@@ -1,0 +1,266 @@
+/**
+ * Conversation Memory - Classic RAG Component
+ *
+ * Manages multi-turn conversation context for improved user experience.
+ * Enables the system to remember previous queries and recommendations.
+ */
+
+import { redis } from '@/lib/upstash';
+import type { ConversationSession, ConversationTurn } from '@/lib/types/rag';
+
+const SESSION_PREFIX = 'rag:session:';
+const SESSION_LIST_PREFIX = 'rag:sessions:';
+
+const DEFAULT_TTL = 60 * 60; // 1 hour
+const MAX_TURNS_PER_SESSION = 20;
+
+/**
+ * Create a new conversation session
+ */
+export async function createSession(userId?: string): Promise<ConversationSession> {
+  const sessionId = generateSessionId();
+  const now = Date.now();
+
+  const session: ConversationSession = {
+    id: sessionId,
+    createdAt: now,
+    updatedAt: now,
+    turns: [],
+    metadata: {
+      userId,
+      startTime: now,
+      turnCount: 0,
+    },
+  };
+
+  await saveSession(session);
+
+  return session;
+}
+
+/**
+ * Get a conversation session by ID
+ */
+export async function getSession(sessionId: string): Promise<ConversationSession | null> {
+  if (!redis) {
+    return null;
+  }
+
+  const sessionData = await redis.hgetall(`${SESSION_PREFIX}${sessionId}`);
+
+  if (!sessionData || Object.keys(sessionData).length === 0) {
+    return null;
+  }
+
+  return sessionData as unknown as ConversationSession;
+}
+
+/**
+ * Add a turn to a conversation session
+ */
+export async function addTurn(
+  sessionId: string,
+  turn: Omit<ConversationTurn, 'id' | 'sessionId'>,
+): Promise<ConversationTurn> {
+  const session = await getSession(sessionId);
+
+  if (!session) {
+    throw new Error(`Session ${sessionId} not found`);
+  }
+
+  const newTurn: ConversationTurn = {
+    id: `turn-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+    sessionId,
+    ...turn,
+  };
+
+  session.turns.push(newTurn);
+  session.updatedAt = Date.now();
+  session.metadata.turnCount = session.turns.length;
+
+  // Limit number of turns per session
+  if (session.turns.length > MAX_TURNS_PER_SESSION) {
+    session.turns = session.turns.slice(-MAX_TURNS_PER_SESSION);
+  }
+
+  await saveSession(session);
+
+  return newTurn;
+}
+
+/**
+ * Get recent turns from a session
+ */
+export async function getRecentTurns(
+  sessionId: string,
+  count: number = 5,
+): Promise<ConversationTurn[]> {
+  const session = await getSession(sessionId);
+
+  if (!session) {
+    return [];
+  }
+
+  return session.turns.slice(-count);
+}
+
+/**
+ * Get full conversation history for a session
+ */
+export async function getConversationHistory(sessionId: string): Promise<ConversationTurn[]> {
+  const session = await getSession(sessionId);
+  return session?.turns || [];
+}
+
+/**
+ * Get conversation context for LLM prompt
+ */
+export async function getConversationContext(
+  sessionId: string,
+  maxTurns: number = 3,
+): Promise<string> {
+  const recentTurns = await getRecentTurns(sessionId, maxTurns);
+
+  if (recentTurns.length === 0) {
+    return '';
+  }
+
+  const contextLines = recentTurns.map((turn, _index) => {
+    const role = turn.role === 'user' ? '用户' : '助手';
+    const content = turn.content;
+
+    // Add requirement analysis if available
+    if (turn.role === 'user' && turn.requirement) {
+      const req = turn.requirement;
+      const categories = req.categories.length > 0 ? req.categories.join(', ') : '无';
+      const keywords = req.keywords.length > 0 ? req.keywords.join(', ') : '无';
+
+      return `${role}: ${content}\n  (需求分析: 分类=[${categories}], 关键词=[${keywords}])`;
+    }
+
+    return `${role}: ${content}`;
+  });
+
+  return `历史对话:\n${contextLines.join('\n')}\n`;
+}
+
+/**
+ * Check if a session exists and is active
+ */
+export async function isSessionActive(sessionId: string): Promise<boolean> {
+  const session = await getSession(sessionId);
+  if (!session) {
+    return false;
+  }
+
+  // Check if session is not too old (24 hours)
+  const maxAge = 24 * 60 * 60 * 1000;
+  return (Date.now() - session.updatedAt) < maxAge;
+}
+
+/**
+ * Update session metadata
+ */
+export async function updateSessionMetadata(
+  sessionId: string,
+  metadata: Partial<ConversationSession['metadata']>,
+): Promise<void> {
+  const session = await getSession(sessionId);
+
+  if (!session) {
+    throw new Error(`Session ${sessionId} not found`);
+  }
+
+  session.metadata = {
+    ...session.metadata,
+    ...metadata,
+  };
+
+  await saveSession(session);
+}
+
+/**
+ * Delete a session
+ */
+export async function deleteSession(sessionId: string): Promise<void> {
+  if (!redis) {
+    return;
+  }
+
+  await redis.del(`${SESSION_PREFIX}${sessionId}`);
+}
+
+/**
+ * Clean up old sessions
+ */
+export async function cleanupOldSessions(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): Promise<number> {
+  if (!redis) {
+    return 0;
+  }
+
+  // In production, you would:
+  // 1. Maintain an index of all active sessions
+  // 2. Scan and delete old sessions
+  // 3. Use Redis SCAN for large deployments
+
+  console.log(`[conversation] Cleaning up sessions older than ${maxAgeMs}ms`);
+  return 0;
+}
+
+/**
+ * Get or create a session (helper function)
+ */
+export async function getOrCreateSession(sessionId?: string, userId?: string): Promise<ConversationSession> {
+  if (sessionId && await isSessionActive(sessionId)) {
+    const session = await getSession(sessionId);
+    if (session) {
+      return session;
+    }
+  }
+
+  return createSession(userId);
+}
+
+/**
+ * Save a session to Redis
+ */
+async function saveSession(session: ConversationSession): Promise<void> {
+  if (!redis) {
+    console.warn('[conversation] Redis not available, session not persisted');
+    return;
+  }
+
+  const sessionKey = `${SESSION_PREFIX}${session.id}`;
+
+  // Save session data
+  await redis.hset(sessionKey, session as unknown as Record<string, unknown>);
+  await redis.expire(sessionKey, DEFAULT_TTL);
+
+  // Add to session list for cleanup
+  await redis.sadd(SESSION_LIST_PREFIX, session.id);
+}
+
+/**
+ * Generate a unique session ID
+ */
+function generateSessionId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 15);
+  return `sess-${timestamp}-${random}`;
+}
+
+/**
+ * Format conversation for display
+ */
+export function formatConversation(turns: ConversationTurn[]): string {
+  if (turns.length === 0) {
+    return '无历史对话';
+  }
+
+  return turns
+    .map((turn) => {
+      const role = turn.role === 'user' ? '用户' : '助手';
+      return `${role}: ${turn.content}`;
+    })
+    .join('\n');
+}

@@ -1,0 +1,224 @@
+{
+  "books": [
+    {
+      "id": 9787545144246,
+      "title": "正思维心理学（平装）",
+      "author": "姚颖",
+      "publisher": "辽海出版社",
+      "price": 68,
+      "stock": 5,
+      "category": "心理学",
+      "description": "本书分正思维之阳光心态篇、正思维之积极行动篇、正思维之交际处世篇，围绕积极心态、行动力和人际处世展开，适合作为通俗心理成长读物。",
+      "popularity_score": 0.72
+    },
+    {
+      "id": 9787545144192,
+      "title": "三分靠机会,七分靠打拼",
+      "author": "张月",
+      "publisher": "辽海出版社",
+      "price": 68,
+      "stock": 30,
+      "category": "成长励志",
+      "description": "本书从多个角度讨论机会、准备与努力之间的关系，强调通过持续打拼寻找并把握机会，适合作为大众励志类阅读。",
+      "popularity_score": 0.74
+    },
+    {
+      "id": 2019000000011,
+      "title": "2019全国两会记者会实录",
+      "author": "新华社中央新闻采访中心",
+      "publisher": "未知出版社",
+      "price": 62,
+      "stock": 20,
+      "category": "时政",
+      "description": "收录十三届全国人大二次会议和全国政协十三届二次会议期间多场记者会内容，涵盖经济、外交、财政、商务等多个公共议题。",
+      "popularity_score": 0.6
+    },
+    {
+      "id": 9787500000019,
+      "title": "公共行政学 第四版",
+      "author": "齐明山",
+      "publisher": "未知出版社",
+      "price": 42,
+      "stock": 208,
+      "category": "公共管理",
+      "description": "全书围绕行政环境、政府职能、行政体制、公共组织、人事行政、行政决策与监督等内容展开，适合作为公共管理基础阅读。",
+      "popularity_score": 0.78
+    },
+    {
+      "id": 9787500000020,
+      "title": "办公室实务",
+      "author": "卢颖",
+      "publisher": "未知出版社",
+      "price": 31,
+      "stock": 198,
+      "category": "职场实务",
+      "description": "聚焦办公室日常工作场景，涵盖办公用品、文书管理、会议服务、公共关系等实操内容，适合职场和行政事务场景。",
+      "popularity_score": 0.73
+    },
+    {
+      "id": 9787500000022,
+      "title": "行政法与行政诉讼法",
+      "author": "胡锦光",
+      "publisher": "未知出版社",
+      "price": 47,
+      "stock": 38,
+      "category": "法律",
+      "description": "系统介绍行政法概述、行政主体、行政许可、行政处罚、行政复议、行政诉讼和行政赔偿等核心内容。",
+      "popularity_score": 0.69
+    },
+    {
+      "id": 9787500000023,
+      "title": "政治学原理",
+      "author": "燕继荣",
+      "publisher": "未知出版社",
+      "price": 33,
+      "stock": 225,
+      "category": "政治学",
+      "description": "内容覆盖政治学学科属性、国家与政府、政党与社团、公共权力、公民权利、政治参与与监督等政治学基本议题。",
+      "popularity_score": 0.77
+    },
+    {
+      "id": 9787500000026,
+      "title": "麻阳苗族自治县革命老区发展史",
+      "author": "麻阳苗族自治县民政局编著",
+      "publisher": "未知出版社",
+      "price": 58,
+      "stock": 2,
+      "category": "地方史",
+      "description": "以详实史料记述麻阳苗族自治县革命老区在民族解放、新中国建立和社会主义建设过程中的历史贡献与发展历程。",
+      "popularity_score": 0.58
+    },
+    {
+      "id": 9787500000027,
+      "title": "诗话孤竹",
+      "author": "宋坤主编",
+      "publisher": "未知出版社",
+      "price": 68,
+      "stock": 2,
+      "category": "地方文化",
+      "description": "从史志、成语典故、书法美术、诗词歌赋、小说散文和戏剧等多个维度，系统记述孤竹文化的历史与文学表达。",
+      "popularity_score": 0.55
+    },
+    {
+      "id": 9787500000030,
+      "title": "寻常书简",
+      "author": "杨国宁",
+      "publisher": "未知出版社",
+      "price": 46,
+      "stock": 2,
+      "category": "散文随笔",
+      "description": "一本书简与随笔气质较强的文学类作品，适合作为人文阅读和轻度文学推荐样本。",
+      "popularity_score": 0.57
+    },
+    {
+      "id": 9787533688035,
+      "title": "井冈山精神",
+      "author": "何虎生",
+      "publisher": "安徽教育出版社",
+      "price": 25,
+      "stock": 1,
+      "category": "党史",
+      "description": "通过真实史料与生动叙述回顾井冈山斗争历史，并结合时代语境阐释井冈山精神的历史价值与当代意义。",
+      "popularity_score": 0.7
+    },
+    {
+      "id": 9787533696221,
+      "title": "民族新魂·鲁迅（修订本）",
+      "author": "张俊",
+      "publisher": "安徽教育出版社",
+      "price": 28,
+      "stock": 14,
+      "category": "人物传记",
+      "description": "以平实语言还原鲁迅作为普通人的成长经历、家庭生活与时代处境，展示其对国家命运与民族未来的深层关切。",
+      "popularity_score": 0.82
+    },
+    {
+      "id": 9787533768607,
+      "title": "北京（四色）",
+      "author": "宣庆坤",
+      "publisher": "安徽科学技术出版社",
+      "price": 88,
+      "stock": 7,
+      "category": "旅游",
+      "description": "围绕北京城市格局、皇家文化、历史遗迹与人文景观展开，适合作为城市文化与旅游阅读样本。",
+      "popularity_score": 0.76
+    },
+    {
+      "id": 9787500000007,
+      "title": "大连（四色）",
+      "author": "宣庆坤",
+      "publisher": "未知出版社",
+      "price": 78,
+      "stock": 21,
+      "category": "旅游",
+      "description": "从历史见证、知识场馆、自然胜景、人文情怀和海畔美食等多个维度呈现大连的城市特色。",
+      "popularity_score": 0.78
+    },
+    {
+      "id": 9787500000009,
+      "title": "膏方调养亚健康",
+      "author": "袁保丰",
+      "publisher": "未知出版社",
+      "price": 68,
+      "stock": 1,
+      "category": "健康养生",
+      "description": "介绍膏方与亚健康相关基础知识，并讨论体质辨别、饮食调养和日常养护方法，适合作为大众养生类样本。",
+      "popularity_score": 0.68
+    },
+    {
+      "id": 9787500000013,
+      "title": "漫话免疫力",
+      "author": "夏聪敏，李阳主编",
+      "publisher": "未知出版社",
+      "price": 58,
+      "stock": 3,
+      "category": "健康科普",
+      "description": "上篇介绍免疫力基础知识，下篇结合中医药视角介绍中药、方剂、艾灸和足浴等提升免疫力的日常方法。",
+      "popularity_score": 0.71
+    },
+    {
+      "id": 9787500000015,
+      "title": "棋海残局拾贝",
+      "author": "傅宝胜",
+      "publisher": "未知出版社",
+      "price": 55,
+      "stock": 13,
+      "category": "象棋",
+      "description": "选取现代象棋大赛与经典赛事中的精彩残局，对战术思路进行演绎，适合棋类兴趣和技巧类推荐场景。",
+      "popularity_score": 0.79
+    },
+    {
+      "id": 9787500000021,
+      "title": "围棋基本功",
+      "author": "马自正，赵勇 编著",
+      "publisher": "未知出版社",
+      "price": 39.8,
+      "stock": 3,
+      "category": "围棋",
+      "description": "以规则、术语、吃子、死活和手筋为重点，系统介绍围棋入门知识和基本技术，适合初学者训练。",
+      "popularity_score": 0.83
+    },
+    {
+      "id": 9787500000024,
+      "title": "围棋现代布局谋略",
+      "author": "马自正 编著",
+      "publisher": "未知出版社",
+      "price": 45.8,
+      "stock": 4,
+      "category": "围棋",
+      "description": "介绍围棋布局阶段的定式、行棋方向、先后手、实地与外势取舍等原理，适合作为进阶棋类策略样本。",
+      "popularity_score": 0.8
+    },
+    {
+      "id": 9787500000028,
+      "title": "厦门（四色）",
+      "author": "宣庆坤",
+      "publisher": "未知出版社",
+      "price": 78,
+      "stock": 24,
+      "category": "旅游",
+      "description": "围绕厦门的历史岁月、博物馆、人文风景、宗教文化和闽台情谊展开，适合作为城市文化旅游阅读样本。",
+      "popularity_score": 0.79
+    }
+  ]
+}

@@ -1,0 +1,240 @@
+/**
+ * Vercel-Optimized RAG Pipeline
+ *
+ * Simplified orchestrator for serverless execution within 10-second limit.
+ * Removes complex iteration and evaluation for faster execution.
+ */
+
+import { analyzeRequirement } from '@/lib/agents/requirement-agent';
+import { generateRecommendation } from '@/lib/agents/recommendation-agent';
+import { retrieveCandidatesVercel } from '@/lib/vercel/simplified-retrieval';
+import { conversationMemory } from '@/lib/vercel/storage';
+import { fastRetrieval } from '@/lib/vercel/simplified-retrieval';
+import type {
+  AgentProgress,
+  RequirementAnalysis,
+  RetrievalResult,
+  RecommendationResult,
+} from '@/lib/types/rag';
+
+export interface VercelRAGPipelineOptions {
+  userQuery: string;
+  sessionId?: string;
+  onProgress?: (progress: AgentProgress) => void;
+}
+
+export interface VercelRAGPipelineResult {
+  success: boolean;
+  requirement?: RequirementAnalysis;
+  retrieval?: RetrievalResult;
+  recommendation?: RecommendationResult;
+  sessionId?: string;
+  error?: string;
+}
+
+/**
+ * Simplified RAG pipeline for Vercel serverless
+ * - Single-pass execution (no iteration)
+ * - Minimal async operations
+ * - Fast fallback on errors
+ */
+export async function runVercelRAGPipeline(
+  options: VercelRAGPipelineOptions
+): Promise<VercelRAGPipelineResult> {
+  const startTime = Date.now();
+  const { userQuery, sessionId: inputSessionId, onProgress } = options;
+
+  let sessionId = inputSessionId;
+  let requirement: RequirementAnalysis | undefined;
+  let retrieval: RetrievalResult | undefined;
+  let recommendation: RecommendationResult | undefined;
+
+  try {
+    // Step 1: Get or create session
+    if (!sessionId) {
+      sessionId = `sess-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    }
+
+    // Step 2: Get conversation context (fast)
+    let conversationContext = '';
+    if (sessionId) {
+      try {
+        conversationContext = await conversationMemory.getContext(sessionId, 2);
+      } catch (error) {
+        console.warn('[pipeline] Failed to get conversation context:', error);
+      }
+    }
+
+    // Step 3: Analyze requirement
+    onProgress?.({
+      type: 'phase_start',
+      phase: 'requirement_analysis',
+      content: '分析需求...',
+    });
+
+    requirement = await analyzeRequirement(userQuery, { conversationContext });
+
+    onProgress?.({
+      type: 'phase_complete',
+      phase: 'requirement_analysis',
+      content: '需求分析完成',
+      data: requirement as unknown as Record<string, unknown>,
+    });
+
+    // Check execution time
+    if (Date.now() - startTime > 5000) {
+      console.warn('[pipeline] Taking too long, simplifying...');
+    }
+
+    // Step 4: Retrieve candidates (simplified)
+    onProgress?.({
+      type: 'phase_start',
+      phase: 'retrieval',
+      content: '检索书籍...',
+    });
+
+    const targetCount = requirement.constraints.target_count ?? 5;
+    const candidateTopK = Math.max(targetCount * 3, 12);
+    const primaryCandidates = await fastRetrieval(userQuery, candidateTopK);
+
+    let candidatePool = primaryCandidates;
+    if (candidatePool.length < targetCount) {
+      try {
+        const fallbackRetrieval = await retrieveCandidatesVercel(requirement, {
+          topK: candidateTopK,
+          enableKeyword: true,
+        });
+
+        const merged = new Map<string, typeof candidatePool[number]>();
+        for (const book of candidatePool) {
+          merged.set(book.book_id, book);
+        }
+        for (const book of fallbackRetrieval.books) {
+          if (!merged.has(book.book_id)) {
+            merged.set(book.book_id, book);
+          }
+        }
+
+        candidatePool = Array.from(merged.values());
+      } catch (error) {
+        console.warn('[pipeline] Fallback retrieval failed:', error);
+      }
+    }
+
+    retrieval = {
+      books: candidatePool.slice(0, candidateTopK),
+      sources: ['semantic'],
+      total_candidates: candidatePool.length,
+    };
+
+    onProgress?.({
+      type: 'phase_complete',
+      phase: 'retrieval',
+      content: `找到 ${retrieval.total_candidates} 本候选书籍`,
+      data: retrieval as unknown as Record<string, unknown>,
+    });
+
+    // Step 5: Generate recommendation
+    onProgress?.({
+      type: 'phase_start',
+      phase: 'generation',
+      content: '生成推荐...',
+    });
+
+    recommendation = await generateRecommendation(requirement, retrieval.books);
+
+    onProgress?.({
+      type: 'phase_complete',
+      phase: 'generation',
+      content: `推荐 ${recommendation.books.length} 本书`,
+      data: recommendation as unknown as Record<string, unknown>,
+    });
+
+    // Step 6: Store conversation turn
+    if (sessionId) {
+      try {
+        await conversationMemory.addTurn(sessionId, 'user', userQuery);
+        await conversationMemory.addTurn(
+          sessionId,
+          'assistant',
+          `推荐了 ${recommendation.books.length} 本书`
+        );
+      } catch (error) {
+        console.warn('[pipeline] Failed to store conversation:', error);
+      }
+    }
+
+    const executionTime = Date.now() - startTime;
+    console.log(`[pipeline] Completed in ${executionTime}ms`);
+
+    return {
+      success: true,
+      requirement,
+      retrieval,
+      recommendation,
+      sessionId,
+    };
+  } catch (error) {
+    console.error('[pipeline] Error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      sessionId,
+    };
+  }
+}
+
+/**
+ * Even faster pipeline for edge cases
+ * Skips some processing for sub-3 second execution
+ */
+export async function runFastRAGPipeline(
+  query: string,
+  sessionId?: string
+): Promise<VercelRAGPipelineResult> {
+  try {
+    const requirement = await analyzeRequirement(query, {});
+    const candidateTopK = Math.max((requirement.constraints.target_count ?? 5) * 4, 16);
+    const retrieval = await retrieveCandidatesVercel(requirement, {
+      topK: candidateTopK,
+      enableKeyword: true,
+    });
+
+    // Simple recommendation (no LLM)
+    const recommendation = {
+      books: retrieval.books.map(book => ({
+        ...book,
+        explanation: '基于您的查询找到的相关书籍。',
+      })),
+      total_price: retrieval.books.reduce((sum, b) => sum + b.price, 0),
+      quality_score: 0.8,
+      confidence: 0.7,
+      category_distribution: {},
+    };
+
+    // Store minimal context
+    if (sessionId) {
+      try {
+        await conversationMemory.addTurn(sessionId, 'user', query);
+        await conversationMemory.addTurn(sessionId, 'assistant', `推荐 ${retrieval.books.length} 本书`);
+      } catch {
+        // Ignore storage errors
+      }
+    }
+
+    return {
+      success: true,
+      requirement,
+      retrieval,
+      recommendation,
+      sessionId,
+    };
+  } catch (error) {
+    console.error('[fastPipeline] Error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      sessionId,
+    };
+  }
+}

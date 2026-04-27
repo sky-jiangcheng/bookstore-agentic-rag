@@ -1,0 +1,64 @@
+{
+  "queries": [
+    {
+      "id": "psychology-growth",
+      "query": "推荐两本帮助调整心态和提升行动力的心理成长类书籍，内容要通俗一点。",
+      "expected_categories": ["心理学", "成长励志"],
+      "expected_keywords": ["心理", "成长", "行动力"]
+    },
+    {
+      "id": "travel-city-culture",
+      "query": "我想找几本了解中国城市文化和旅游的书，最好介绍北京或厦门。",
+      "expected_categories": ["旅游"],
+      "expected_keywords": ["北京", "厦门", "城市文化", "旅游"]
+    },
+    {
+      "id": "history-biography",
+      "query": "有没有适合普通读者看的历史人物传记，最好是鲁迅相关的。",
+      "expected_categories": ["人物传记"],
+      "expected_keywords": ["鲁迅", "人物传记", "历史"]
+    },
+    {
+      "id": "health-popular",
+      "query": "推荐一些适合家里长辈看的健康养生和免疫力科普书。",
+      "expected_categories": ["健康养生", "健康科普"],
+      "expected_keywords": ["养生", "免疫力", "长辈", "科普"]
+    },
+    {
+      "id": "chess-xiangqi",
+      "query": "我想提升象棋残局和布局能力，有没有偏实战一点的书？",
+      "expected_categories": ["象棋"],
+      "expected_keywords": ["象棋", "残局", "布局", "实战"]
+    },
+    {
+      "id": "go-beginner",
+      "query": "我是围棋初学者，想先练基本功，再学布局，有哪些书合适？",
+      "expected_categories": ["围棋"],
+      "expected_keywords": ["围棋", "基本功", "布局", "初学者"]
+    },
+    {
+      "id": "public-admin",
+      "query": "我最近想补一补公共管理和政治学基础，推荐几本入门书。",
+      "expected_categories": ["公共管理", "政治学"],
+      "expected_keywords": ["公共管理", "政治学", "入门"]
+    },
+    {
+      "id": "law-admin",
+      "query": "推荐一本适合快速了解行政法和行政诉讼法核心内容的书。",
+      "expected_categories": ["法律"],
+      "expected_keywords": ["行政法", "行政诉讼法", "法律"]
+    },
+    {
+      "id": "local-history",
+      "query": "有没有和地方史、地方文化相关的书，偏纪实一些的？",
+      "expected_categories": ["地方史", "地方文化"],
+      "expected_keywords": ["地方史", "地方文化", "纪实"]
+    },
+    {
+      "id": "career-office",
+      "query": "给刚参加工作的新人推荐几本办公室实务和职业发展方面的书。",
+      "expected_categories": ["职场实务", "成长励志"],
+      "expected_keywords": ["办公室", "职业发展", "新人", "职场"]
+    }
+  ]
+}
