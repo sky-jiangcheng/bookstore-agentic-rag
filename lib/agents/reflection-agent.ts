@@ -67,18 +67,24 @@ export async function evaluateRecommendation(
 
     return output;
   } catch (error) {
-    // 如果评估失败，返回一个默认评估结果
+    // 如果评估失败，返回低分并标记需要改进，让系统知道需要重试
+    console.error('[reflection-agent] Evaluation failed:', error);
     return {
-      overall_score: 0.8,
+      overall_score: 0.0,
       scores: {
-        requirement_match: 0.8,
-        diversity: 0.8,
-        book_quality: 0.8,
-        budget: 0.8,
+        requirement_match: 0.0,
+        diversity: 0.0,
+        book_quality: 0.0,
+        budget: 0.0,
       },
-      issues: [],
-      needs_improvement: false,
-      suggestions: [],
+      issues: ['评估过程失败，无法验证推荐质量'],
+      needs_improvement: true,
+      suggestions: [{
+        type: 'error',
+        action: 'optimize',
+        target: 'evaluation',
+        description: 'LLM 评估调用失败，建议重试推荐流程',
+      }],
     };
   }
 }

@@ -198,13 +198,46 @@ export async function cleanupOldSessions(maxAgeMs: number = 7 * 24 * 60 * 60 * 1
     return 0;
   }
 
-  // In production, you would:
-  // 1. Maintain an index of all active sessions
-  // 2. Scan and delete old sessions
-  // 3. Use Redis SCAN for large deployments
+  const cutoffTime = Date.now() - maxAgeMs;
+  let deletedCount = 0;
 
-  console.log(`[conversation] Cleaning up sessions older than ${maxAgeMs}ms`);
-  return 0;
+  try {
+    // Get all session IDs from the session list set
+    const sessionIds = await redis.smembers<string[]>(SESSION_LIST_PREFIX);
+
+    if (!sessionIds || sessionIds.length === 0) {
+      return 0;
+    }
+
+    for (const sessionId of sessionIds) {
+      try {
+        const sessionData = await redis.hgetall(`${SESSION_PREFIX}${sessionId}`);
+
+        if (!sessionData || Object.keys(sessionData).length === 0) {
+          // Session data is gone, remove from list
+          await redis.srem(SESSION_LIST_PREFIX, sessionId);
+          deletedCount++;
+          continue;
+        }
+
+        const updatedAt = Number(sessionData.updatedAt || sessionData.createdAt || 0);
+
+        if (updatedAt > 0 && updatedAt < cutoffTime) {
+          await redis.del(`${SESSION_PREFIX}${sessionId}`);
+          await redis.srem(SESSION_LIST_PREFIX, sessionId);
+          deletedCount++;
+        }
+      } catch (error) {
+        console.error(`[conversation] Failed to check session ${sessionId}:`, error);
+      }
+    }
+
+    console.log(`[conversation] Cleaned up ${deletedCount} old sessions`);
+  } catch (error) {
+    console.error('[conversation] Session cleanup failed:', error);
+  }
+
+  return deletedCount;
 }
 
 /**

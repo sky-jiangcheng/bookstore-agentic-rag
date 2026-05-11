@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS books (
   price DECIMAL(10, 2),
   stock INTEGER DEFAULT 0,
   category VARCHAR(100),
-  popularity_score DECIMAL(5, 2) DEFAULT 0,
+  popularity_score DECIMAL(10, 2) DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -24,4 +24,4 @@ CREATE INDEX IF NOT EXISTS idx_books_title ON books(title);
 CREATE INDEX IF NOT EXISTS idx_books_author ON books(author);
 CREATE INDEX IF NOT EXISTS idx_books_category ON books(category);
 CREATE INDEX IF NOT EXISTS idx_books_popularity ON books(popularity_score DESC);
-CREATE INDEX IF NOT EXISTS idx_books_fulltext ON books USING gin(to_tsvector('english', title || ' ' || COALESCE(author, '') || ' ' || COALESCE(category, '')));
+CREATE INDEX IF NOT EXISTS idx_books_fulltext ON books USING gin(to_tsvector('simple', title || ' ' || COALESCE(author, '') || ' ' || COALESCE(category, '')));

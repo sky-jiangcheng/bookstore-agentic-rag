@@ -9,6 +9,15 @@ function encodeSseEvent(event: string, data: unknown): Uint8Array {
   return new TextEncoder().encode(payload);
 }
 
+/**
+ * Get allowed origin for CORS from environment variable.
+ * Defaults to empty string (no CORS) if ALLOWED_ORIGINS is not set.
+ */
+function getAllowedOrigin(): string {
+  const allowed = process.env.ALLOWED_ORIGINS || '';
+  return allowed;
+}
+
 function buildRecommendationSummary(result: RAGPipelineResult): string {
   if (!result.recommendation || result.recommendation.books.length === 0) {
     return '目前没有检索到足够的真实图书数据，暂时无法生成可信推荐。';
@@ -181,7 +190,7 @@ async function handleRequest(query: string, sessionId: string | undefined, req: 
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*', // Allow CORS if needed
+        'Access-Control-Allow-Origin': getAllowedOrigin(),
       },
     });
   } catch (error) {

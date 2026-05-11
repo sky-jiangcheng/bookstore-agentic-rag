@@ -9,6 +9,15 @@ function encodeSseEvent(event: string, data: unknown): Uint8Array {
   return new TextEncoder().encode(payload);
 }
 
+/**
+ * Get allowed origin for CORS from environment variable.
+ * Defaults to empty string (no CORS) if ALLOWED_ORIGINS is not set.
+ */
+function getAllowedOrigin(): string {
+  const allowed = process.env.ALLOWED_ORIGINS || '';
+  return allowed;
+}
+
 export async function handleStreamingRequest(
   query: string,
   sessionId: string | undefined,
@@ -96,7 +105,7 @@ export async function handleStreamingRequest(
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getAllowedOrigin(),
     },
   });
 }

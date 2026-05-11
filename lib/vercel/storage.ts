@@ -11,6 +11,15 @@ import { kv } from '@vercel/kv';
 /**
  * Simple in-memory vector search using cosine similarity
  * Suitable for small-scale deployments (< 1000 books)
+ *
+ * WARNING: In Vercel serverless environments, this in-memory cache is NOT
+ * shared across function invocations. Each cold start creates a fresh instance.
+ * For production serverless deployments, prefer using Vercel KV or a dedicated
+ * vector database (e.g., Upstash Vector, Pinecone) instead of this class.
+ *
+ * The loadFromDatabase() method can be called on each cold start to warm the
+ * cache from Vercel Postgres, but this adds latency and is not recommended
+ * for large datasets.
  */
 export class SimpleVectorSearch {
   private cache: Map<string, { vector: number[]; metadata: Record<string, unknown> }> = new Map();
@@ -93,21 +102,47 @@ export class SimpleVectorSearch {
   }
 
   /**
-   * Load vectors from database into cache
+   * Load vectors from Vercel KV into cache
+   * This should be called on cold start to warm the cache.
+   * Note: For large datasets, this can be slow and memory-intensive.
    */
-  async loadFromDatabase(): Promise<void> {
+  async loadFromDatabase(): Promise<number> {
     try {
+      // Load pre-computed vectors from Vercel KV
+      // Vectors are stored with keys like "vector:<id>"
+      // We use scan to find all vector keys
+      let loadedCount = 0;
+
+      // Try loading from Vercel KV first (vectors stored by upsert)
+      // Since Vercel KV doesn't have SCAN in all tiers, we load from the known books
       const result = await sql`
         SELECT id, title, author, category
         FROM books
         LIMIT 1000
       `;
 
-      console.log(`[VectorSearch] Loading ${result.rows.length} books into cache`);
-      // Note: Vectors should be pre-computed and stored
-      // This is a placeholder for the actual implementation
+      for (const row of result.rows) {
+        const bookId = String(row.id);
+        const cached = this.cache.get(bookId);
+        if (!cached) {
+          // Try to load from KV
+          const data = await kv.hgetall<{ vector: string; metadata: string }>('vector:' + bookId);
+          if (data && data.vector && data.metadata) {
+            this.cache.set(bookId, {
+              vector: JSON.parse(data.vector),
+              metadata: JSON.parse(data.metadata),
+            });
+            this.cacheExpiry.set(bookId, Date.now() + this.CACHE_TTL);
+            loadedCount++;
+          }
+        }
+      }
+
+      console.log(`[VectorSearch] Loaded ${loadedCount} vectors from Vercel KV (checked ${result.rows.length} books)`);
+      return loadedCount;
     } catch (error) {
       console.error('[VectorSearch] Failed to load from database:', error);
+      return 0;
     }
   }
 }
@@ -211,13 +246,32 @@ export class VercelFeedbackStore {
     await kv.set(key, feedback, { ex: 60 * 60 * 24 * 30 }); // 30 days
   }
 
-  async getStats(_bookId: string): Promise<{
+  async getStats(bookId: string): Promise<{
     positive: number;
     negative: number;
   }> {
-    // In production, you'd maintain aggregated stats
-    // For now, return default values
-    return { positive: 0, negative: 0 };
+    try {
+      const result = await sql`
+        SELECT
+          COUNT(*) FILTER (WHERE signal = 'thumbs_up') AS positive,
+          COUNT(*) FILTER (WHERE signal IN ('thumbs_down', 'not_relevant')) AS negative
+        FROM recommendation_feedback
+        WHERE book_id = ${bookId}
+      `;
+
+      if (result.rows.length > 0) {
+        const row = result.rows[0] as { positive: string | number; negative: string | number };
+        return {
+          positive: Number(row.positive) || 0,
+          negative: Number(row.negative) || 0,
+        };
+      }
+
+      return { positive: 0, negative: 0 };
+    } catch (error) {
+      console.error('[VercelFeedbackStore] Failed to get stats:', error);
+      return { positive: 0, negative: 0 };
+    }
   }
 }
 

@@ -1,17 +1,17 @@
 CREATE TABLE IF NOT EXISTS books (
   id BIGINT PRIMARY KEY,
   source_id TEXT,
-  title TEXT NOT NULL,
-  author TEXT,
-  publisher TEXT,
+  title VARCHAR(255) NOT NULL,
+  author VARCHAR(255),
+  publisher VARCHAR(255),
   description TEXT,
-  cover_url TEXT,
-  price NUMERIC(10, 2) DEFAULT 0,
+  cover_url VARCHAR(512),
+  price DECIMAL(10, 2) DEFAULT 0,
   stock INTEGER DEFAULT 0,
-  category TEXT DEFAULT 'general',
-  popularity_score NUMERIC(10, 4) DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  category VARCHAR(100) DEFAULT 'general',
+  popularity_score DECIMAL(10, 2) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_books_category ON books(category);
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
   query TEXT NOT NULL,
   book_id BIGINT REFERENCES books(id) ON DELETE CASCADE,
   signal TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_user_id

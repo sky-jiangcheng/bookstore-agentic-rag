@@ -118,8 +118,10 @@ export class BGEReranker implements IReranker {
   }
 
   isAvailable(): boolean {
-    // In production, check if the Python service is running
-    return true; // Always available (via fallback)
+    // BGE reranker requires a Python microservice or ONNX runtime,
+    // which is not available in this Node.js environment.
+    // Return false so the system falls back to MockReranker.
+    return false;
   }
 }
 

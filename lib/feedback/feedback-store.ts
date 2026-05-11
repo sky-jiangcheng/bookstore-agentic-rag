@@ -192,9 +192,37 @@ async function getAllFeedbackStats(): Promise<FeedbackStats[]> {
     return [];
   }
 
-  // This is a simplified implementation
-  // In production, you would maintain a separate index of all book stats
-  return [];
+  // Scan all stats keys matching the pattern
+  const allStats: FeedbackStats[] = [];
+  let cursor: string | number = 0;
+
+  do {
+    const [nextCursor, keys]: [string | number, string[]] = await redis.scan(cursor, {
+      match: `${STATS_PREFIX}book:*`,
+      count: 100,
+    });
+
+    cursor = nextCursor;
+
+    for (const key of keys) {
+      try {
+        const stats = await redis.hgetall(key);
+        if (stats && Object.keys(stats).length > 0) {
+          allStats.push({
+            bookId: String(stats.bookId || key.replace(`${STATS_PREFIX}book:`, '')),
+            positiveCount: Number(stats.positiveCount || 0),
+            negativeCount: Number(stats.negativeCount || 0),
+            averageScore: Number(stats.averageScore || 0),
+            totalFeedback: Number(stats.totalFeedback || 0),
+          });
+        }
+      } catch (error) {
+        console.error(`[feedback] Failed to read stats for key ${key}:`, error);
+      }
+    }
+  } while (Number(cursor) !== 0);
+
+  return allStats;
 }
 
 /**

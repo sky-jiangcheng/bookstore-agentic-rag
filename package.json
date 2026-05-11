@@ -9,6 +9,7 @@
     "lint": "npm run typecheck",
     "typecheck": "next typegen && tsc --noEmit",
     "check": "npm run typecheck && npm run build",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "import:books": "node ./scripts/import-books.mjs",
     "index:books": "node ./scripts/index-books.mjs",
     "smoke:rag": "node ./scripts/smoke-rag.mjs",
@@ -64,14 +65,14 @@
     "tailwind-merge": "^3.5.0",
     "tokenlens": "^1.3.1",
     "use-stick-to-bottom": "^1.1.3",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "ai-elements": "^1.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@types/node": "^20.11.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "ai-elements": "^1.0.0",
     "autoprefixer": "^10.4.16",
     "baseline-browser-mapping": "^2.10.22",
     "postcss": "^8.4.32",

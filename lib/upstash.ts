@@ -111,18 +111,16 @@ export async function vectorSearch(
     query.sparseVector = sparseVector;
   }
 
-  const results = await vectorIndex.query(query);
-  
+  const results = await vectorIndex.query(query) as Array<{ id: string | number; score: number; metadata: Record<string, unknown> | undefined }>;
+
   // Validate and filter results
-  return results
-    .filter((result): result is { id: string; score: number; metadata: VectorBookMetadata } => 
-      isValidVectorBookMetadata(result.metadata)
-    )
-    .map((result) => ({
-      id: result.id,
-      score: result.score,
-      metadata: result.metadata,
-    }));
+  const validResults: Array<{ id: string; score: number; metadata: VectorBookMetadata }> = [];
+  for (const result of results) {
+    if (typeof result.id === 'string' && isValidVectorBookMetadata(result.metadata)) {
+      validResults.push({ id: result.id, score: result.score, metadata: result.metadata });
+    }
+  }
+  return validResults;
 }
 
 export async function deleteBookVector(bookId: string): Promise<void> {
@@ -181,18 +179,16 @@ export async function vectorSearchChunks(
     vector: queryVector,
     topK,
     includeMetadata: true,
-  });
+  }) as Array<{ id: string | number; score: number; metadata: Record<string, unknown> | undefined }>;
 
   // Validate and filter results
-  return results
-    .filter((result): result is { id: string; score: number; metadata: ChunkMetadata } => 
-      isValidChunkMetadata(result.metadata)
-    )
-    .map((result) => ({
-      id: result.id,
-      score: result.score,
-      metadata: result.metadata,
-    }));
+  const validResults: Array<{ id: string; score: number; metadata: ChunkMetadata }> = [];
+  for (const result of results) {
+    if (typeof result.id === 'string' && isValidChunkMetadata(result.metadata)) {
+      validResults.push({ id: result.id, score: result.score, metadata: result.metadata });
+    }
+  }
+  return validResults;
 }
 
 export async function deleteChunkVectors(chunkIds: string[]): Promise<void> {
@@ -208,10 +204,14 @@ export async function deleteAllBookChunks(bookId: string): Promise<void> {
     throw new Error('Upstash Vector is not configured');
   }
 
-  // Find all chunks for this book and delete them
-  // Note: This requires the vector database to support filtering by metadata
-  // For Upstash Vector, you would need to query by bookId and then delete
+  // Delete all chunks belonging to this book using prefix-based deletion
+  const CHUNK_NAMESPACE = `chunk:${bookId}`;
 
-  // This is a placeholder - actual implementation depends on Upstash Vector capabilities
-  console.warn(`deleteAllBookChunks for book ${bookId} not fully implemented`);
+  try {
+    const result = await vectorIndex.delete({ prefix: CHUNK_NAMESPACE });
+    console.log(`[upstash] Deleted ${result.deleted} chunks for book ${bookId}`);
+  } catch (error) {
+    console.error(`[upstash] Failed to delete chunks for book ${bookId}:`, error);
+    throw error;
+  }
 }
