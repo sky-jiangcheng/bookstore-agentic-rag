@@ -4,6 +4,7 @@
  * Stores and retrieves user feedback for continuous learning and relevance improvement.
  */
 
+import crypto from 'crypto';
 import { redis } from '@/lib/upstash';
 import type { UserFeedback, FeedbackStats } from '@/lib/types/rag';
 
@@ -15,7 +16,7 @@ const SESSION_FEEDBACK_PREFIX = 'rag:session:';
  * Store user feedback
  */
 export async function storeFeedback(feedback: Omit<UserFeedback, 'id'>): Promise<UserFeedback> {
-  const id = `feedback-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  const id = `feedback-${Date.now()}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8)}`;
   const fullFeedback: UserFeedback = {
     ...feedback,
     id,

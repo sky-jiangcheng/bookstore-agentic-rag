@@ -5,6 +5,7 @@
  * Removes complex iteration and evaluation for faster execution.
  */
 
+import crypto from 'crypto';
 import { analyzeRequirement } from '@/lib/agents/requirement-agent';
 import { generateRecommendation } from '@/lib/agents/recommendation-agent';
 import { retrieveCandidatesVercel } from '@/lib/vercel/simplified-retrieval';
@@ -52,7 +53,7 @@ export async function runVercelRAGPipeline(
   try {
     // Step 1: Get or create session
     if (!sessionId) {
-      sessionId = `sess-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      sessionId = `sess-${crypto.randomUUID()}`;
     }
 
     // Step 2: Get conversation context (fast)

@@ -82,9 +82,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 获取客户端 IP
+  // 获取客户端 IP（防止伪造）
   const forwarded = request.headers.get('x-forwarded-for') || '';
-  const ip = forwarded.split(',')[0]?.trim() || request.headers.get('x-real-ip') || '127.0.0.1';
+  const forwardedIp = forwarded.split(',')[0]?.trim();
+  // 验证 IP 格式有效性
+  const validIp = forwardedIp && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(forwardedIp)
+    ? forwardedIp
+    : request.headers.get('x-real-ip') || '127.0.0.1';
+  const ip = validIp;
   const rateLimitKey = `ratelimit:${ip}`;
 
   const { allowed, remaining, resetTime } = checkRateLimit(rateLimitKey);

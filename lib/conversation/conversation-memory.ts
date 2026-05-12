@@ -5,6 +5,7 @@
  * Enables the system to remember previous queries and recommendations.
  */
 
+import crypto from 'crypto';
 import { redis } from '@/lib/upstash';
 import type { ConversationSession, ConversationTurn } from '@/lib/types/rag';
 
@@ -93,7 +94,7 @@ export async function addTurn(
   }
 
   const newTurn: ConversationTurn = {
-    id: `turn-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+    id: `turn-${Date.now()}-${crypto.randomUUID().replace(/-/g, '').substring(0, 8)}`,
     sessionId,
     ...turn,
   };
@@ -302,7 +303,7 @@ async function saveSession(session: ConversationSession): Promise<void> {
  */
 function generateSessionId(): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 15);
+  const random = crypto.randomUUID().replace(/-/g, '').substring(0, 13);
   return `sess-${timestamp}-${random}`;
 }
 
