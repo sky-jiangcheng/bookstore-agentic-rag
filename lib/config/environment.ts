@@ -19,7 +19,7 @@ export const config = {
     url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   },
   rag: {
-    maxIterations: 3,
+    maxIterations: 1,
     defaultTargetCount: 15,
     qualityThreshold: 0.8,
   },

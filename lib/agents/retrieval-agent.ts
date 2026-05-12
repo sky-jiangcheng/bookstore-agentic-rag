@@ -1,7 +1,7 @@
 // lib/agents/retrieval-agent.ts
 import type { Book, RetrievalResult, RequirementAnalysis } from '@/lib/types/rag';
 import { vectorSearch } from '@/lib/upstash';
-import { searchCatalog, getPopularBooks, getBookDetails } from '@/lib/clients/catalog-client';
+import { searchCatalog, getPopularBooks, getBookDetailsBatch } from '@/lib/clients/catalog-client';
 import { generateEmbeddingPair } from '@/lib/embeddings';
 import { rerankBooks, type RerankerConfig } from '@/lib/reranking';
 
@@ -190,20 +190,21 @@ export async function retrieveCandidates(
             try {
               const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
               const vectorResults = await vectorSearch(vector, strategy.topK, sparseVector);
-              // Convert vector results to Book objects by fetching details
-              // Handle each getBookDetails call independently to avoid single failure breaking all
-              const bookPromises = vectorResults.map(async (result) => {
+              // Batch-fetch book details instead of N+1 individual calls
+              const ids = vectorResults.map((result) => result.id);
+              let bookMap = new Map<string, Book>();
+              if (ids.length > 0) {
                 try {
-                  const book = await getBookDetails(result.id);
-                  return book;
+                  const books = await getBookDetailsBatch(ids);
+                  bookMap = new Map(books.map((book) => [book.book_id, book]));
                 } catch (error) {
-                  console.warn(`[semantic] Failed to get book details for ${result.id}:`, error);
-                  return null;
+                  console.warn('[semantic] Failed to batch get book details:', error);
                 }
-              });
-              const booksOrNull = await Promise.all(bookPromises);
-              // Filter out null results (failed fetches)
-              const books = booksOrNull.filter((book): book is Book => book !== null);
+              }
+              // Map vector results to books, skipping any whose details weren't found
+              const books = vectorResults
+                .map((result) => bookMap.get(result.id) ?? null)
+                .filter((book): book is Book => book !== null);
               return { books, type: 'semantic' };
             } catch (error) {
               console.warn('[semantic] retrieval failed:', error);
@@ -220,18 +221,17 @@ export async function retrieveCandidates(
               const searchTerms = expandSearchTerms(requirement);
               const merged = new Map<string, Book>();
 
-              for (const term of searchTerms) {
-                const books = await searchCatalog({
-                  author: requirement.constraints.author,
-                  price_min: requirement.constraints.price_min,
-                  price_max: requirement.constraints.price_max,
-                  query: term,
-                });
+              // Single combined query — tokenized internally into all individual terms
+              const books = await searchCatalog({
+                author: requirement.constraints.author,
+                price_min: requirement.constraints.price_min,
+                price_max: requirement.constraints.price_max,
+                query: searchTerms.join(' '),
+              });
 
-                for (const book of books) {
-                  if (!merged.has(book.book_id)) {
-                    merged.set(book.book_id, book);
-                  }
+              for (const book of books) {
+                if (!merged.has(book.book_id)) {
+                  merged.set(book.book_id, book);
                 }
               }
 

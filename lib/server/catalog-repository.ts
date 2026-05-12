@@ -75,7 +75,7 @@ function mergeBooksById(primary: Book[], secondary: Book[]): Book[] {
   return Array.from(merged.values());
 }
 
-async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
+export async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
   if (ids.length === 0) {
     return [];
   }

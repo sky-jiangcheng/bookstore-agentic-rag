@@ -1,6 +1,7 @@
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 import { hasCatalogServiceConfig, hasDatabaseConfig } from '@/lib/config/environment';
 import {
+  fetchBooksByIds,
   getBookDetailsFromDatabase,
   getBookDetailsFromService,
   getPopularBooksFromDatabase,
@@ -31,6 +32,24 @@ export async function searchCatalog(filters: CatalogSearchFilters): Promise<Book
   }
 
   return (await filterBlockedBooks(books)).books;
+}
+
+/**
+ * Get details for multiple books by their IDs.
+ */
+export async function getBookDetailsBatch(ids: string[]): Promise<Book[]> {
+  let books: Book[];
+
+  if (hasDatabaseConfig()) {
+    books = await fetchBooksByIds(ids);
+    books = (await filterBlockedBooks(books)).books;
+  } else if (hasCatalogServiceConfig()) {
+    books = (await Promise.all(ids.map((id) => getBookDetailsFromService(id)))).filter((b): b is Book => b !== null);
+  } else {
+    throw unavailableDataSourceError();
+  }
+
+  return books;
 }
 
 /**
