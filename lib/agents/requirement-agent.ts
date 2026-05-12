@@ -142,8 +142,32 @@ function parseExcludedKeywords(query: string): string[] {
   return Array.from(new Set(exclusions));
 }
 
+/**
+ * Sanitize user input before embedding into LLM prompts to prevent prompt injection.
+ * - Strips role-switching markers (e.g. "system:", "assistant:", "user:") that could
+ *   hijack the conversation structure.
+ * - Removes common injection phrases.
+ * - Truncates input to a safe maximum length.
+ */
+const MAX_USER_INPUT_LENGTH = 2000;
+const ROLE_MARKER_PATTERN = /\b(system|assistant|user|human|ai|model)\s*:\s*/gi;
+const INJECTION_PHRASE_PATTERN = /\b(ignore\s+(previous|above|all)\s*(instructions|prompts|rules)|forget\s+(everything|all|previous)|disregard\s*(all|previous|above)|you\s+are\s+now|new\s+instructions?|override\s*(previous|all|system)?)\b/gi;
+
+function sanitizeUserInput(input: string): string {
+  let sanitized = input
+    .replace(ROLE_MARKER_PATTERN, '[filtered]')
+    .replace(INJECTION_PHRASE_PATTERN, '[filtered]');
+
+  if (sanitized.length > MAX_USER_INPUT_LENGTH) {
+    sanitized = sanitized.slice(0, MAX_USER_INPUT_LENGTH) + '...[truncated]';
+  }
+
+  return sanitized;
+}
+
 function extractQueryKeywords(query: string): string[] {
-  const tokens = query
+  const sanitized = sanitizeUserInput(query);
+  const tokens = sanitized
     .toLowerCase()
     .match(/[\p{Script=Han}]{2,12}|[a-z0-9][a-z0-9\-_]{2,}/gu) ?? [];
 
@@ -218,7 +242,7 @@ const ANALYSIS_PROMPT = (userQuery: string, conversationContext?: string) => `�
 
 ${conversationContext ? `历史对话上下文:\n${conversationContext}\n` : ''}
 
-当前用户查询: ${userQuery}
+当前用户查询: ${sanitizeUserInput(userQuery)}
 
 请提取：
 1. categories: 用户提到的书籍分类（如"小说"，"历史"，"围棋"，"计算机"等）

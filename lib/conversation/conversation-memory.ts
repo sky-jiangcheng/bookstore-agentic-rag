@@ -14,6 +14,30 @@ const SESSION_LIST_PREFIX = 'rag:sessions:';
 const DEFAULT_TTL = 60 * 60; // 1 hour
 const MAX_TURNS_PER_SESSION = 20;
 
+// 自动清理：模块加载时立即清理过期 session，之后每 30 分钟清理一次
+const CLEANUP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
+function startAutoCleanup(): void {
+  // 延迟 5 秒后执行首次清理，避免启动时与数据库连接竞争
+  setTimeout(() => {
+    cleanupOldSessions(DEFAULT_TTL * 1000).catch((err) =>
+      console.error('[conversation] Auto-cleanup failed:', err),
+    );
+  }, 5000);
+
+  // 每 30 分钟执行一次清理
+  setInterval(() => {
+    cleanupOldSessions(DEFAULT_TTL * 1000).catch((err) =>
+      console.error('[conversation] Auto-cleanup failed:', err),
+    );
+  }, CLEANUP_INTERVAL_MS);
+}
+
+// 仅在非构建阶段启动自动清理
+if (typeof process !== 'undefined' && process.env?.NEXT_PHASE !== 'phase-production-build') {
+  startAutoCleanup();
+}
+
 /**
  * Create a new conversation session
  */
@@ -193,7 +217,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
 /**
  * Clean up old sessions
  */
-export async function cleanupOldSessions(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): Promise<number> {
+export async function cleanupOldSessions(maxAgeMs: number = DEFAULT_TTL * 1000): Promise<number> {
   if (!redis) {
     return 0;
   }

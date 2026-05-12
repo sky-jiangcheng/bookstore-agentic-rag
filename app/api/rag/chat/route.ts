@@ -11,11 +11,32 @@ function encodeSseEvent(event: string, data: unknown): Uint8Array {
 
 /**
  * Get allowed origin for CORS from environment variable.
- * Defaults to empty string (no CORS) if ALLOWED_ORIGINS is not set.
+ * When ALLOWED_ORIGINS is not set, returns '*' (allow all origins).
+ * When set to a comma-separated list of domains, validates the Origin
+ * request header and returns the matching domain.
  */
-function getAllowedOrigin(): string {
-  const allowed = process.env.ALLOWED_ORIGINS || '';
-  return allowed;
+function getAllowedOrigin(request: NextRequest): string {
+  const allowed = process.env.ALLOWED_ORIGINS;
+  if (!allowed) {
+    return '*';
+  }
+  const origin = request.headers.get('origin') || '';
+  const allowedList = allowed.split(',').map((d) => d.trim()).filter(Boolean);
+  if (origin && allowedList.includes(origin)) {
+    return origin;
+  }
+  return '';
+}
+
+/**
+ * Build standard CORS headers for a response.
+ */
+function corsHeaders(request: NextRequest): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': getAllowedOrigin(request),
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
 }
 
 function buildRecommendationSummary(result: RAGPipelineResult): string {
@@ -190,7 +211,7 @@ async function handleRequest(query: string, sessionId: string | undefined, req: 
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': getAllowedOrigin(),
+        ...corsHeaders(req),
       },
     });
   } catch (error) {

@@ -9,6 +9,13 @@ import {
 import { getFilterStatus } from '@/lib/server/book-filters';
 
 export async function GET() {
+  if (process.env.APP_ENV === 'production') {
+    return NextResponse.json({
+      status: 'ok',
+      service: 'bookstore-agentic-rag',
+    });
+  }
+
   const filters = process.env.NEXT_PHASE === 'phase-production-build'
     ? {
         enabled: false,
