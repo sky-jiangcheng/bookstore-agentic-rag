@@ -36,7 +36,7 @@ async function checkRedisRateLimit(
   windowMs: number,
 ): Promise<{ allowed: boolean; remaining: number; resetTime: number } | null> {
   try {
-    const { redis } = await import('@/lib/upstash');
+    const { redis } = await import('@/lib/edge-redis');
     if (!redis) return null;
 
     const now = Date.now();
