@@ -198,7 +198,7 @@ async function getAllFeedbackStats(): Promise<FeedbackStats[]> {
   let cursor: string | number = 0;
 
   do {
-    const scanResult = await redis.scan(cursor, {
+    const scanResult: [cursor: string | number, keys: string[]] = await redis.scan(cursor, {
       match: `${STATS_PREFIX}book:*`,
       count: 100,
     });
