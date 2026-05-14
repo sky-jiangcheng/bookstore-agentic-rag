@@ -11,7 +11,7 @@
     "check": "npm run typecheck && npm run build",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "import:books": "node ./scripts/import-books.mjs",
-    "index:books": "node ./scripts/index-books.mjs",
+    "index:books": "tsx ./scripts/index-books.ts",
     "smoke:rag": "node ./scripts/smoke-rag.mjs",
     "vercel:precompute": "tsx scripts/vercel/precompute-embeddings.ts",
     "vercel:build": "next build --webpack",

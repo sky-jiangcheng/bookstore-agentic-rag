@@ -1,7 +1,7 @@
 import { createChunker } from './chunking';
 import type { TextChunk } from './types/rag';
 import { upsertChunkVector, vectorSearchChunks } from './upstash';
-import { buildBookDocument, buildEmbeddingPair } from './local-vector.js';
+import { buildBookDocument, buildEmbeddingPair } from './local-vector';
 
 type EmbeddingTaskType = 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' | 'SEMANTIC_SIMILARITY';
 

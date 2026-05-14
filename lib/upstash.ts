@@ -2,7 +2,7 @@
 import { Index } from '@upstash/vector';
 import { Redis } from '@upstash/redis';
 import { config, hasRedisConfig, hasVectorConfig } from '@/lib/config/environment';
-import { buildBookDocument, buildSparseVector } from './local-vector.js';
+import { buildBookDocument, buildSparseVector } from './local-vector';
 
 const vectorIndex = hasVectorConfig()
   ? new Index({

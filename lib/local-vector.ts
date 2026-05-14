@@ -6,7 +6,19 @@ const MAX_TOKENS = 512;
 
 const TOKEN_PATTERN = /\p{Script=Han}+|[\p{L}\p{N}]+/gu;
 
-function normalizeText(value) {
+export interface SparseVector {
+  indices: number[];
+  values: number[];
+}
+
+export interface EmbeddingPair {
+  vector: number[];
+  sparseVector: SparseVector;
+}
+
+type BookDocumentRecord = object;
+
+function normalizeText(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
   }
@@ -14,7 +26,7 @@ function normalizeText(value) {
   return String(value).replace(/\s+/g, ' ').trim();
 }
 
-function limitText(value, maxLength) {
+function limitText(value: unknown, maxLength: number): string {
   const text = normalizeText(value);
   if (!text) {
     return '';
@@ -23,7 +35,7 @@ function limitText(value, maxLength) {
   return text.slice(0, maxLength);
 }
 
-function hashToken(token, seed = 0) {
+function hashToken(token: string, seed = 0): number {
   let hash = 2166136261 ^ seed;
 
   for (let i = 0; i < token.length; i += 1) {
@@ -34,7 +46,7 @@ function hashToken(token, seed = 0) {
   return hash >>> 0;
 }
 
-function expandToken(token) {
+function expandToken(token: string): string[] {
   const expanded = [token];
 
   if (/^\p{Script=Han}+$/u.test(token)) {
@@ -54,10 +66,10 @@ function expandToken(token) {
   return expanded;
 }
 
-function tokenize(text) {
+function tokenize(text: unknown): string[] {
   const normalized = limitText(text, MAX_DOCUMENT_CHARS).toLowerCase();
   const matches = normalized.match(TOKEN_PATTERN) || [];
-  const tokens = [];
+  const tokens: string[] = [];
 
   for (const match of matches) {
     for (const token of expandToken(match)) {
@@ -74,7 +86,7 @@ function tokenize(text) {
   return tokens.slice(0, MAX_TOKENS);
 }
 
-function buildDenseVector(text, dimensions = DENSE_DIMENSIONS) {
+function buildDenseVector(text: unknown, dimensions = DENSE_DIMENSIONS): number[] {
   const tokens = tokenize(text);
   const vector = new Array(dimensions).fill(0);
 
@@ -83,7 +95,7 @@ function buildDenseVector(text, dimensions = DENSE_DIMENSIONS) {
     return vector;
   }
 
-  const counts = new Map();
+  const counts = new Map<string, number>();
   for (const token of tokens) {
     counts.set(token, (counts.get(token) || 0) + 1);
   }
@@ -113,7 +125,7 @@ function buildDenseVector(text, dimensions = DENSE_DIMENSIONS) {
   return vector.map((value) => value * scale);
 }
 
-function buildSparseVector(text) {
+function buildSparseVector(text: unknown): SparseVector {
   const tokens = tokenize(text);
 
   if (tokens.length === 0) {
@@ -123,7 +135,7 @@ function buildSparseVector(text) {
     };
   }
 
-  const counts = new Map();
+  const counts = new Map<string, number>();
   for (const token of tokens) {
     counts.set(token, (counts.get(token) || 0) + 1);
   }
@@ -138,7 +150,7 @@ function buildSparseVector(text) {
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, 256);
 
-  const aggregated = new Map();
+  const aggregated = new Map<number, number>();
   for (const entry of entries) {
     aggregated.set(entry.index, (aggregated.get(entry.index) || 0) + entry.score);
   }
@@ -154,9 +166,9 @@ function buildSparseVector(text) {
 const EMBEDDING_CACHE_MAX = 200;
 const EMBEDDING_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-const embeddingCache = new Map();
+const embeddingCache = new Map<string, { value: EmbeddingPair; timestamp: number }>();
 
-function getFromEmbeddingCache(key) {
+function getFromEmbeddingCache(key: string): EmbeddingPair | undefined {
   const entry = embeddingCache.get(key);
   if (!entry) return undefined;
   if (Date.now() - entry.timestamp > EMBEDDING_CACHE_TTL) {
@@ -169,22 +181,24 @@ function getFromEmbeddingCache(key) {
   return entry.value;
 }
 
-function setInEmbeddingCache(key, value) {
+function setInEmbeddingCache(key: string, value: EmbeddingPair): void {
   if (embeddingCache.has(key)) {
     embeddingCache.delete(key);
   } else if (embeddingCache.size >= EMBEDDING_CACHE_MAX) {
     // Evict oldest entry (first in Map iteration order)
     const oldestKey = embeddingCache.keys().next().value;
-    embeddingCache.delete(oldestKey);
+    if (oldestKey !== undefined) {
+      embeddingCache.delete(oldestKey);
+    }
   }
   embeddingCache.set(key, { value, timestamp: Date.now() });
 }
 
-function clearEmbeddingCache() {
+function clearEmbeddingCache(): void {
   embeddingCache.clear();
 }
 
-function buildEmbeddingPair(text) {
+function buildEmbeddingPair(text: unknown): EmbeddingPair {
   const normalized = normalizeText(text);
   if (normalized) {
     const cached = getFromEmbeddingCache(normalized);
@@ -200,25 +214,26 @@ function buildEmbeddingPair(text) {
   return result;
 }
 
-function buildBookDocument(record) {
+function buildBookDocument(record: BookDocumentRecord | null | undefined): string {
   if (!record) {
     return '';
   }
 
-  const vectorText = normalizeText(record.vector_text || record.vectorText);
+  const data = record as Record<string, unknown>;
+  const vectorText = normalizeText(data.vector_text || data.vectorText);
   if (vectorText) {
     return vectorText.slice(0, MAX_DOCUMENT_CHARS);
   }
 
-  const title = normalizeText(record.title);
-  const author = normalizeText(record.author) || 'Unknown Author';
-  const publisher = normalizeText(record.publisher) || 'Unknown Publisher';
-  const category = normalizeText(record.category) || 'general';
+  const title = normalizeText(data.title);
+  const author = normalizeText(data.author) || 'Unknown Author';
+  const publisher = normalizeText(data.publisher) || 'Unknown Publisher';
+  const category = normalizeText(data.category) || 'general';
   const descriptionSource =
-    record.summary_short ??
-    record.summaryShort ??
-    record.description ??
-    record.summary ??
+    data.summary_short ??
+    data.summaryShort ??
+    data.description ??
+    data.summary ??
     '';
   const description = limitText(descriptionSource, MAX_DESCRIPTION_CHARS);
 

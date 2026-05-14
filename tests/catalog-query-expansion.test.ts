@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildCatalogSearchTerms, buildCatalogSearchQuery } from '../lib/search/query-rerank.js';
+import { buildCatalogSearchTerms, buildCatalogSearchQuery } from '../lib/search/query-rerank';
 
 test('expands health queries into useful search terms', () => {
   const terms = buildCatalogSearchTerms('推荐一些适合家里长辈看的健康养生和免疫力科普书。');

@@ -4,9 +4,27 @@ import { Index } from '@upstash/vector';
 import { createPool } from '@vercel/postgres';
 
 import { loadEnvFile } from './lib/load-env.mjs';
-import { buildBookDocument, buildEmbeddingPair } from '../lib/local-vector.js';
+import { buildBookDocument, buildEmbeddingPair } from '../lib/local-vector';
 
-function getRequiredEnv(name) {
+interface IndexBooksArgs {
+  limit?: number;
+  offset: number;
+  bookId?: number;
+  afterId?: number;
+  envFile?: string;
+}
+
+interface BookIndexRow {
+  id: string | number;
+  title: string | null;
+  author: string | null;
+  publisher: string | null;
+  category: string | null;
+}
+
+type DatabasePool = ReturnType<typeof createPool>;
+
+function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
@@ -15,12 +33,12 @@ function getRequiredEnv(name) {
   return value;
 }
 
-function getDatabaseConnectionString() {
+function getDatabaseConnectionString(): string {
   return process.env.POSTGRES_URL || process.env.DATABASE_URL || '';
 }
 
-function parseArgs(argv) {
-  const args = {
+function parseArgs(argv: string[]): IndexBooksArgs {
+  const args: IndexBooksArgs = {
     limit: undefined,
     offset: 0,
     bookId: undefined,
@@ -52,7 +70,10 @@ function parseArgs(argv) {
   return args;
 }
 
-async function fetchBooks(pool, { limit, offset, bookId, afterId }) {
+async function fetchBooks(
+  pool: DatabasePool,
+  { limit, offset, bookId, afterId }: IndexBooksArgs
+): Promise<BookIndexRow[]> {
   if (bookId) {
     const result = await pool.sql`
       SELECT
@@ -66,7 +87,7 @@ async function fetchBooks(pool, { limit, offset, bookId, afterId }) {
       LIMIT 1
     `;
 
-    return result.rows;
+    return result.rows as BookIndexRow[];
   }
 
   if (afterId) {
@@ -83,7 +104,7 @@ async function fetchBooks(pool, { limit, offset, bookId, afterId }) {
       LIMIT ${limit || 1000}
     `;
 
-    return result.rows;
+    return result.rows as BookIndexRow[];
   }
 
   if (limit) {
@@ -100,7 +121,7 @@ async function fetchBooks(pool, { limit, offset, bookId, afterId }) {
       OFFSET ${offset}
     `;
 
-    return result.rows;
+    return result.rows as BookIndexRow[];
   }
 
   const result = await pool.sql`
@@ -114,7 +135,7 @@ async function fetchBooks(pool, { limit, offset, bookId, afterId }) {
     ORDER BY id
   `;
 
-  return result.rows;
+  return result.rows as BookIndexRow[];
 }
 
 async function main() {

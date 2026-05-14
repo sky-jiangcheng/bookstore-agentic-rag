@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { rerankCatalogBooks } from '../lib/search/query-rerank.js';
+import { rerankCatalogBooks } from '../lib/search/query-rerank';
 
 test('reranks health books above unrelated popular books', () => {
   const books = [

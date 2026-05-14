@@ -6,10 +6,39 @@ import { Index } from '@upstash/vector';
 import { createPool } from '@vercel/postgres';
 
 import { loadEnvFile } from './lib/load-env.mjs';
-import { buildBookDocument, buildEmbeddingPair, normalizeText } from '../lib/local-vector.js';
+import { buildBookDocument, buildEmbeddingPair, normalizeText } from '../lib/local-vector';
 
-function parseArgs(argv) {
-  const args = {
+interface ImportVectorsArgs {
+  input: string;
+  envFile: string;
+  batchSize: number;
+  skipLines: number;
+  limit?: number;
+}
+
+interface SourceBookRecord {
+  id: string | number;
+  title?: unknown;
+  author?: unknown;
+  category?: unknown;
+  description?: unknown;
+  [key: string]: unknown;
+}
+
+interface VectorMetadata {
+  bookId: string;
+  title: string;
+  author: string;
+  category: string;
+  description: string;
+  sourceId?: string;
+  [key: string]: string | undefined;
+}
+
+type DatabasePool = ReturnType<typeof createPool>;
+
+function parseArgs(argv: string[]): ImportVectorsArgs {
+  const args: ImportVectorsArgs = {
     input: '',
     envFile: '',
     batchSize: 32,
@@ -45,11 +74,11 @@ function parseArgs(argv) {
   return args;
 }
 
-function resolveInputPath(rawPath) {
+function resolveInputPath(rawPath: string): string {
   return path.isAbsolute(rawPath) ? rawPath : path.resolve(process.cwd(), rawPath);
 }
 
-function getRequiredEnv(name) {
+function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
@@ -58,11 +87,11 @@ function getRequiredEnv(name) {
   return value;
 }
 
-function normalizeJsonLine(line) {
+function normalizeJsonLine(line: string): string {
   return line.replace(/("id"\s*:\s*)(-?\d+(?:\.\d+)?)/, '$1"$2"');
 }
 
-async function loadOverflowIdMap(pool) {
+async function loadOverflowIdMap(pool: DatabasePool): Promise<Map<string, string>> {
   const result = await pool.query(`
     select source_id, id::text as id
     from books
@@ -72,7 +101,7 @@ async function loadOverflowIdMap(pool) {
   return new Map(result.rows.map((row) => [String(row.source_id), String(row.id)]));
 }
 
-function resolveBookId(record, overflowMap) {
+function resolveBookId(record: SourceBookRecord, overflowMap: Map<string, string>): string {
   const rawId = String(record.id).trim();
   return overflowMap.get(rawId) || rawId;
 }
@@ -99,7 +128,7 @@ async function main() {
 
   let processed = 0;
   let skipped = 0;
-  let buffer = [];
+  let buffer: SourceBookRecord[] = [];
 
   async function flushBuffer() {
     if (buffer.length === 0) {
@@ -112,7 +141,7 @@ async function main() {
     await index.upsert(
       buffer.map((record, indexOffset) => {
         const bookId = resolveBookId(record, overflowMap);
-        const metadata = {
+        const metadata: VectorMetadata = {
           bookId,
           title: normalizeText(record.title),
           author: normalizeText(record.author) || 'Unknown Author',
@@ -156,7 +185,7 @@ async function main() {
       break;
     }
 
-    buffer.push(JSON.parse(normalizeJsonLine(trimmed)));
+    buffer.push(JSON.parse(normalizeJsonLine(trimmed)) as SourceBookRecord);
     if (buffer.length >= args.batchSize) {
       await flushBuffer();
     }

@@ -8,7 +8,7 @@
  */
 
 import { sql } from '@vercel/postgres';
-import { buildBookDocument, buildEmbeddingPair } from '../../lib/local-vector.js';
+import { buildBookDocument, buildEmbeddingPair } from '../../lib/local-vector';
 
 interface Book {
   id: string;

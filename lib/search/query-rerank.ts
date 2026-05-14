@@ -1,4 +1,19 @@
-const CATEGORY_ALIASES = {
+interface CatalogRerankBook {
+  title?: unknown;
+  author?: unknown;
+  publisher?: unknown;
+  category?: unknown;
+  description?: unknown;
+  relevance_score?: unknown;
+}
+
+interface ScoredBook<T extends CatalogRerankBook> {
+  book: T;
+  score: number;
+  index: number;
+}
+
+const CATEGORY_ALIASES: Record<string, string[]> = {
   健康: ['健康', '养生', '医疗', '免疫力', '中老年', '老人', '长辈', '保健'],
   科普: ['科普', '科学', '知识', '百科'],
   历史: ['历史', '党史', '地方史', '人物传记', '地方文化', '革命', '传记'],
@@ -17,7 +32,7 @@ const CATEGORY_ALIASES = {
   棋牌: ['围棋', '象棋', '国际象棋', '五子棋'],
 };
 
-const GENERIC_STOPWORDS = new Set([
+const GENERIC_STOPWORDS = new Set<string>([
   '推荐',
   '书',
   '书籍',
@@ -44,7 +59,7 @@ const GENERIC_STOPWORDS = new Set([
   '哪些',
 ]);
 
-const SEARCH_INTENT_RULES = [
+const SEARCH_INTENT_RULES: Array<{ terms: string[]; triggers: string[] }> = [
   { terms: ['健康', '养生', '医疗', '免疫力', '中老年', '老人', '长辈', '保健', '科普'], triggers: ['健康', '养生', '医疗', '免疫力', '中老年', '老人', '长辈', '保健'] },
   { terms: ['科普', '科学', '知识', '百科'], triggers: ['科普', '科学', '知识', '百科'] },
   { terms: ['历史', '传记', '人物', '鲁迅'], triggers: ['历史', '传记', '人物', '鲁迅'] },
@@ -58,7 +73,7 @@ const SEARCH_INTENT_RULES = [
   { terms: ['五子棋', '布局', '实战', '开局'], triggers: ['五子棋'] },
 ];
 
-function normalizeText(value) {
+function normalizeText(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
   }
@@ -66,12 +81,12 @@ function normalizeText(value) {
   return String(value).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function unique(values) {
+function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-function collectIntentTerms(normalizedQuery) {
-  const terms = [];
+function collectIntentTerms(normalizedQuery: string): string[] {
+  const terms: string[] = [];
 
   for (const rule of SEARCH_INTENT_RULES) {
     if (rule.triggers.some((trigger) => normalizedQuery.includes(trigger.toLowerCase()))) {
@@ -84,7 +99,7 @@ function collectIntentTerms(normalizedQuery) {
   return unique(terms);
 }
 
-function extractTerms(query) {
+function extractTerms(query: unknown): string[] {
   const normalized = normalizeText(query);
   if (!normalized) {
     return [];
@@ -100,7 +115,7 @@ function extractTerms(query) {
   return unique(terms);
 }
 
-function buildCatalogSearchTerms(query) {
+function buildCatalogSearchTerms(query: unknown): string[] {
   const normalized = normalizeText(query);
   if (!normalized) {
     return [];
@@ -120,12 +135,12 @@ function buildCatalogSearchTerms(query) {
   );
 }
 
-function buildCatalogSearchQuery(query) {
+function buildCatalogSearchQuery(query: unknown): string {
   const terms = buildCatalogSearchTerms(query);
   return terms.length > 0 ? terms.join(' ') : normalizeText(query);
 }
 
-function matchCount(haystack, terms) {
+function matchCount(haystack: string, terms: string[]): number {
   let count = 0;
   for (const term of terms) {
     if (term && haystack.includes(term)) {
@@ -135,14 +150,14 @@ function matchCount(haystack, terms) {
   return count;
 }
 
-function containsAny(haystack, terms) {
+function containsAny(haystack: string, terms: string[]): boolean {
   return terms.some((term) => term && haystack.includes(term));
 }
 
-function matchCategories(book, normalizedQuery) {
+function matchCategories(book: CatalogRerankBook, normalizedQuery: string): string[] {
   const category = normalizeText(book.category);
   const title = normalizeText(book.title);
-  const queryCategoryHits = [];
+  const queryCategoryHits: string[] = [];
 
   for (const [label, aliases] of Object.entries(CATEGORY_ALIASES)) {
     const matched = aliases.some((alias) => normalizedQuery.includes(alias.toLowerCase()));
@@ -159,7 +174,7 @@ function matchCategories(book, normalizedQuery) {
   return unique(queryCategoryHits);
 }
 
-function computeBookScore(book, query, index) {
+function computeBookScore(book: CatalogRerankBook, query: unknown, index: number): { score: number; index: number } {
   const normalizedQuery = normalizeText(query);
   const queryTerms = extractTerms(query);
   const title = normalizeText(book.title);
@@ -282,12 +297,12 @@ function computeBookScore(book, query, index) {
   };
 }
 
-function rerankCatalogBooks(books, query) {
+function rerankCatalogBooks<T extends CatalogRerankBook>(books: T[], query: unknown): Array<T & { relevance_score: number }> {
   if (!Array.isArray(books) || books.length === 0) {
     return [];
   }
 
-  const scored = books.map((book, index) => ({
+  const scored: Array<ScoredBook<T>> = books.map((book, index) => ({
     book,
     ...computeBookScore(book, query, index),
   }));
@@ -302,10 +317,10 @@ function rerankCatalogBooks(books, query) {
   return sorted.map(({ book, score }) => ({
     ...book,
     relevance_score: score,
-  }));
+  })) as Array<T & { relevance_score: number }>;
 }
 
-module.exports = {
+export {
   CATEGORY_ALIASES,
   buildCatalogSearchQuery,
   buildCatalogSearchTerms,

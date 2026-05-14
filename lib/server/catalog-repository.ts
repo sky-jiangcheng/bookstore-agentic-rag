@@ -3,9 +3,9 @@ import 'server-only';
 import { sql } from '@vercel/postgres';
 
 import config, { hasCatalogServiceConfig, hasVectorConfig } from '@/lib/config/environment';
-import { buildCatalogSearchQuery, buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank.js';
+import { buildCatalogSearchQuery, buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
-import { buildEmbeddingPair } from '@/lib/local-vector.js';
+import { buildEmbeddingPair } from '@/lib/local-vector';
 import { vectorSearch } from '@/lib/upstash';
 import { fetchWithTimeout } from '@/lib/utils/fetch-timeout';
 
