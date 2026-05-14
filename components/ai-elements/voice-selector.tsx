@@ -22,15 +22,9 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
-  CircleSmallIcon,
-  MarsIcon,
-  MarsStrokeIcon,
-  NonBinaryIcon,
+  CircleIcon,
   PauseIcon,
   PlayIcon,
-  TransgenderIcon,
-  VenusAndMarsIcon,
-  VenusIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, useCallback, useContext, useMemo } from "react";
@@ -44,6 +38,75 @@ interface VoiceSelectorContextValue {
 
 const VoiceSelectorContext = createContext<VoiceSelectorContextValue | null>(
   null
+);
+
+type GenderIconProps = ComponentProps<"svg">;
+
+const GenderIconBase = (props: GenderIconProps) => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="2"
+    viewBox="0 0 24 24"
+    {...props}
+  />
+);
+
+const MarsIcon = (props: GenderIconProps) => (
+  <GenderIconBase {...props}>
+    <circle cx="9" cy="15" r="5" />
+    <path d="m13 11 7-7" />
+    <path d="M15 4h5v5" />
+  </GenderIconBase>
+);
+
+const VenusIcon = (props: GenderIconProps) => (
+  <GenderIconBase {...props}>
+    <circle cx="12" cy="8" r="5" />
+    <path d="M12 13v8" />
+    <path d="M8 17h8" />
+  </GenderIconBase>
+);
+
+const TransgenderIcon = (props: GenderIconProps) => (
+  <GenderIconBase {...props}>
+    <circle cx="10" cy="14" r="4" />
+    <path d="m13 11 7-7" />
+    <path d="M15 4h5v5" />
+    <path d="M10 18v4" />
+    <path d="M6 22h8" />
+  </GenderIconBase>
+);
+
+const MarsStrokeIcon = (props: GenderIconProps) => (
+  <GenderIconBase {...props}>
+    <circle cx="10" cy="14" r="4" />
+    <path d="m13 11 6-6" />
+    <path d="M17 5h2v2" />
+    <path d="M10 18v4" />
+  </GenderIconBase>
+);
+
+const NonBinaryIcon = (props: GenderIconProps) => (
+  <GenderIconBase {...props}>
+    <circle cx="12" cy="14" r="4" />
+    <path d="M12 10V3" />
+    <path d="m9 6 3-3 3 3" />
+  </GenderIconBase>
+);
+
+const VenusAndMarsIcon = (props: GenderIconProps) => (
+  <GenderIconBase {...props}>
+    <circle cx="9" cy="14" r="4" />
+    <circle cx="15" cy="10" r="4" />
+    <path d="M12 17v4" />
+    <path d="M8 21h8" />
+    <path d="m18 7 3-3" />
+    <path d="M19 4h2v2" />
+  </GenderIconBase>
 );
 
 export const useVoiceSelector = () => {
@@ -226,7 +289,7 @@ export const VoiceSelectorGender = ({
       break;
     }
     default: {
-      icon = <CircleSmallIcon className="size-4" />;
+      icon = <CircleIcon className="size-4" />;
     }
   }
 
