@@ -58,7 +58,7 @@ export async function evaluateRecommendation(
 ): Promise<EvaluationResult> {
   try {
     const { output } = await generateText({
-      model: 'google/gemini-3.1-flash-image-preview',
+      model: 'google/gemini-2.0-flash',
       prompt: EVALUATION_PROMPT(requirement, recommendation),
       output: Output.object({
         schema: EvaluationSchema,

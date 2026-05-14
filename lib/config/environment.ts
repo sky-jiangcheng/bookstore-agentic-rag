@@ -56,9 +56,10 @@ export const config = {
 export function validateConfig(): void {
   const missing: string[] = [];
   if (!config.google.apiKey) missing.push('GOOGLE_API_KEY');
+  if (!config.database.url) missing.push('POSTGRES_URL or DATABASE_URL');
 
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    console.warn(`[config] Missing environment variables: ${missing.join(', ')}. Some features may not work.`);
   }
 }
 

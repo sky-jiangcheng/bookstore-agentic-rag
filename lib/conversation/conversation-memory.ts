@@ -77,7 +77,27 @@ export async function getSession(sessionId: string): Promise<ConversationSession
     return null;
   }
 
-  return sessionData as unknown as ConversationSession;
+  // Redis HGETALL returns all values as strings; nested objects need JSON.parse
+  const parsed = { ...sessionData } as Record<string, unknown>;
+  if (typeof parsed.turns === 'string') {
+    try {
+      parsed.turns = JSON.parse(parsed.turns as string);
+    } catch {
+      parsed.turns = [];
+    }
+  }
+  if (typeof parsed.metadata === 'string') {
+    try {
+      parsed.metadata = JSON.parse(parsed.metadata as string);
+    } catch {
+      parsed.metadata = { startTime: parsed.createdAt ? Number(parsed.createdAt) : Date.now(), turnCount: 0 };
+    }
+  }
+  // Ensure numeric fields
+  parsed.createdAt = Number(parsed.createdAt) || 0;
+  parsed.updatedAt = Number(parsed.updatedAt) || 0;
+
+  return parsed as unknown as ConversationSession;
 }
 
 /**

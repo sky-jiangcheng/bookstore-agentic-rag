@@ -2,7 +2,7 @@ import 'server-only';
 
 import { sql } from '@vercel/postgres';
 
-import config from '@/lib/config/environment';
+import config, { hasVectorConfig } from '@/lib/config/environment';
 import { buildCatalogSearchQuery, buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank.js';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 import { buildEmbeddingPair } from '@/lib/local-vector.js';
@@ -181,13 +181,15 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
     return sqlBooks;
   }
 
-  const { vector, sparseVector } = buildEmbeddingPair(searchQuery || filters.query);
-  const vectorResults = await vectorSearch(vector, 50, sparseVector);
-  const ids = vectorResults.map((entry) => String(entry.metadata?.bookId ?? entry.id));
-  const books = await fetchBooksByIds(ids);
-  const bookById = new Map(books.map((book) => [book.book_id, book]));
+  // Vector search: only attempt if Upstash Vector is configured
+  if (filters.query && hasVectorConfig()) {
+    const { vector, sparseVector } = buildEmbeddingPair(searchQuery || filters.query);
+    const vectorResults = await vectorSearch(vector, 50, sparseVector);
+    const ids = vectorResults.map((entry) => String(entry.metadata?.bookId ?? entry.id));
+    const books = await fetchBooksByIds(ids);
+    const bookById = new Map(books.map((book) => [book.book_id, book]));
 
-  const vectorBooks = ids
+    const vectorBooks = ids
     .map((id) => bookById.get(id))
     .filter((book): book is Book => Boolean(book))
     .map((book) => ({
@@ -196,7 +198,10 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
         Number(vectorResults.find((entry) => String(entry.metadata?.bookId ?? entry.id) === book.book_id)?.score ?? book.relevance_score ?? 0),
     }));
 
-  return rerankCatalogBooks(mergeBooksById(sqlBooks, vectorBooks), searchQuery || filters.query || '');
+    return rerankCatalogBooks(mergeBooksById(sqlBooks, vectorBooks), searchQuery || filters.query || '');
+  }
+
+  return sqlBooks;
 }
 
 export async function getBookDetailsFromDatabase(bookId: string): Promise<Book | null> {

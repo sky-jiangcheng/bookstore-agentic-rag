@@ -153,7 +153,7 @@ export async function generateRecommendation(
 
   try {
     const { output } = await generateText({
-      model: 'google/gemini-3.1-flash',
+      model: 'google/gemini-2.0-flash',
       prompt: RECOMMENDATION_PROMPT(requirement, visibleCandidates, targetCount),
       output: Output.object({
         schema: RecommendationSchema,
