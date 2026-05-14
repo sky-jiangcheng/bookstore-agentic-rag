@@ -41,7 +41,7 @@ export async function upsertBookVector(
   sparseVector?: SparseVector,
 ): Promise<void> {
   if (!vectorIndex) {
-    throw new Error('Upstash Vector is not configured');
+    throw new Error('Vector search is not available');
   }
 
   const document = buildBookDocument(metadata);
@@ -93,7 +93,7 @@ export async function vectorSearch(
   sparseVector?: SparseVector,
 ): Promise<{ id: string; score: number; metadata: VectorBookMetadata }[]> {
   if (!vectorIndex) {
-    throw new Error('Upstash Vector is not configured');
+    throw new Error('Vector search is not available');
   }
 
   const query: {
@@ -125,7 +125,7 @@ export async function vectorSearch(
 
 export async function deleteBookVector(bookId: string): Promise<void> {
   if (!vectorIndex) {
-    throw new Error('Upstash Vector is not configured');
+    throw new Error('Vector search is not available');
   }
 
   await vectorIndex.delete([bookId.toString()]);
@@ -151,7 +151,7 @@ export async function upsertChunkVector(
   sparseVector?: SparseVector,
 ): Promise<void> {
   if (!vectorIndex) {
-    throw new Error('Upstash Vector is not configured');
+    throw new Error('Vector search is not available');
   }
 
   const document = metadata.text || [metadata.title, metadata.author, metadata.category].filter(Boolean).join('\n');
@@ -172,7 +172,7 @@ export async function vectorSearchChunks(
   _filter?: { bookId?: string; category?: string },
 ): Promise<{ id: string; score: number; metadata: ChunkMetadata }[]> {
   if (!vectorIndex) {
-    throw new Error('Upstash Vector is not configured');
+    throw new Error('Vector search is not available');
   }
 
   const results = await vectorIndex.query({
@@ -193,7 +193,7 @@ export async function vectorSearchChunks(
 
 export async function deleteChunkVectors(chunkIds: string[]): Promise<void> {
   if (!vectorIndex) {
-    throw new Error('Upstash Vector is not configured');
+    throw new Error('Vector search is not available');
   }
 
   await vectorIndex.delete(chunkIds);
@@ -201,7 +201,7 @@ export async function deleteChunkVectors(chunkIds: string[]): Promise<void> {
 
 export async function deleteAllBookChunks(bookId: string): Promise<void> {
   if (!vectorIndex) {
-    throw new Error('Upstash Vector is not configured');
+    throw new Error('Vector search is not available');
   }
 
   // Delete all chunks belonging to this book using prefix-based deletion

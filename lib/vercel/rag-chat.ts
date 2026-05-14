@@ -3,19 +3,12 @@ import type { NextRequest } from 'next/server';
 import type { VercelRAGPipelineResult } from './simplified-orchestrator';
 import type { AgentProgress } from '@/lib/types/rag';
 import { runVercelRAGPipeline } from './simplified-orchestrator';
+import { corsHeaders } from '@/lib/utils/cors';
+import { getSafeErrorMessage } from '@/lib/utils/safe-error';
 
 function encodeSseEvent(event: string, data: unknown): Uint8Array {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   return new TextEncoder().encode(payload);
-}
-
-/**
- * Get allowed origin for CORS from environment variable.
- * Defaults to empty string (no CORS) if ALLOWED_ORIGINS is not set.
- */
-function getAllowedOrigin(): string {
-  const allowed = process.env.ALLOWED_ORIGINS || '';
-  return allowed;
 }
 
 export async function handleStreamingRequest(
@@ -67,7 +60,10 @@ export async function handleStreamingRequest(
               );
             }
           } else if (!isClosed) {
-            controller.enqueue(encodeSseEvent('error', result));
+            controller.enqueue(encodeSseEvent('error', {
+              ...result,
+              error: getSafeErrorMessage(result.error),
+            }));
           }
 
           closeStream();
@@ -78,7 +74,7 @@ export async function handleStreamingRequest(
             controller.enqueue(
               encodeSseEvent('error', {
                 success: false,
-                error: error.message,
+                error: getSafeErrorMessage(error),
               })
             );
           }
@@ -105,7 +101,7 @@ export async function handleStreamingRequest(
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': getAllowedOrigin(),
+      ...corsHeaders(req),
     },
   });
 }

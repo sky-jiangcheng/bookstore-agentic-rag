@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { storeFeedback, getSessionFeedback } from '@/lib/feedback';
+import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 
 export async function POST(req: NextRequest) {
   try {
@@ -48,9 +49,9 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('[feedback] API error:', error);
+    logServerError('[feedback]', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      buildSafeErrorResponse(error, '反馈提交失败'),
       { status: 500 }
     );
   }
@@ -76,9 +77,9 @@ export async function GET(req: NextRequest) {
       count: feedback.length,
     });
   } catch (error) {
-    console.error('[feedback] API error:', error);
+    logServerError('[feedback]', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      buildSafeErrorResponse(error, '获取反馈失败'),
       { status: 500 }
     );
   }

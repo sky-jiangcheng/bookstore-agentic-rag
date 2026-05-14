@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { BookListHttpError, parseBookListRequirements } from '@/lib/book-list/service';
 import { validateConfig } from '@/lib/config/environment';
+import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 
 const parseSchema = z.object({
   user_input: z.string().min(5).max(1000),
@@ -23,9 +24,9 @@ export async function POST(req: NextRequest) {
     if (err instanceof BookListHttpError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    console.error('[book-list/parse]', err);
+    logServerError('[book-list/parse]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Parse failed' },
+      buildSafeErrorResponse(err, '解析请求失败'),
       { status: 500 },
     );
   }

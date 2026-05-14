@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runRAGPipeline, type RAGPipelineResult } from '@/lib/agents/orchestrator';
+import { runRAGPipeline } from '@/lib/agents/orchestrator';
+import type { RAGPipelineResult } from '@/lib/agents/orchestrator';
 import { validateConfig, config } from '@/lib/config/environment';
 import { runVercelRAGPipeline } from '@/lib/vercel/simplified-orchestrator';
+import type { VercelRAGPipelineResult } from '@/lib/vercel/simplified-orchestrator';
 import type { AgentProgress } from '@/lib/types/rag';
+import { corsHeaders, handleCorsPreflightRequest } from '@/lib/utils/cors';
+import { getSafeErrorMessage, buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
+import { z } from 'zod';
 
 function encodeSseEvent(event: string, data: unknown): Uint8Array {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -10,36 +15,22 @@ function encodeSseEvent(event: string, data: unknown): Uint8Array {
 }
 
 /**
- * Get allowed origin for CORS from environment variable.
- * When ALLOWED_ORIGINS is not set, returns '*' (allow all origins).
- * When set to a comma-separated list of domains, validates the Origin
- * request header and returns the matching domain.
+ * 请求体验证 schema。
+ * 防止超长输入、空查询、非字符串类型等安全问题。
  */
-function getAllowedOrigin(request: NextRequest): string {
-  const allowed = process.env.ALLOWED_ORIGINS;
-  if (!allowed) {
-    return '*';
-  }
-  const origin = request.headers.get('origin') || '';
-  const allowedList = allowed.split(',').map((d) => d.trim()).filter(Boolean);
-  if (origin && allowedList.includes(origin)) {
-    return origin;
-  }
-  return '';
-}
+const chatRequestSchema = z.object({
+  query: z.string()
+    .min(1, 'Query cannot be empty')
+    .max(2000, 'Query too long (max 2000 characters)')
+    .transform((q) => q.trim()),
+  sessionId: z.string()
+    .max(128, 'Session ID too long')
+    .optional()
+    .transform((s) => s?.trim() || undefined),
+});
 
-/**
- * Build standard CORS headers for a response.
- */
-function corsHeaders(request: NextRequest): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': getAllowedOrigin(request),
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
-}
-
-function buildRecommendationSummary(result: RAGPipelineResult): string {
+/** 通用推荐摘要构建（兼容两种 pipeline 结果类型） */
+function buildRecommendationSummary(result: RAGPipelineResult | VercelRAGPipelineResult): string {
   if (!result.recommendation || result.recommendation.books.length === 0) {
     return '目前没有检索到足够的真实图书数据，暂时无法生成可信推荐。';
   }
@@ -71,6 +62,10 @@ function buildRecommendationSummary(result: RAGPipelineResult): string {
   ].join('\n\n');
 }
 
+export async function OPTIONS(req: NextRequest) {
+  return handleCorsPreflightRequest(req);
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Validate configuration
@@ -80,94 +75,73 @@ export async function POST(req: NextRequest) {
     if (req.headers.get('content-type') !== 'application/json') {
       return NextResponse.json(
         { error: 'Content-Type must be application/json' },
-        { status: 415 }
+        { status: 415, headers: corsHeaders(req) }
       );
     }
 
-    // Parse request body
-    const body = await req.json();
-    const { query, sessionId } = body;
+    // Parse and validate request body with Zod
+    const rawBody = await req.json();
+    const parseResult = chatRequestSchema.safeParse(rawBody);
 
-    if (!query || typeof query !== 'string') {
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'Query parameter is required and must be a string' },
-        { status: 400 }
+        { error: 'Invalid request', details: parseResult.error.flatten() },
+        { status: 400, headers: corsHeaders(req) }
       );
     }
+
+    const { query, sessionId } = parseResult.data;
 
     return await handleRequest(query, sessionId, req);
   } catch (error) {
-    console.error('RAG API error:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+    logServerError('[RAG Chat]', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function GET(req: NextRequest) {
-  try {
-    // Validate configuration
-    validateConfig();
-
-    // Get query from search parameters
-    const url = new URL(req.url);
-    const query = url.searchParams.get('query');
-    const sessionId = url.searchParams.get('sessionId') || undefined;
-
-    if (!query || typeof query !== 'string') {
-      return NextResponse.json(
-        { error: 'Query parameter is required and must be a string' },
-        { status: 400 }
-      );
-    }
-
-    return await handleRequest(query, sessionId, req);
-  } catch (error) {
-    console.error('RAG API error:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      buildSafeErrorResponse(error, '处理请求时发生错误'),
+      { status: 500, headers: corsHeaders(req) }
     );
   }
 }
 
 async function handleRequest(query: string, sessionId: string | undefined, req: NextRequest) {
   try {
-    const useFastPipeline = config.vercel.enabled && config.vercel.useSimplifiedPipeline;
+    // Determine which pipeline to use
+    const useVercelPipeline = config.vercel.enabled && config.vercel.useSimplifiedPipeline;
 
-    if (useFastPipeline) {
-      const result = await runVercelRAGPipeline({
-        userQuery: query,
-        sessionId,
-      });
-      const summary =
-        result.success && result.recommendation && result.recommendation.books.length > 0
-          ? `为你整理了 ${result.recommendation.books.length} 本候选图书。`
-          : '这次没有找到足够明确的候选书，建议换个更具体的主题再试。';
-
-      return NextResponse.json(
-        {
-          ...result,
-          summary,
-        },
-        { status: result.success ? 200 : 500 }
-      );
+    if (!useVercelPipeline) {
+      // Full RAG Pipeline (non-Vercel)
+      return await handleFullPipeline(query, sessionId, req);
     }
 
-    // Create a ReadableStream for SSE
+    // Vercel Simplified Pipeline
+    const result = await runVercelRAGPipeline({ userQuery: query, sessionId });
+    return NextResponse.json(
+      { ...result, summary: buildRecommendationSummary(result) },
+      { headers: corsHeaders(req) }
+    );
+  } catch (error) {
+    logServerError('[RAG Chat]', error);
+    return NextResponse.json(
+      buildSafeErrorResponse(error, '处理请求时发生错误'),
+      { status: 500, headers: corsHeaders(req) }
+    );
+  }
+}
+
+async function handleFullPipeline(query: string, sessionId: string | undefined, req: NextRequest) {
+  try {
+    // Set up SSE streaming
     const stream = new ReadableStream({
       start(controller) {
-        // Handle request cancellation
+        let aborted = false;
+
         const onAbort = () => {
+          aborted = true;
           controller.close();
         };
         req.signal.addEventListener('abort', onAbort);
 
-        // Send progress events from the pipeline
-        const onProgress = (progress: AgentProgress) => {
+        const onProgress: (progress: AgentProgress) => void = (progress) => {
+          if (aborted) return;
           controller.enqueue(encodeSseEvent('progress', progress));
         };
 
@@ -189,15 +163,19 @@ async function handleRequest(query: string, sessionId: string | undefined, req: 
               summary: buildRecommendationSummary(result),
             }));
           } else {
-            controller.enqueue(encodeSseEvent('error', result));
+            controller.enqueue(encodeSseEvent('error', {
+              ...result,
+              // Sanitize error message for SSE events too
+              error: getSafeErrorMessage(result.error),
+            }));
           }
           controller.close();
         }).catch((error: Error) => {
           req.signal.removeEventListener('abort', onAbort);
-          // Send error event
+          // Send error event — use safe message
           controller.enqueue(encodeSseEvent('error', {
             success: false,
-            error: error.message,
+            error: getSafeErrorMessage(error),
             iterations: 0,
           }));
           controller.close();
@@ -215,11 +193,10 @@ async function handleRequest(query: string, sessionId: string | undefined, req: 
       },
     });
   } catch (error) {
-    console.error('RAG API error:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+    logServerError('[RAG Chat SSE]', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      buildSafeErrorResponse(error, '处理请求时发生错误'),
+      { status: 500, headers: corsHeaders(req) }
     );
   }
 }

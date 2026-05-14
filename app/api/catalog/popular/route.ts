@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getPopularBooks } from '@/lib/clients/catalog-client';
+import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,10 +15,9 @@ export async function GET(req: NextRequest) {
       filtered: true,
     });
   } catch (error) {
+    logServerError('[catalog/popular]', error);
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Failed to load popular books',
-      },
+      buildSafeErrorResponse(error, '获取热门图书失败'),
       { status: 503 }
     );
   }

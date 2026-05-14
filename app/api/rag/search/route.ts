@@ -12,13 +12,21 @@ import { generateEmbeddingPair } from '@/lib/embeddings';
 import { vectorSearch } from '@/lib/upstash';
 import { getBookDetailsBatch } from '@/lib/clients/catalog-client';
 import { validateConfig } from '@/lib/config/environment';
+import { corsHeaders, handleCorsPreflightRequest } from '@/lib/utils/cors';
+import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
+import { z } from 'zod';
 
-function corsHeaders(): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
+/** 查询参数验证 schema */
+const searchQuerySchema = z.object({
+  query: z.string()
+    .min(1, 'Query parameter is required')
+    .max(500, 'Query too long (max 500 characters)')
+    .transform((q) => q.trim()),
+  top_k: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export async function OPTIONS(req: NextRequest) {
+  return handleCorsPreflightRequest(req);
 }
 
 export async function GET(req: NextRequest) {
@@ -26,45 +34,42 @@ export async function GET(req: NextRequest) {
     validateConfig();
 
     const url = new URL(req.url);
-    const query = url.searchParams.get('query');
-    const topK = Math.min(Math.max(1, Number(url.searchParams.get('top_k')) || 20), 50);
+    const parseResult = searchQuerySchema.safeParse({
+      query: url.searchParams.get('query'),
+      top_k: url.searchParams.get('top_k'),
+    });
 
-    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+    if (!parseResult.success) {
       return NextResponse.json(
-        { success: false, error: 'Query parameter is required' },
-        { status: 400, headers: corsHeaders() }
+        { success: false, error: 'Invalid request', details: parseResult.error.flatten() },
+        { status: 400, headers: corsHeaders(req) }
       );
     }
+
+    const { query, top_k } = parseResult.data;
 
     // Generate embedding from the query text
     const { vector, sparseVector } = generateEmbeddingPair(query.trim());
 
-    // Search Upstash Vector for similar books
-    const vectorResults = await vectorSearch(vector, topK, sparseVector);
+    // Search the vector index
+    const searchResults = await vectorSearch(vector, top_k, sparseVector);
 
-    if (vectorResults.length === 0) {
-      return NextResponse.json(
-        { success: true, results: [] },
-        { headers: corsHeaders() }
-      );
-    }
+    // Extract book IDs for batch fetching
+    const bookIds = searchResults.map((r) => r.metadata.bookId);
 
-    // Fetch full book details for each result
-    const ids = vectorResults.map((result) => result.id);
-    const books = await getBookDetailsBatch(ids);
+    // Fetch book details in batch (instead of N+1 individual fetches)
+    const books = await getBookDetailsBatch(bookIds);
 
-    // Build a score map from vector results
-    const scoreMap = new Map<string, number>();
-    for (const result of vectorResults) {
-      scoreMap.set(result.id, result.score);
-    }
+    // Build score map for relevance scoring
+    const scoreMap = new Map(
+      searchResults.map((r) => [r.metadata.bookId, r.score]),
+    );
 
-    // Return results in the format expected by local-platform's vector_search_tool
+    // Combine book details with search scores
     const results = books.map((book) => ({
       book_id: book.book_id,
       title: book.title,
       author: book.author,
-      price: book.price,
       category: book.category,
       relevance_score: scoreMap.get(book.book_id) ?? 0,
       source: 'vector',
@@ -72,24 +77,13 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(
       { success: true, results },
-      { headers: corsHeaders() }
+      { headers: corsHeaders(req) }
     );
   } catch (error) {
-    console.error('[RAG Search] Error:', error);
+    logServerError('[RAG Search]', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        results: [],
-      },
-      { status: 500, headers: corsHeaders() }
+      buildSafeErrorResponse(error, '搜索服务暂时不可用'),
+      { status: 500, headers: corsHeaders(req) }
     );
   }
-}
-
-export async function OPTIONS() {
-  return NextResponse.json(
-    {},
-    { headers: corsHeaders() }
-  );
 }

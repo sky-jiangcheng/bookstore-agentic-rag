@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getBookDetails } from '@/lib/clients/catalog-client';
+import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 
 interface RouteContext {
   params: Promise<{
@@ -20,10 +21,9 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     const book = await getBookDetails(normalizedBookId);
     return NextResponse.json({ book });
   } catch (error) {
+    logServerError('[catalog/book]', error);
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Failed to get book details',
-      },
+      buildSafeErrorResponse(error, '获取图书详情失败'),
       { status: 503 }
     );
   }

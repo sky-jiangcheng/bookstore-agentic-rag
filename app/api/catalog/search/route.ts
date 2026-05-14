@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { searchCatalog } from '@/lib/clients/catalog-client';
 import type { CatalogSearchFilters } from '@/lib/types/rag';
+import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,10 +15,9 @@ export async function POST(req: NextRequest) {
       filtered: true,
     });
   } catch (error) {
+    logServerError('[catalog/search]', error);
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Failed to search catalog',
-      },
+      buildSafeErrorResponse(error, '搜索目录失败'),
       { status: 503 }
     );
   }

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { ParsedRequirements } from '@/lib/book-list/types';
 import { BookListHttpError, generateBookList } from '@/lib/book-list/service';
 import { validateConfig } from '@/lib/config/environment';
+import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 
 const categorySchema = z.object({
   category: z.string(),
@@ -58,9 +59,9 @@ export async function POST(req: NextRequest) {
     if (err instanceof BookListHttpError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    console.error('[book-list/generate]', err);
+    logServerError('[book-list/generate]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Generate failed' },
+      buildSafeErrorResponse(err, '生成书单失败'),
       { status: 500 },
     );
   }

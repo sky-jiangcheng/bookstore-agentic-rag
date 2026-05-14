@@ -87,8 +87,14 @@ function checkMemoryRateLimit(
   return { allowed: true, remaining: maxRequests - entry.count, resetTime: entry.windowStart + windowMs };
 }
 
+/** 标记是否已输出过内存限流降级警告（避免日志刷屏） */
+let memoryFallbackWarned = false;
+
 /**
  * 统一限流检查：Redis 优先 → 内存降级
+ *
+ * 内存降级在 serverless 环境下每个冷启动独立，限流效果有限，
+ * 但至少能为单实例内的重复请求提供基本保护。
  */
 async function checkRateLimit(
   key: string,
@@ -98,20 +104,113 @@ async function checkRateLimit(
   const redisResult = await checkRedisRateLimit(key, maxRequests, windowMs);
   if (redisResult !== null) return redisResult;
 
-  // 降级到内存限流
+  // 降级到内存限流 — 在 serverless 环境下输出警告
+  if (!memoryFallbackWarned) {
+    console.warn(
+      '[rate-limit] Falling back to in-memory rate limiting. ' +
+      'This is ineffective in serverless environments (each cold start has independent state). ' +
+      'Configure UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN for distributed rate limiting.',
+    );
+    memoryFallbackWarned = true;
+  }
   return checkMemoryRateLimit(key, maxRequests, windowMs);
 }
 
-// 内存限流定期清理过期条目（仅在非构建阶段运行）
-if (typeof process !== 'undefined' && process.env?.NEXT_PHASE !== 'phase-production-build') {
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of memoryRateLimitMap.entries()) {
-      if (now - entry.windowStart > DEFAULT_WINDOW_MS * 2) {
-        memoryRateLimitMap.delete(key);
-      }
+// ============================================================
+// IP 地址提取（支持 IPv4 和 IPv6）
+// ============================================================
+
+/** IPv4 正则：4 组 1-3 位数字 */
+const IPv4_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/;
+
+/** IPv6 正则：支持标准格式、压缩格式和 IPv4-mapped 格式 */
+const IPv6_REGEX =
+  /^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$|^::([0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{0,4}$|^([0-9a-fA-F]{1,4}:){1,6}:$|^::$/;
+
+/**
+ * 去掉 IP 地址中可能的端口号。
+ * IPv4: 1.2.3.4:8080 → 1.2.3.4
+ * IPv6: [::1]:8080 → ::1 （方括号形式）
+ * IPv6: ::1 → ::1 （无端口）
+ */
+function removePort(ip: string): string {
+  // IPv6 带方括号和端口：[::1]:8080
+  if (ip.startsWith('[') && ip.includes(']:')) {
+    return ip.slice(1, ip.indexOf(']:'));
+  }
+  // IPv6 带方括号无端口：[::1]
+  if (ip.startsWith('[') && ip.endsWith(']')) {
+    return ip.slice(1, -1);
+  }
+  // IPv4 带端口：1.2.3.4:8080（最后一个冒号后是纯数字）
+  const lastColon = ip.lastIndexOf(':');
+  if (lastColon > 0 && IPv4_REGEX.test(ip.slice(0, lastColon))) {
+    return ip.slice(0, lastColon);
+  }
+  return ip;
+}
+
+/**
+ * 验证 IP 地址格式（IPv4 / IPv6，可带端口）。
+ */
+function isValidIp(ip: string): boolean {
+  const trimmed = ip.trim();
+  if (!trimmed) return false;
+  const hostPart = removePort(trimmed);
+  if (IPv4_REGEX.test(hostPart)) return true;
+  if (hostPart.includes(':') && IPv6_REGEX.test(hostPart)) return true;
+  return false;
+}
+
+/**
+ * 提取客户端真实 IP 地址。
+ *
+ * 优先级：x-forwarded-for 第一个条目 → x-real-ip → 'unknown'
+ * 正确处理 IPv4 和 IPv6 格式（含带端口的格式）。
+ * 无法识别时不使用 127.0.0.1，避免多用户共享同一限流桶。
+ */
+function extractClientIp(request: NextRequest): string {
+  // x-forwarded-for 可能包含多个 IP（代理链），取第一个（最接近客户端的）
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    const firstIp = forwardedFor.split(',')[0].trim();
+    if (firstIp && isValidIp(firstIp)) {
+      return removePort(firstIp).toLowerCase();
     }
-  }, 60_000);
+  }
+
+  // 尝试 x-real-ip header
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp && isValidIp(realIp)) {
+    return removePort(realIp).toLowerCase();
+  }
+
+  // 无法识别 IP 时使用 unknown（不使用 127.0.0.1 避免多用户共享同一限流桶）
+  return 'unknown';
+}
+
+// ============================================================
+// 内存限流清理（惰性清理替代 setInterval）
+// ============================================================
+
+/** 上次清理时间戳 */
+let lastCleanupTime = 0;
+
+/**
+ * 惰性清理过期的内存限流条目。
+ * 在每次限流检查时调用，替代 setInterval（serverless 不支持持久定时器）。
+ */
+function maybeCleanupMemoryMap(): void {
+  const now = Date.now();
+  // 最多每 60 秒清理一次
+  if (now - lastCleanupTime < DEFAULT_WINDOW_MS) return;
+  lastCleanupTime = now;
+
+  for (const [key, entry] of memoryRateLimitMap.entries()) {
+    if (now - entry.windowStart > DEFAULT_WINDOW_MS * 2) {
+      memoryRateLimitMap.delete(key);
+    }
+  }
 }
 
 // ============================================================
@@ -126,29 +225,6 @@ const RATE_LIMIT_EXEMPT_PATHS = [
   '/favicon',
   '/robots.txt',
 ];
-
-/**
- * 从请求中提取客户端 IP，支持 IPv4 和 IPv6。
- * 优先使用 X-Forwarded-For 第一个值，其次 X-Real-Ip。
- */
-function extractClientIp(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for') || '';
-  const forwardedIp = forwarded.split(',')[0]?.trim();
-
-  // 验证 IP 格式：接受 IPv4 和 IPv6
-  const IP_REGEX = /^[\d.:a-fA-F]+$/;
-  if (forwardedIp && IP_REGEX.test(forwardedIp)) {
-    return forwardedIp;
-  }
-
-  const realIp = request.headers.get('x-real-ip') || '';
-  if (realIp && IP_REGEX.test(realIp)) {
-    return realIp;
-  }
-
-  // 无法识别 IP 时使用 unknown（不使用 127.0.0.1 避免多用户共享同一限流桶）
-  return 'unknown';
-}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -165,6 +241,9 @@ export async function middleware(request: NextRequest) {
 
   const ip = extractClientIp(request);
   const rateLimitKey = `ratelimit:${ip}`;
+
+  // 惰性清理过期条目
+  maybeCleanupMemoryMap();
 
   const { allowed, remaining, resetTime } = await checkRateLimit(rateLimitKey);
 
