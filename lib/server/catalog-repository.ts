@@ -2,11 +2,14 @@ import 'server-only';
 
 import { sql } from '@vercel/postgres';
 
-import config, { hasVectorConfig } from '@/lib/config/environment';
+import config, { hasCatalogServiceConfig, hasVectorConfig } from '@/lib/config/environment';
 import { buildCatalogSearchQuery, buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank.js';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 import { buildEmbeddingPair } from '@/lib/local-vector.js';
 import { vectorSearch } from '@/lib/upstash';
+import { fetchWithTimeout } from '@/lib/utils/fetch-timeout';
+
+const CATALOG_SERVICE_TIMEOUT_MS = 8000;
 
 interface CatalogApiBook {
   book_id?: string | number;
@@ -40,10 +43,6 @@ function mapBook(record: CatalogApiBook): Book {
     cover_url: record.cover_url ?? undefined,
     relevance_score: Number(record.relevance_score ?? 0),
   };
-}
-
-function isCatalogServiceConfigured(): boolean {
-  return Boolean(config.services.catalogUrl);
 }
 
 function normalizeBooks(records: CatalogApiBook[]): Book[] {
@@ -104,18 +103,22 @@ export async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
 }
 
 async function fetchFromCatalogService<T>(path: string, init?: RequestInit): Promise<T> {
-  if (!isCatalogServiceConfigured()) {
+  if (!hasCatalogServiceConfig()) {
     throw new Error('Catalog service is not configured');
   }
 
-  const response = await fetch(`${config.services.catalogUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
+  const response = await fetchWithTimeout(
+    `${config.services.catalogUrl}${path}`,
+    {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+      cache: 'no-store',
     },
-    cache: 'no-store',
-  });
+    CATALOG_SERVICE_TIMEOUT_MS,
+  );
 
   if (!response.ok) {
     throw new Error(`Catalog service request failed: ${response.status}`);

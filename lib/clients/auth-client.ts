@@ -1,5 +1,8 @@
 import type { UserInfo } from '@/lib/types/rag';
 import config from '@/lib/config/environment';
+import { fetchWithTimeout } from '@/lib/utils/fetch-timeout';
+
+const AUTH_SERVICE_TIMEOUT_MS = 5000;
 
 /**
  * Validate an authentication token against an external auth service when configured.
@@ -14,14 +17,18 @@ export async function validateToken(token: string): Promise<{ valid: boolean; us
   }
 
   try {
-    const response = await fetch(`${config.services.authUrl}/api/rag/auth/validate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+    const response = await fetchWithTimeout(
+      `${config.services.authUrl}/api/rag/auth/validate`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store',
       },
-      cache: 'no-store',
-    });
+      AUTH_SERVICE_TIMEOUT_MS,
+    );
 
     if (!response.ok) {
       return { valid: false };
@@ -42,9 +49,11 @@ export async function getUserPreferences(userId: string): Promise<UserInfo['pref
   }
 
   try {
-    const response = await fetch(`${config.services.authUrl}/api/rag/users/${userId}/preferences`, {
-      cache: 'no-store',
-    });
+    const response = await fetchWithTimeout(
+      `${config.services.authUrl}/api/rag/users/${userId}/preferences`,
+      { cache: 'no-store' },
+      AUTH_SERVICE_TIMEOUT_MS,
+    );
 
     if (!response.ok) {
       return {};

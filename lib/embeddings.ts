@@ -3,6 +3,20 @@ import type { TextChunk } from './types/rag';
 import { upsertChunkVector, vectorSearchChunks } from './upstash';
 import { buildBookDocument, buildEmbeddingPair } from './local-vector.js';
 
+type EmbeddingTaskType = 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' | 'SEMANTIC_SIMILARITY';
+
+function buildTaskAwareEmbeddingText(text: string, taskType: EmbeddingTaskType): string {
+  switch (taskType) {
+    case 'RETRIEVAL_DOCUMENT':
+      return `retrieval document\n${text}`;
+    case 'SEMANTIC_SIMILARITY':
+      return `semantic similarity\n${text}`;
+    case 'RETRIEVAL_QUERY':
+    default:
+      return `retrieval query\n${text}`;
+  }
+}
+
 export function generateEmbeddingPair(text: string): {
   vector: number[];
   sparseVector: { indices: number[]; values: number[] };
@@ -12,10 +26,9 @@ export function generateEmbeddingPair(text: string): {
 
 export async function generateEmbedding(
   text: string,
-  taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' | 'SEMANTIC_SIMILARITY' = 'RETRIEVAL_QUERY',
+  taskType: EmbeddingTaskType = 'RETRIEVAL_QUERY',
 ): Promise<number[]> {
-  void taskType;
-  return buildEmbeddingPair(text).vector;
+  return buildEmbeddingPair(buildTaskAwareEmbeddingText(text, taskType)).vector;
 }
 
 export async function generateBookEmbedding(
