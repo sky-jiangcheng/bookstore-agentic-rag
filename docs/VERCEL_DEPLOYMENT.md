@@ -2,12 +2,12 @@
 
 ## 概述
 
-本项目已针对 Vercel 免费版进行优化，主要改造包括：
+本项目已针对 Vercel Serverless 进行优化，主要改造包括：
 
-1. **简化的存储层**：使用 Vercel KV 替代 Upstash Vector
-2. **优化的执行流程**：单次执行，无复杂迭代
-3. **预计算嵌入**：构建时预计算向量嵌入
-4. **超时保护**：9秒超时限制（低于 Vercel 10秒限制）
+1. **存储层**：主路径使用 **Upstash Vector + Upstash Redis**（与 `lib/config/environment.ts` 一致）；不再以 Vercel KV 为默认方案
+2. **执行流程**：默认 **单次简化流水线**（`runVercelRAGPipeline`），无多轮反思迭代
+3. **预计算嵌入**：可按脚本预计算向量嵌入
+4. **超时意识**：配置默认 **9s** 量级的超时提示（低于常见 10s 函数上限）
 
 ## 架构变更
 
@@ -16,10 +16,12 @@
 Upstash Vector → 本地 BGE Reranker → 多轮迭代评估
 ```
 
-### Vercel 优化架构
+### Vercel 优化架构（默认）
 ```
-Vercel KV (缓存) → 简化检索 → 单次推荐生成
+Upstash Vector / Postgres → 简化检索 (fastRetrieval + 可选 fallback) → 单次推荐生成 LLM
 ```
+
+书单 BFF：`POST /api/v1/book-list/generate` 在生产（`VERCEL` + `VERCEL_USE_SIMPLIFIED` 默认）走上述简化链路，并在 `parse` 之后 **复用已解析需求**，避免重复需求分析 LLM。
 
 ## 部署步骤
 
@@ -37,12 +39,11 @@ vercel login
 
 在 Vercel 项目设置中添加以下环境变量：
 
-**必需**：
+**必需（与当前代码一致）**：
 - `GOOGLE_API_KEY` - Gemini API 密钥
-- `POSTGRES_URL` - Vercel Postgres 连接URL
-- `KV_URL` - Vercel KV 连接URL
-- `KV_REST_API_URL` - Vercel KV REST API URL
-- `KV_REST_API_TOKEN` - Vercel KV REST API Token
+- `POSTGRES_URL` 或 `DATABASE_URL` - Postgres（如 Neon / Vercel Postgres）
+- `UPSTASH_VECTOR_REST_URL` / `UPSTASH_VECTOR_REST_TOKEN` - 向量检索
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` - 缓存、会话、书单 parse 会话等
 
 **可选**：
 - `RERANKER_ENABLED=false` - 禁用重排序器（节省时间）

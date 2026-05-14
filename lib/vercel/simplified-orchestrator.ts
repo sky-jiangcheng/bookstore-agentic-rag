@@ -8,9 +8,8 @@
 import crypto from 'crypto';
 import { analyzeRequirement } from '@/lib/agents/requirement-agent';
 import { generateRecommendation } from '@/lib/agents/recommendation-agent';
-import { retrieveCandidatesVercel } from '@/lib/vercel/simplified-retrieval';
 import { conversationMemory } from '@/lib/vercel/storage';
-import { fastRetrieval } from '@/lib/vercel/simplified-retrieval';
+import { fastRetrieval, retrieveCandidatesVercel } from '@/lib/vercel/simplified-retrieval';
 import type {
   AgentProgress,
   RequirementAnalysis,
@@ -22,6 +21,16 @@ export interface VercelRAGPipelineOptions {
   userQuery: string;
   sessionId?: string;
   onProgress?: (progress: AgentProgress) => void;
+  /**
+   * When set, skips LLM requirement analysis (e.g. book-list generate after parse).
+   * Retrieval still uses `userQuery` for embedding / hybrid search.
+   */
+  requirement?: RequirementAnalysis;
+  /**
+   * When true, does not allocate an anonymous session or persist conversation turns
+   * (avoids Redis chatter for stateless BFF calls such as book-list generate).
+   */
+  skipConversationMemory?: boolean;
 }
 
 export interface VercelRAGPipelineResult {
@@ -43,7 +52,13 @@ export async function runVercelRAGPipeline(
   options: VercelRAGPipelineOptions
 ): Promise<VercelRAGPipelineResult> {
   const startTime = Date.now();
-  const { userQuery, sessionId: inputSessionId, onProgress } = options;
+  const {
+    userQuery,
+    sessionId: inputSessionId,
+    onProgress,
+    requirement: precomputedRequirement,
+    skipConversationMemory = false,
+  } = options;
 
   let sessionId = inputSessionId;
   let requirement: RequirementAnalysis | undefined;
@@ -51,14 +66,14 @@ export async function runVercelRAGPipeline(
   let recommendation: RecommendationResult | undefined;
 
   try {
-    // Step 1: Get or create session
-    if (!sessionId) {
-      sessionId = `sess-${crypto.randomUUID()}`;
+    if (!skipConversationMemory) {
+      if (!sessionId) {
+        sessionId = `sess-${crypto.randomUUID()}`;
+      }
     }
 
-    // Step 2: Get conversation context (fast)
     let conversationContext = '';
-    if (sessionId) {
+    if (!skipConversationMemory && sessionId) {
       try {
         conversationContext = await conversationMemory.getContext(sessionId, 2);
       } catch (error) {
@@ -66,14 +81,20 @@ export async function runVercelRAGPipeline(
       }
     }
 
-    // Step 3: Analyze requirement
     onProgress?.({
       type: 'phase_start',
       phase: 'requirement_analysis',
-      content: '分析需求...',
+      content: precomputedRequirement ? '使用已解析需求' : '分析需求...',
     });
 
-    requirement = await analyzeRequirement(userQuery, { conversationContext });
+    if (precomputedRequirement) {
+      requirement = {
+        ...precomputedRequirement,
+        original_query: precomputedRequirement.original_query || userQuery,
+      };
+    } else {
+      requirement = await analyzeRequirement(userQuery, { conversationContext });
+    }
 
     onProgress?.({
       type: 'phase_complete',
@@ -151,8 +172,7 @@ export async function runVercelRAGPipeline(
       data: recommendation as unknown as Record<string, unknown>,
     });
 
-    // Step 6: Store conversation turn
-    if (sessionId) {
+    if (!skipConversationMemory && sessionId) {
       try {
         await conversationMemory.addTurn(sessionId, 'user', userQuery);
         await conversationMemory.addTurn(

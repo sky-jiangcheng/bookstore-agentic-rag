@@ -1,15 +1,25 @@
 # BookStore Agentic RAG
 
-这是面向 Vercel 部署的核心项目。
+这是面向 **Vercel** 部署的线上核心项目，默认以 **典型 RAG（检索 + 单次生成）** 为主，控制 **单次请求耗时与 LLM 次数**，贴近 Serverless 约 10s 的执行预算。
 
 ## 目标
 
-构建一个基于 Next.js + Agentic RAG 的智能图书推荐系统，核心能力包括：
+基于 Next.js + Vercel AI SDK 的图书推荐 **线上入口**，在 Vercel 上优先提供：
 
-- 自然语言需求理解
-- 多路径检索
-- 推荐生成与质量反思
-- 流式对话交互
+- 自然语言需求理解（单次分析）
+- 向量 / 混合检索与候选召回
+- 基于候选的推荐生成（`VERCEL_USE_SIMPLIFIED` 默认开启时的 **单趟流水线**，无反思迭代）
+- 流式对话（`/api/rag/chat` 在非简化路径下仍可使用完整编排；生产环境建议保持简化）
+
+**多轮反思、重编排、重运营逻辑** 放在 `bookstore-local-platform`（或经网关显式调用），由本地/后台承担，不把完整 Agentic 循环默认压在线上。
+
+## 与本地平台的分工
+
+| 能力 | Vercel（本项目） | `bookstore-local-platform` |
+|------|------------------|---------------------------|
+| 公网检索 + 推荐 API | 是（轻量、单趟为主） | 可选代理、运营入口 |
+| 书单 BFF `/api/v1/book-list/*` | 是（生产走简化 RAG + 解析会话存 Redis） | 网关转发、鉴权、导出 Excel |
+| 完整 `runRAGPipeline`（评估与迭代） | 仅当未启用 Vercel 简化（如本地 `next start`） | 历史 Python 书单 / Agent 工作流 |
 
 ## 当前技术方向
 
@@ -63,6 +73,7 @@ npm run check
 - 核心链路不再依赖 mock 数据
 - 检索与推荐能力优先做成可降级服务
 - 非核心后台能力从旧项目中按需迁移
+- **Vercel 生产默认「典型 RAG」**：`VERCEL_USE_SIMPLIFIED` 不为 `false` 时，`/api/v1/book-list/generate` 与快速聊天路径使用 `runVercelRAGPipeline`；完整 Agentic 编排留给本地长进程
 
 ## 当前数据访问策略
 

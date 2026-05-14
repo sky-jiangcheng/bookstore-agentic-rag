@@ -9,10 +9,14 @@ import {
 import { getFilterStatus } from '@/lib/server/book-filters';
 
 export async function GET() {
-  if (process.env.APP_ENV === 'production') {
+  const productionSurface =
+    process.env.APP_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+
+  if (productionSurface) {
     return NextResponse.json({
       status: 'ok',
       service: 'bookstore-agentic-rag',
+      environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'unknown',
     });
   }
 
