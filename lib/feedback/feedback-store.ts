@@ -12,6 +12,15 @@ const FEEDBACK_PREFIX = 'rag:feedback:';
 const STATS_PREFIX = 'rag:stats:';
 const SESSION_FEEDBACK_PREFIX = 'rag:session:';
 
+async function getStringSetMembers(key: string): Promise<string[]> {
+  if (!redis) {
+    return [];
+  }
+
+  const members = await redis.smembers<unknown[]>(key);
+  return members.filter((member): member is string => typeof member === 'string');
+}
+
 /**
  * Store user feedback
  */
@@ -28,7 +37,9 @@ export async function storeFeedback(feedback: Omit<UserFeedback, 'id'>): Promise
     await redis.expire(`${FEEDBACK_PREFIX}${id}`, 60 * 60 * 24 * 30); // 30 days TTL
 
     // Add to session feedback list
-    await redis.sadd(`${SESSION_FEEDBACK_PREFIX}${feedback.sessionId}`, id);
+    const sessionFeedbackKey = `${SESSION_FEEDBACK_PREFIX}${feedback.sessionId}`;
+    await redis.sadd(sessionFeedbackKey, id);
+    await redis.expire(sessionFeedbackKey, 60 * 60 * 24 * 30);
 
     // Update feedback stats
     await updateFeedbackStats(feedback.bookId, feedback.feedbackType);
@@ -47,7 +58,7 @@ export async function getSessionFeedback(sessionId: string): Promise<UserFeedbac
     return [];
   }
 
-  const feedbackIds = await redis.smembers<string[]>(`${SESSION_FEEDBACK_PREFIX}${sessionId}`);
+  const feedbackIds = await getStringSetMembers(`${SESSION_FEEDBACK_PREFIX}${sessionId}`);
 
   if (!feedbackIds || feedbackIds.length === 0) {
     return [];
@@ -235,7 +246,39 @@ export async function clearOldFeedback(daysOld: number = 30): Promise<number> {
     return 0;
   }
 
-  // In production, implement cleanup logic
-  console.log(`[feedback] Clearing feedback older than ${daysOld} days`);
-  return 0;
+  const cutoffTime = Date.now() - daysOld * 24 * 60 * 60 * 1000;
+  let cursor: string | number = 0;
+  let deletedCount = 0;
+
+  do {
+    const scanResult: [cursor: string | number, keys: string[]] = await redis.scan(cursor, {
+      match: `${FEEDBACK_PREFIX}*`,
+      count: 100,
+    });
+
+    cursor = typeof scanResult[0] === 'string' ? scanResult[0] : String(scanResult[0]);
+    const keys: string[] = Array.isArray(scanResult[1]) ? scanResult[1] : [];
+
+    for (const key of keys) {
+      try {
+        const feedback = await redis.hgetall(key);
+        const timestamp = Number(feedback?.timestamp || key.match(/^rag:feedback:feedback-(\d+)-/)?.[1] || 0);
+
+        if (timestamp > 0 && timestamp < cutoffTime) {
+          const feedbackId = String(feedback?.id || key.replace(FEEDBACK_PREFIX, ''));
+          const sessionId = typeof feedback?.sessionId === 'string' ? feedback.sessionId : '';
+
+          await redis.del(key);
+          if (sessionId) {
+            await redis.srem(`${SESSION_FEEDBACK_PREFIX}${sessionId}`, feedbackId);
+          }
+          deletedCount++;
+        }
+      } catch (error) {
+        console.error(`[feedback] Failed to clear old feedback key ${key}:`, error);
+      }
+    }
+  } while (Number(cursor) !== 0);
+
+  return deletedCount;
 }

@@ -14,29 +14,25 @@ const SESSION_LIST_PREFIX = 'rag:sessions:';
 
 const DEFAULT_TTL = 60 * 60; // 1 hour
 const MAX_TURNS_PER_SESSION = 20;
-
-// 自动清理：模块加载时立即清理过期 session，之后每 30 分钟清理一次
 const CLEANUP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+let lastLazyCleanupAt = 0;
 
-function startAutoCleanup(): void {
-  // 延迟 5 秒后执行首次清理，避免启动时与数据库连接竞争
-  setTimeout(() => {
-    cleanupOldSessions(DEFAULT_TTL * 1000).catch((err) =>
-      console.error('[conversation] Auto-cleanup failed:', err),
-    );
-  }, 5000);
+async function cleanupOldSessionsIfDue(now: number = Date.now()): Promise<void> {
+  if (now - lastLazyCleanupAt < CLEANUP_INTERVAL_MS) {
+    return;
+  }
 
-  // 每 30 分钟执行一次清理
-  setInterval(() => {
-    cleanupOldSessions(DEFAULT_TTL * 1000).catch((err) =>
-      console.error('[conversation] Auto-cleanup failed:', err),
-    );
-  }, CLEANUP_INTERVAL_MS);
+  lastLazyCleanupAt = now;
+  await cleanupOldSessions(DEFAULT_TTL * 1000);
 }
 
-// 仅在非构建阶段启动自动清理
-if (typeof process !== 'undefined' && process.env?.NEXT_PHASE !== 'phase-production-build') {
-  startAutoCleanup();
+async function getStringSetMembers(key: string): Promise<string[]> {
+  if (!redis) {
+    return [];
+  }
+
+  const members = await redis.smembers<unknown[]>(key);
+  return members.filter((member): member is string => typeof member === 'string');
 }
 
 /**
@@ -248,7 +244,7 @@ export async function cleanupOldSessions(maxAgeMs: number = DEFAULT_TTL * 1000):
 
   try {
     // Get all session IDs from the session list set
-    const sessionIds = await redis.smembers<string[]>(SESSION_LIST_PREFIX);
+    const sessionIds = await getStringSetMembers(SESSION_LIST_PREFIX);
 
     if (!sessionIds || sessionIds.length === 0) {
       return 0;
@@ -289,6 +285,8 @@ export async function cleanupOldSessions(maxAgeMs: number = DEFAULT_TTL * 1000):
  * Get or create a session (helper function)
  */
 export async function getOrCreateSession(sessionId?: string, userId?: string): Promise<ConversationSession> {
+  await cleanupOldSessionsIfDue();
+
   if (sessionId && await isSessionActive(sessionId)) {
     const session = await getSession(sessionId);
     if (session) {
@@ -316,6 +314,7 @@ async function saveSession(session: ConversationSession): Promise<void> {
 
   // Add to session list for cleanup
   await redis.sadd(SESSION_LIST_PREFIX, session.id);
+  await redis.expire(SESSION_LIST_PREFIX, DEFAULT_TTL * 2);
 }
 
 /**

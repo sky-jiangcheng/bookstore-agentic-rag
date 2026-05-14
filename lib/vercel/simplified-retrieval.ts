@@ -6,7 +6,7 @@
  */
 
 import { generateEmbeddingPair } from '@/lib/embeddings';
-import { searchCatalog, getBookDetails } from '@/lib/clients/catalog-client';
+import { searchCatalog, getBookDetailsBatch } from '@/lib/clients/catalog-client';
 import { vectorSearch, upsertBookVector } from '@/lib/upstash';
 import type { Book, RequirementAnalysis, RetrievalResult } from '@/lib/types/rag';
 import { filterBlockedBooks } from '@/lib/server/book-filters';
@@ -72,14 +72,19 @@ export async function retrieveCandidatesVercel(
     const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
     const vectorResults = await vectorSearch(vector, topK, sparseVector);
 
-    for (const result of vectorResults) {
-      const bookId = result.metadata.bookId as string;
-      if (bookId) {
-        try {
-          const book = await getBookDetails(bookId);
+    const bookIds = Array.from(new Set(
+      vectorResults
+        .map((result) => result.metadata.bookId)
+        .filter((bookId): bookId is string => typeof bookId === 'string' && bookId.length > 0)
+    ));
+
+    if (bookIds.length > 0) {
+      const books = await getBookDetailsBatch(bookIds);
+      const bookMap = new Map(books.map((book) => [book.book_id, book]));
+      for (const bookId of bookIds) {
+        const book = bookMap.get(bookId);
+        if (book) {
           results.push(book);
-        } catch (error) {
-          console.warn(`[retrieval] Failed to get book ${bookId}:`, error);
         }
       }
     }
@@ -147,18 +152,12 @@ export async function fastRetrieval(
     const { vector, sparseVector } = generateEmbeddingPair(query);
     const vectorResults = await vectorSearch(vector, topK, sparseVector);
 
-    const books: Book[] = [];
-    for (const result of vectorResults) {
-      const bookId = result.metadata.bookId as string;
-      if (bookId) {
-        try {
-          const book = await getBookDetails(bookId);
-          books.push(book);
-        } catch {
-          // Skip failed books
-        }
-      }
-    }
+    const bookIds = Array.from(new Set(
+      vectorResults
+        .map((result) => result.metadata.bookId)
+        .filter((bookId): bookId is string => typeof bookId === 'string' && bookId.length > 0)
+    ));
+    const books = bookIds.length > 0 ? await getBookDetailsBatch(bookIds) : [];
 
     return (await filterBlockedBooks(books)).books;
   } catch (error) {
