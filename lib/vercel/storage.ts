@@ -25,13 +25,41 @@ export class SimpleVectorSearch {
   private cache: Map<string, { vector: number[]; metadata: Record<string, unknown> }> = new Map();
   private cacheExpiry: Map<string, number> = new Map();
   private readonly CACHE_TTL = 60 * 60 * 1000; // 1 hour
+  private readonly MAX_CACHE_ENTRIES = 1000;
+
+  private cacheVector(id: string, vector: number[], metadata: Record<string, unknown>): void {
+    this.cache.delete(id);
+    this.cacheExpiry.delete(id);
+    this.cache.set(id, { vector, metadata });
+    this.cacheExpiry.set(id, Date.now() + this.CACHE_TTL);
+    this.enforceMaxCacheSize();
+  }
+
+  private pruneExpiredEntries(now: number = Date.now()): void {
+    for (const [id, expiry] of this.cacheExpiry.entries()) {
+      if (expiry < now) {
+        this.cache.delete(id);
+        this.cacheExpiry.delete(id);
+      }
+    }
+  }
+
+  private enforceMaxCacheSize(): void {
+    while (this.cache.size > this.MAX_CACHE_ENTRIES) {
+      const oldestId = this.cache.keys().next().value;
+      if (typeof oldestId !== 'string') {
+        break;
+      }
+      this.cache.delete(oldestId);
+      this.cacheExpiry.delete(oldestId);
+    }
+  }
 
   /**
    * Upsert a vector into memory cache
    */
   async upsert(id: string, vector: number[], metadata: Record<string, unknown>): Promise<void> {
-    this.cache.set(id, { vector, metadata });
-    this.cacheExpiry.set(id, Date.now() + this.CACHE_TTL);
+    this.cacheVector(id, vector, metadata);
 
     // Also persist to Vercel KV for retrieval
     await kv.hset('vector:' + id, {
@@ -51,14 +79,7 @@ export class SimpleVectorSearch {
   }>> {
     const results: Array<{ id: string; score: number; metadata: Record<string, unknown> }> = [];
 
-    // Clean expired entries
-    const now = Date.now();
-    for (const [id, expiry] of this.cacheExpiry.entries()) {
-      if (expiry < now) {
-        this.cache.delete(id);
-        this.cacheExpiry.delete(id);
-      }
-    }
+    this.pruneExpiredEntries();
 
     // Calculate cosine similarity for all vectors
     for (const [id, { vector, metadata }] of this.cache.entries()) {
@@ -77,16 +98,20 @@ export class SimpleVectorSearch {
   async get(id: string): Promise<{ vector: number[]; metadata: Record<string, unknown> } | null> {
     const cached = this.cache.get(id);
     if (cached) {
+      this.cache.delete(id);
+      this.cache.set(id, cached);
       return cached;
     }
 
     // Try to fetch from Vercel KV
     const data = await kv.hgetall<{ vector: string; metadata: string }>('vector:' + id);
     if (data && data.vector && data.metadata) {
-      return {
+      const vectorRecord = {
         vector: JSON.parse(data.vector),
         metadata: JSON.parse(data.metadata),
       };
+      this.cacheVector(id, vectorRecord.vector, vectorRecord.metadata);
+      return vectorRecord;
     }
 
     return null;
@@ -128,11 +153,7 @@ export class SimpleVectorSearch {
           // Try to load from KV
           const data = await kv.hgetall<{ vector: string; metadata: string }>('vector:' + bookId);
           if (data && data.vector && data.metadata) {
-            this.cache.set(bookId, {
-              vector: JSON.parse(data.vector),
-              metadata: JSON.parse(data.metadata),
-            });
-            this.cacheExpiry.set(bookId, Date.now() + this.CACHE_TTL);
+            this.cacheVector(bookId, JSON.parse(data.vector), JSON.parse(data.metadata));
             loadedCount++;
           }
         }

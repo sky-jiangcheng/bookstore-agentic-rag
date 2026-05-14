@@ -4,6 +4,7 @@ import { analyzeRequirement } from './requirement-agent';
 import { retrieveCandidates } from './retrieval-agent';
 import { generateRecommendation } from './recommendation-agent';
 import { evaluateRecommendation } from './reflection-agent';
+import { extractKnownBookKeywords } from './book-taxonomy';
 import {
   getOrCreateSession,
   addTurn,
@@ -312,17 +313,6 @@ export async function runRAGPipeline(
 
 // Helper function to extract keywords from evaluation issues
 function extractKeywordsFromSuggestions(issues: string[]): string[] {
-  // Simple keyword extraction from issues (can be enhanced with NLP)
-  const keywords: string[] = [];
   const issueText = issues.join(' ');
-
-  // Look for common book-related keywords
-  const bookKeywords = ['科幻', '小说', '文学', '历史', '哲学', '经济', '管理', '科技', '计算机', '编程'];
-  for (const keyword of bookKeywords) {
-    if (issueText.includes(keyword)) {
-      keywords.push(keyword);
-    }
-  }
-
-  return keywords;
+  return extractKnownBookKeywords(issueText);
 }
