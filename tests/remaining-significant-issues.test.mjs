@@ -18,6 +18,15 @@ test('SimpleVectorSearch bounds and evicts its in-memory cache', () => {
   assert.match(storage, /this\.cache\.delete\(oldestId\)/);
 });
 
+test('SimpleVectorSearch handles cold cache and zero vectors safely', () => {
+  const storage = source('lib/vercel/storage.ts');
+
+  assert.match(storage, /this\.cache\.size === 0/);
+  assert.match(storage, /await this\.loadFromDatabase\(\)/);
+  assert.match(storage, /normA === 0 \|\| normB === 0/);
+  assert.match(storage, /if \(normA === 0 \|\| normB === 0\) {\s*return 0;\s*}/);
+});
+
 test('orchestrator uses shared book taxonomy instead of a local keyword list', () => {
   const orchestrator = source('lib/agents/orchestrator.ts');
 

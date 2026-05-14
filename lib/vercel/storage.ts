@@ -80,6 +80,10 @@ export class SimpleVectorSearch {
     const results: Array<{ id: string; score: number; metadata: Record<string, unknown> }> = [];
 
     this.pruneExpiredEntries();
+    if (this.cache.size === 0) {
+      await this.loadFromDatabase();
+      this.pruneExpiredEntries();
+    }
 
     // Calculate cosine similarity for all vectors
     for (const [id, { vector, metadata }] of this.cache.entries()) {
@@ -184,6 +188,10 @@ function cosineSimilarity(a: number[], b: number[]): number {
     dotProduct += a[i] * b[i];
     normA += a[i] * a[i];
     normB += b[i] * b[i];
+  }
+
+  if (normA === 0 || normB === 0) {
+    return 0;
   }
 
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
