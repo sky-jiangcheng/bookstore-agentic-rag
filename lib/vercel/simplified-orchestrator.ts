@@ -7,7 +7,6 @@
 
 import crypto from 'crypto';
 import { analyzeRequirement } from '@/lib/agents/requirement-agent';
-import { generateRecommendation } from '@/lib/agents/recommendation-agent';
 import { conversationMemory } from '@/lib/vercel/storage';
 import { fastRetrieval, retrieveCandidatesVercel } from '@/lib/vercel/simplified-retrieval';
 import type {
@@ -156,30 +155,17 @@ export async function runVercelRAGPipeline(
       data: retrieval as unknown as Record<string, unknown>,
     });
 
-    // Step 5: Generate recommendation (skip if running out of time)
-    const elapsedRetrieval = Date.now() - startTime;
-    if (elapsedRetrieval > 5000) {
-      // Running short on time — skip LLM generation, return ranked candidates
-      console.warn(`[pipeline] ${elapsedRetrieval}ms elapsed, skipping LLM generation, returning ranked candidates`);
-      recommendation = {
-        books: retrieval.books.slice(0, Math.max(targetCount, 5)).map(book => ({
-          ...book,
-          explanation: '基于您的需求找到的相关书籍。',
-        })),
-        total_price: retrieval.books.reduce((sum, b) => sum + b.price, 0),
-        quality_score: 0.8,
-        confidence: 0.7,
-        category_distribution: {},
-      };
-    } else {
-      onProgress?.({
-        type: 'phase_start',
-        phase: 'generation',
-        content: '生成推荐...',
-      });
-
-      recommendation = await generateRecommendation(requirement, retrieval.books);
-    }
+    // Step 5: Build recommendation (heuristic only — no LLM call)
+    recommendation = {
+      books: retrieval.books.slice(0, Math.max(targetCount, 5)).map(book => ({
+        ...book,
+        explanation: '',
+      })),
+      total_price: retrieval.books.reduce((sum, b) => sum + b.price, 0),
+      quality_score: 0.8,
+      confidence: 0.7,
+      category_distribution: {},
+    };
 
     onProgress?.({
       type: 'phase_complete',
