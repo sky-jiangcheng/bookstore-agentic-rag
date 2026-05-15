@@ -11,11 +11,52 @@ import { vectorSearch, upsertBookVector } from '@/lib/upstash';
 import type { Book, RequirementAnalysis, RetrievalResult } from '@/lib/types/rag';
 import { filterBlockedBooks } from '@/lib/server/book-filters';
 
+/** 中文类别查询扩展映射表：将常见中文类别扩展为同义/近义词 */
+const CATEGORY_EXPANSION_MAP: Record<string, string[]> = {
+  '公共管理': ['公共管理', '行政管理'],
+  '政治学': ['政治学', '政治'],
+  '经济学': ['经济学', '经济'],
+  '社会学': ['社会学', '社会'],
+  '法学': ['法学', '法律'],
+  '哲学': ['哲学', '哲思'],
+  '历史': ['历史', '史学'],
+  '心理学': ['心理学', '心理'],
+  '教育学': ['教育学', '教育'],
+  '文学': ['文学', '文艺'],
+  '管理学': ['管理学', '管理'],
+  '计算机': ['计算机', '计算机科学', '编程'],
+};
+
+function expandCategories(categories: string[]): string[] {
+  const expanded = new Set<string>(categories);
+  for (const cat of categories) {
+    const synonyms = CATEGORY_EXPANSION_MAP[cat];
+    if (synonyms) {
+      for (const s of synonyms) {
+        expanded.add(s);
+      }
+    }
+  }
+  return Array.from(expanded);
+}
+
 function applyHardConstraints(books: Book[], requirement: RequirementAnalysis): Book[] {
   const excludedKeywords = requirement.constraints.exclude_keywords ?? [];
   const keywords = requirement.keywords.map((keyword) => keyword.toLowerCase()).filter((keyword) => keyword.length >= 2);
 
-  const constrained = books.filter((book) => {
+  const matchesAnyKeyword = (haystack: string): boolean => {
+    if (keywords.length === 0) return true;
+    return keywords.some((keyword) => haystack.includes(keyword));
+  };
+
+  // Check if any book matches at least one keyword; if none do, skip keyword filtering
+  const anyBookMatchesKeyword = keywords.length === 0 || books.some((book) => {
+    const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
+    return matchesAnyKeyword(haystack);
+  });
+
+  // Strict mode: apply keyword + exclude + budget
+  const strictFilter = (book: Book): boolean => {
     const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
 
     if (excludedKeywords.some((keyword) => haystack.includes(keyword.toLowerCase()))) {
@@ -26,27 +67,30 @@ function applyHardConstraints(books: Book[], requirement: RequirementAnalysis): 
       return false;
     }
 
-    if (keywords.length > 0 && !keywords.some((keyword) => haystack.includes(keyword))) {
+    if (anyBookMatchesKeyword && !matchesAnyKeyword(haystack)) {
       return false;
     }
 
     return true;
-  });
+  };
 
-  if (constrained.length > 0) {
-    return constrained;
+  const constrained = books.filter(strictFilter);
+
+  // Relaxed fallback: if strict mode yields fewer than 2 results, only apply exclude + budget
+  if (constrained.length < 2) {
+    return books.filter((book) => {
+      const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
+      if (excludedKeywords.some((keyword) => haystack.includes(keyword.toLowerCase()))) {
+        return false;
+      }
+      if (requirement.constraints.budget && book.price > requirement.constraints.budget) {
+        return false;
+      }
+      return true;
+    });
   }
 
-  return books.filter((book) => {
-    const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
-    if (excludedKeywords.some((keyword) => haystack.includes(keyword.toLowerCase()))) {
-      return false;
-    }
-    if (requirement.constraints.budget && book.price > requirement.constraints.budget) {
-      return false;
-    }
-    return true;
-  });
+  return constrained;
 }
 
 /**
@@ -97,8 +141,9 @@ export async function retrieveCandidatesVercel(
   // 2. Keyword search (only if needed and time permits)
   if (enableKeyword && results.length < topK) {
     try {
+      const expandedCategories = expandCategories(requirement.categories);
       const filters = {
-        categories: requirement.categories.length > 0 ? requirement.categories : undefined,
+        categories: expandedCategories.length > 0 ? expandedCategories : undefined,
         author: requirement.constraints.author,
         query: requirement.keywords.slice(0, 3).join(' '), // Limit keywords
       };

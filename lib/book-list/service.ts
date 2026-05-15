@@ -118,39 +118,60 @@ export async function generateBookList(
 
   const started = Date.now();
   const useVercelSimplified = config.vercel.enabled && config.vercel.useSimplifiedPipeline;
+  const timeoutMs = config.vercel.timeout ?? 9000;
 
   let recommendationBooks: RecommendedBook[] = [];
   let pipelineRequirement: Awaited<ReturnType<typeof runRAGPipeline>>['requirement'];
   let pipelineSuccess: boolean;
   let pipelineError: string | undefined;
 
-  if (useVercelSimplified) {
-    const preReq = parsedRequirementsToRequirementAnalysis(userQuery, requirements, limit);
-    preReq.constraints = { ...preReq.constraints, target_count: limit };
+  const pipelineTask = useVercelSimplified
+    ? (async () => {
+        const preReq = parsedRequirementsToRequirementAnalysis(userQuery, requirements, limit);
+        preReq.constraints = { ...preReq.constraints, target_count: limit };
 
-    const vercelResult = await runVercelRAGPipeline({
-      userQuery,
-      requirement: preReq,
-      skipConversationMemory: true,
-    });
+        const vercelResult = await runVercelRAGPipeline({
+          userQuery,
+          requirement: preReq,
+          skipConversationMemory: true,
+        });
 
-    recommendationBooks = vercelResult.recommendation?.books ?? [];
-    pipelineRequirement = vercelResult.requirement;
-    pipelineSuccess = vercelResult.success;
-    pipelineError = vercelResult.error;
-  } else {
-    const fullQuery = requestId ? `${userQuery}\n请推荐约 ${limit} 本书。` : userQuery;
-    const classic = await runRAGPipeline({
-      userQuery: fullQuery,
-      enableConversationMemory: false,
-      maxIterations: config.rag.maxIterations,
-    });
+        return {
+          recommendationBooks: vercelResult.recommendation?.books ?? [],
+          pipelineRequirement: vercelResult.requirement,
+          pipelineSuccess: vercelResult.success,
+          pipelineError: vercelResult.error,
+        };
+      })()
+    : (async () => {
+        const fullQuery = requestId ? `${userQuery}\n请推荐约 ${limit} 本书。` : userQuery;
+        const classic = await runRAGPipeline({
+          userQuery: fullQuery,
+          enableConversationMemory: false,
+          maxIterations: config.rag.maxIterations,
+        });
 
-    recommendationBooks = classic.recommendation?.books ?? [];
-    pipelineRequirement = classic.requirement;
-    pipelineSuccess = classic.success;
-    pipelineError = classic.error;
-  }
+        return {
+          recommendationBooks: classic.recommendation?.books ?? [],
+          pipelineRequirement: classic.requirement,
+          pipelineSuccess: classic.success,
+          pipelineError: classic.error,
+        };
+      })();
+
+  const timeoutPromise = new Promise<never>(
+    (_, reject) =>
+      setTimeout(
+        () => reject(new BookListHttpError(503, '生成书单超时')),
+        timeoutMs,
+      ),
+  );
+
+  const pipelineResult = await Promise.race([pipelineTask, timeoutPromise]);
+  recommendationBooks = pipelineResult.recommendationBooks;
+  pipelineRequirement = pipelineResult.pipelineRequirement;
+  pipelineSuccess = pipelineResult.pipelineSuccess;
+  pipelineError = pipelineResult.pipelineError;
 
   const sliced = recommendationBooks.slice(0, limit);
   const recommendations = sliced.map((b, i) =>

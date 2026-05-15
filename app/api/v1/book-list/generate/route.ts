@@ -4,7 +4,21 @@ import { z } from 'zod';
 import type { ParsedRequirements } from '@/lib/book-list/types';
 import { BookListHttpError, generateBookList } from '@/lib/book-list/service';
 import { validateConfig } from '@/lib/config/environment';
+import config from '@/lib/config/environment';
 import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
+  return Promise.race([
+    promise.finally(() => clearTimeout(timeout)),
+    new Promise<never>((_, reject) =>
+      controller.signal.addEventListener('abort', () =>
+        reject(new DOMException('The operation was aborted', 'AbortError')),
+      ),
+    ),
+  ]);
+}
 
 const categorySchema = z.object({
   category: z.string(),
@@ -44,17 +58,23 @@ export async function POST(req: NextRequest) {
     validateConfig();
     const json = await req.json();
     const body = generateSchema.parse(json);
-    const data = await generateBookList({
-      request_id: body.request_id ?? undefined,
-      requirements: body.requirements as ParsedRequirements | undefined,
-      limit: body.limit,
-      save_to_history: body.save_to_history,
-      auto_complete: body.auto_complete,
-    });
+    const data = await withTimeout(
+      generateBookList({
+        request_id: body.request_id ?? undefined,
+        requirements: body.requirements as ParsedRequirements | undefined,
+        limit: body.limit,
+        save_to_history: body.save_to_history,
+        auto_complete: body.auto_complete,
+      }),
+      config.vercel.timeout,
+    );
     return NextResponse.json(data);
   } catch (err) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid request', details: err.flatten() }, { status: 400 });
+    }
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return NextResponse.json({ error: '生成书单超时，请稍后重试' }, { status: 503 });
     }
     if (err instanceof BookListHttpError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
