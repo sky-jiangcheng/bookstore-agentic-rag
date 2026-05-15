@@ -10,6 +10,7 @@ import { searchCatalog, getBookDetailsBatch } from '@/lib/clients/catalog-client
 import { vectorSearch, upsertBookVector } from '@/lib/upstash';
 import type { Book, RequirementAnalysis, RetrievalResult } from '@/lib/types/rag';
 import { filterBlockedBooks } from '@/lib/server/book-filters';
+import { ensureVectorStoreReady } from '@/lib/vector-initializer';
 
 /** 中文类别查询扩展映射表：将常见中文类别扩展为同义/近义词 */
 const CATEGORY_EXPANSION_MAP: Record<string, string[]> = {
@@ -107,6 +108,13 @@ export async function retrieveCandidatesVercel(
   } = {}
 ): Promise<RetrievalResult> {
   const { topK = 10, enableKeyword = true } = options;
+
+  // Lazy-init: if vector store is empty, trigger precompute in background
+  ensureVectorStoreReady().then((triggered) => {
+    if (triggered) {
+      console.log('[retrieval] Background pre-computation triggered');
+    }
+  });
 
   const results: Book[] = [];
   const sources: ('semantic' | 'keyword' | 'popular')[] = [];

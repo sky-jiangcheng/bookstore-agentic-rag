@@ -199,6 +199,31 @@ export async function deleteChunkVectors(chunkIds: string[]): Promise<void> {
   await vectorIndex.delete(chunkIds);
 }
 
+/**
+ * Get index info (vector count, dimensions, etc.)
+ * Returns null when vector config is missing.
+ */
+export async function getVectorStoreInfo(): Promise<{
+  vectorCount: number;
+  pendingVectorCount: number;
+  indexSize: number;
+  dimension: number;
+} | null> {
+  if (!vectorIndex) return null;
+  try {
+    const info = await vectorIndex.info();
+    return {
+      // Handle both camelCase and snake_case response keys
+      vectorCount: (info as any).vectorCount ?? (info as any).vector_count ?? 0,
+      pendingVectorCount: (info as any).pendingVectorCount ?? (info as any).pending_vector_count ?? 0,
+      indexSize: (info as any).indexSize ?? (info as any).index_size ?? 0,
+      dimension: (info as any).dimension ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteAllBookChunks(bookId: string): Promise<void> {
   if (!vectorIndex) {
     throw new Error('Vector search is not available');
