@@ -7,9 +7,11 @@ import { buildCatalogSearchQuery, buildCatalogSearchTerms, rerankCatalogBooks } 
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 import { buildEmbeddingPair } from '@/lib/local-vector';
 import { vectorSearch } from '@/lib/upstash';
+import { AsyncTimeoutError, withTimeout } from '@/lib/utils/async-timeout';
 import { fetchWithTimeout } from '@/lib/utils/fetch-timeout';
 
 const CATALOG_SERVICE_TIMEOUT_MS = 8000;
+const VECTOR_SEARCH_TIMEOUT_MS = 2500;
 
 interface CatalogApiBook {
   book_id?: string | number;
@@ -131,42 +133,73 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
   const searchTerms = filters.query ? buildCatalogSearchTerms(filters.query) : [];
   const searchQuery = filters.query ? buildCatalogSearchQuery(filters.query) : '';
   const query = `
+    WITH ranked_books AS (
+      SELECT
+        id AS book_id,
+        title,
+        author,
+        COALESCE(publisher, 'Unknown Publisher') AS publisher,
+        COALESCE(price, 0) AS price,
+        COALESCE(stock, 0) AS stock,
+        COALESCE(category, 'general') AS category,
+        COALESCE(description, '') AS description,
+        cover_url,
+        COALESCE(popularity_score, 0) AS popularity_score,
+        COALESCE(updated_at, NOW()) AS updated_at,
+        COALESCE((
+          SELECT SUM(
+            CASE WHEN title ILIKE '%' || term || '%' THEN 6 ELSE 0 END
+            + CASE WHEN category ILIKE '%' || term || '%' THEN 5 ELSE 0 END
+            + CASE WHEN author ILIKE '%' || term || '%' THEN 1 ELSE 0 END
+          )
+          FROM unnest(COALESCE($1::text[], ARRAY[]::text[])) AS term
+          WHERE term <> ''
+        ), 0) AS search_rank
+      FROM books
+      WHERE
+        (
+          $1::text[] IS NULL
+          OR cardinality($1::text[]) = 0
+          OR EXISTS (
+            SELECT 1
+            FROM unnest($1::text[]) AS term
+            WHERE term <> ''
+              AND (
+                title ILIKE '%' || term || '%'
+                OR author ILIKE '%' || term || '%'
+                OR category ILIKE '%' || term || '%'
+              )
+          )
+        )
+        AND ($2::text IS NULL OR author ILIKE '%' || $2 || '%')
+        AND ($3::numeric IS NULL OR price >= $3)
+        AND ($4::numeric IS NULL OR price <= $4)
+        AND (
+          $5::text[] IS NULL OR cardinality($5::text[]) = 0 OR category = ANY($5::text[])
+        )
+    )
     SELECT
-      id AS book_id,
+      book_id,
       title,
       author,
-      COALESCE(publisher, 'Unknown Publisher') AS publisher,
-      COALESCE(price, 0) AS price,
-      COALESCE(stock, 0) AS stock,
-      COALESCE(category, 'general') AS category,
-      COALESCE(description, '') AS description,
+      publisher,
+      price,
+      stock,
+      category,
+      description,
       cover_url,
-      COALESCE(popularity_score, 0) AS relevance_score
-    FROM books
-    WHERE
-      (
-        $1::text[] IS NULL
-        OR cardinality($1::text[]) = 0
-        OR EXISTS (
-          SELECT 1
-          FROM unnest($1::text[]) AS term
-          WHERE term <> ''
-            AND (
-              title ILIKE '%' || term || '%'
-              OR author ILIKE '%' || term || '%'
-              OR category ILIKE '%' || term || '%'
-            )
-        )
-      )
-      AND ($2::text IS NULL OR author ILIKE '%' || $2 || '%')
-      AND ($3::numeric IS NULL OR price >= $3)
-      AND ($4::numeric IS NULL OR price <= $4)
-      AND (
-        $5::text[] IS NULL OR cardinality($5::text[]) = 0 OR category = ANY($5::text[])
-      )
+      CASE
+        WHEN COALESCE(cardinality($1::text[]), 0) > 0 THEN search_rank
+        ELSE popularity_score
+      END AS relevance_score
+    FROM ranked_books
     ORDER BY
-      COALESCE(popularity_score, 0) DESC,
-      COALESCE(updated_at, NOW()) DESC
+      CASE
+        WHEN COALESCE(cardinality($1::text[]), 0) > 0 THEN search_rank
+        ELSE popularity_score
+      END DESC,
+      popularity_score DESC,
+      updated_at DESC
     LIMIT 50
   `;
 
@@ -184,24 +217,38 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
     return sqlBooks;
   }
 
-  // Vector search: only attempt if Upstash Vector is configured
-  if (filters.query && hasVectorConfig()) {
-    const { vector, sparseVector } = buildEmbeddingPair(searchQuery || filters.query);
-    const vectorResults = await vectorSearch(vector, 50, sparseVector);
-    const ids = vectorResults.map((entry) => String(entry.metadata?.bookId ?? entry.id));
-    const books = await fetchBooksByIds(ids);
-    const bookById = new Map(books.map((book) => [book.book_id, book]));
+  // Vector enrichment is optional; keep it off on Vercel catalog routes so smoke/API calls
+  // stay inside the serverless request budget. Dedicated RAG paths still use vector search.
+  if (filters.query && hasVectorConfig() && !config.vercel.enabled) {
+    try {
+      const { vector, sparseVector } = buildEmbeddingPair(searchQuery || filters.query);
+      const vectorResults = await withTimeout(
+        vectorSearch(vector, 50, sparseVector),
+        VECTOR_SEARCH_TIMEOUT_MS,
+        'catalog vector search',
+      );
+      const ids = vectorResults.map((entry) => String(entry.metadata?.bookId ?? entry.id));
+      const books = await fetchBooksByIds(ids);
+      const bookById = new Map(books.map((book) => [book.book_id, book]));
 
-    const vectorBooks = ids
-    .map((id) => bookById.get(id))
-    .filter((book): book is Book => Boolean(book))
-    .map((book) => ({
-      ...book,
-      relevance_score:
-        Number(vectorResults.find((entry) => String(entry.metadata?.bookId ?? entry.id) === book.book_id)?.score ?? book.relevance_score ?? 0),
-    }));
+      const vectorBooks = ids
+      .map((id) => bookById.get(id))
+      .filter((book): book is Book => Boolean(book))
+      .map((book) => ({
+        ...book,
+        relevance_score:
+          Number(vectorResults.find((entry) => String(entry.metadata?.bookId ?? entry.id) === book.book_id)?.score ?? book.relevance_score ?? 0),
+      }));
 
-    return rerankCatalogBooks(mergeBooksById(sqlBooks, vectorBooks), searchQuery || filters.query || '');
+      return rerankCatalogBooks(mergeBooksById(sqlBooks, vectorBooks), searchQuery || filters.query || '');
+    } catch (error) {
+      if (error instanceof AsyncTimeoutError) {
+        console.warn('[catalog/search] Vector enrichment timed out; returning SQL results only');
+        return sqlBooks;
+      }
+
+      throw error;
+    }
   }
 
   return sqlBooks;

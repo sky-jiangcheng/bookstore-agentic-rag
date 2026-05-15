@@ -6,6 +6,35 @@ function resolveBaseUrl() {
   return (process.env.RAG_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
 }
 
+function bodyPreview(text) {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 180);
+}
+
+function buildNonJsonMessage(label, response, text) {
+  const contentType = response.headers.get('content-type') || 'unknown content-type';
+  const preview = bodyPreview(text);
+  const protectionHint = /Authentication Required|vercel authentication|sso-api/i.test(text)
+    ? ' This looks like Vercel deployment protection; use `vercel curl` or configure a protection bypass token for automation.'
+    : '';
+
+  return `[${label}] Expected JSON but received ${contentType} with HTTP ${response.status}.${protectionHint} Body preview: ${preview}`;
+}
+
+async function readJsonResponse(response, label) {
+  const text = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+
+  if (!contentType.includes('application/json')) {
+    throw new Error(buildNonJsonMessage(label, response, text));
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`[${label}] Invalid JSON response: ${error.message}. Body preview: ${bodyPreview(text)}`);
+  }
+}
+
 async function readQueries() {
   const filePath = path.resolve(process.cwd(), 'data/huqifeng-test-queries.json');
   const content = await fs.readFile(filePath, 'utf8');
@@ -15,7 +44,7 @@ async function readQueries() {
 
 async function callHealth(baseUrl) {
   const response = await fetch(`${baseUrl}/api/health`);
-  const body = await response.json();
+  const body = await readJsonResponse(response, 'health');
   return {
     ok: response.ok,
     status: response.status,
@@ -32,7 +61,7 @@ async function callCatalogSearch(baseUrl, query) {
     body: JSON.stringify({ query }),
   });
 
-  const body = await response.json();
+  const body = await readJsonResponse(response, `catalog/search:${query}`);
   return {
     ok: response.ok,
     status: response.status,

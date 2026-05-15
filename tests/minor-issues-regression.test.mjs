@@ -9,11 +9,16 @@ function source(path) {
   return readFileSync(resolve(root, path), 'utf8');
 }
 
-test('health endpoint returns only minimal unauthenticated status data', () => {
+test('health endpoint exposes self-test dependency flags', () => {
   const healthRoute = source('app/api/health/route.ts');
 
-  assert.doesNotMatch(healthRoute, /hasDatabaseConfig|hasVectorConfig|hasRedisConfig|hasCatalogServiceConfig/);
-  assert.doesNotMatch(healthRoute, /dataSources/);
+  assert.match(healthRoute, /hasDatabaseConfig/);
+  assert.match(healthRoute, /hasVectorConfig/);
+  assert.match(healthRoute, /hasRedisConfig/);
+  assert.match(healthRoute, /hasCatalogServiceConfig/);
+  assert.match(healthRoute, /database:/);
+  assert.match(healthRoute, /vector:/);
+  assert.match(healthRoute, /dependencies:/);
   assert.doesNotMatch(healthRoute, /getFilterStatus/);
   assert.match(healthRoute, /status:\s*'ok'/);
 });
@@ -29,6 +34,18 @@ test('service fetches use bounded timeout helpers', () => {
   assert.doesNotMatch(catalogRepository, /\bfetch\(/);
   assert.match(authClient, /fetchWithTimeout/);
   assert.match(catalogRepository, /fetchWithTimeout/);
+});
+
+test('catalog vector enrichment is bounded and optional for online smoke tests', () => {
+  const catalogRepository = source('lib/server/catalog-repository.ts');
+
+  assert.match(catalogRepository, /search_rank/);
+  assert.match(catalogRepository, /THEN search_rank/);
+  assert.match(catalogRepository, /VECTOR_SEARCH_TIMEOUT_MS/);
+  assert.match(catalogRepository, /!config\.vercel\.enabled/);
+  assert.match(catalogRepository, /withTimeout\(\s*vectorSearch/);
+  assert.match(catalogRepository, /AsyncTimeoutError/);
+  assert.match(catalogRepository, /return sqlBooks/);
 });
 
 test('catalog repository uses shared catalog service config helper', () => {
