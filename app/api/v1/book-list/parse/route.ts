@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
     if (err instanceof BookListHttpError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
+    if (err instanceof SyntaxError) {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
     logServerError('[book-list/parse]', err);
     return NextResponse.json(
       buildSafeErrorResponse(err, '解析请求失败'),

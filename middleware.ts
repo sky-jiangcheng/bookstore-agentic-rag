@@ -226,17 +226,32 @@ const RATE_LIMIT_EXEMPT_PATHS = [
   '/robots.txt',
 ];
 
+/** 安全响应头：所有响应都设置 */
+const SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+};
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 放行不需要限流的路径
   if (RATE_LIMIT_EXEMPT_PATHS.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    // 安全头对所有响应都设置
+    for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+      response.headers.set(key, value);
+    }
+    return response;
   }
 
   // 仅对 API 路由做限流
   if (!pathname.startsWith('/api/')) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+      response.headers.set(key, value);
+    }
+    return response;
   }
 
   const ip = extractClientIp(request);
@@ -258,12 +273,16 @@ export async function middleware(request: NextRequest) {
           'Retry-After': String(retryAfter),
           'X-RateLimit-Limit': String(DEFAULT_MAX_REQUESTS),
           'X-RateLimit-Remaining': '0',
+          ...SECURITY_HEADERS,
         },
       },
     );
   }
 
   const response = NextResponse.next();
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    response.headers.set(key, value);
+  }
   response.headers.set('X-RateLimit-Limit', String(DEFAULT_MAX_REQUESTS));
   response.headers.set('X-RateLimit-Remaining', String(remaining));
   return response;
