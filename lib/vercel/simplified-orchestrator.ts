@@ -12,6 +12,7 @@ import { conversationMemory } from '@/lib/vercel/storage';
 import { fastRetrieval, retrieveCandidatesVercel } from '@/lib/vercel/simplified-retrieval';
 import type {
   AgentProgress,
+  Book,
   RequirementAnalysis,
   RetrievalResult,
   RecommendationResult,
@@ -117,31 +118,30 @@ export async function runVercelRAGPipeline(
 
     const targetCount = requirement.constraints.target_count ?? 5;
     const candidateTopK = Math.max(targetCount * 3, 12);
-    const primaryCandidates = await fastRetrieval(userQuery, candidateTopK);
 
-    let candidatePool = primaryCandidates;
-    if (candidatePool.length < targetCount) {
-      try {
-        const fallbackRetrieval = await retrieveCandidatesVercel(requirement, {
-          topK: candidateTopK,
-          enableKeyword: true,
-        });
-
-        const merged = new Map<string, typeof candidatePool[number]>();
-        for (const book of candidatePool) {
-          merged.set(book.book_id, book);
-        }
-        for (const book of fallbackRetrieval.books) {
-          if (!merged.has(book.book_id)) {
-            merged.set(book.book_id, book);
-          }
-        }
-
-        candidatePool = Array.from(merged.values());
-      } catch (error) {
+    // Run primary and fallback retrieval in parallel to cut latency
+    const [primaryCandidates, fallbackRetrieval] = await Promise.all([
+      fastRetrieval(userQuery, candidateTopK),
+      retrieveCandidatesVercel(requirement, {
+        topK: candidateTopK,
+        enableKeyword: true,
+      }).catch((error) => {
         console.warn('[pipeline] Fallback retrieval failed:', error);
+        return { books: [], sources: [], total_candidates: 0 } as RetrievalResult;
+      }),
+    ]);
+
+    const merged = new Map<string, Book>();
+    for (const book of primaryCandidates) {
+      merged.set(book.book_id, book);
+    }
+    for (const book of fallbackRetrieval.books) {
+      if (!merged.has(book.book_id)) {
+        merged.set(book.book_id, book);
       }
     }
+
+    let candidatePool = Array.from(merged.values());
 
     retrieval = {
       books: candidatePool.slice(0, candidateTopK),
@@ -156,14 +156,30 @@ export async function runVercelRAGPipeline(
       data: retrieval as unknown as Record<string, unknown>,
     });
 
-    // Step 5: Generate recommendation
-    onProgress?.({
-      type: 'phase_start',
-      phase: 'generation',
-      content: '生成推荐...',
-    });
+    // Step 5: Generate recommendation (skip if running out of time)
+    const elapsedRetrieval = Date.now() - startTime;
+    if (elapsedRetrieval > 5000) {
+      // Running short on time — skip LLM generation, return ranked candidates
+      console.warn(`[pipeline] ${elapsedRetrieval}ms elapsed, skipping LLM generation, returning ranked candidates`);
+      recommendation = {
+        books: retrieval.books.slice(0, Math.max(targetCount, 5)).map(book => ({
+          ...book,
+          explanation: '基于您的需求找到的相关书籍。',
+        })),
+        total_price: retrieval.books.reduce((sum, b) => sum + b.price, 0),
+        quality_score: 0.8,
+        confidence: 0.7,
+        category_distribution: {},
+      };
+    } else {
+      onProgress?.({
+        type: 'phase_start',
+        phase: 'generation',
+        content: '生成推荐...',
+      });
 
-    recommendation = await generateRecommendation(requirement, retrieval.books);
+      recommendation = await generateRecommendation(requirement, retrieval.books);
+    }
 
     onProgress?.({
       type: 'phase_complete',

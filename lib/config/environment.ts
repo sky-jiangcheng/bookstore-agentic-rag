@@ -28,7 +28,7 @@ export const config = {
   // Vercel Deployment
   vercel: {
     enabled: process.env.VERCEL === 'true' || process.env.VERCEL_ENV !== undefined,
-    timeout: Number(process.env.VERCEL_TIMEOUT) || 9000, // 9 seconds (under 10s limit)
+    timeout: Number(process.env.VERCEL_TIMEOUT) || 7000, // 7 seconds (under 10s limit with cold start headroom)
     useSimplifiedPipeline: process.env.VERCEL_USE_SIMPLIFIED !== 'false',
   },
   // Classic RAG Components

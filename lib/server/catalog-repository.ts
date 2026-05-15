@@ -217,6 +217,10 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
     return sqlBooks;
   }
 
+  // Always rerank SQL results for better precision, even on Vercel.
+  // The reranker is a pure JS function — no external deps, no network calls.
+  const rerankedSql = rerankCatalogBooks(sqlBooks, searchQuery || filters.query);
+
   // Vector enrichment is optional; keep it off on Vercel catalog routes so smoke/API calls
   // stay inside the serverless request budget. Dedicated RAG paths still use vector search.
   if (filters.query && hasVectorConfig() && !config.vercel.enabled) {
@@ -240,18 +244,18 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
           Number(vectorResults.find((entry) => String(entry.metadata?.bookId ?? entry.id) === book.book_id)?.score ?? book.relevance_score ?? 0),
       }));
 
-      return rerankCatalogBooks(mergeBooksById(sqlBooks, vectorBooks), searchQuery || filters.query || '');
+      return rerankCatalogBooks(mergeBooksById(rerankedSql, vectorBooks), searchQuery || filters.query || '');
     } catch (error) {
       if (error instanceof AsyncTimeoutError) {
-        console.warn('[catalog/search] Vector enrichment timed out; returning SQL results only');
-        return sqlBooks;
+        console.warn('[catalog/search] Vector enrichment timed out; returning cleaned SQL results only');
+        return rerankedSql;
       }
 
       throw error;
     }
   }
 
-  return sqlBooks;
+  return rerankedSql;
 }
 
 export async function getBookDetailsFromDatabase(bookId: string): Promise<Book | null> {
