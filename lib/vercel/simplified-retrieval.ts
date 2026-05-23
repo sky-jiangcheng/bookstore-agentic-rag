@@ -12,7 +12,6 @@ import type { Book, RequirementAnalysis, RetrievalResult } from '@/lib/types/rag
 import { filterBlockedBooks } from '@/lib/server/book-filters';
 import { ensureVectorStoreReady } from '@/lib/vector-initializer';
 
-/** 中文类别查询扩展映射表：将常见中文类别扩展为同义/近义词 */
 const CATEGORY_EXPANSION_MAP: Record<string, string[]> = {
   '公共管理': ['公共管理', '行政管理', '公共', '行政'],
   '政治学': ['政治学', '政治', '公共管理', '行政管理'],
@@ -34,37 +33,41 @@ const CATEGORY_EXPANSION_MAP: Record<string, string[]> = {
   '旅游': ['旅游', '旅行', '城市', '地理', '人文'],
 };
 
+const MIN_KEYWORD_LENGTH = 2;
+const RELEVANCE_THRESHOLD = 0.01;
+
 function expandCategories(categories: string[]): string[] {
   const expanded = new Set<string>(categories);
   for (const cat of categories) {
     const synonyms = CATEGORY_EXPANSION_MAP[cat];
     if (synonyms) {
-      for (const s of synonyms) {
-        expanded.add(s);
-      }
+      synonyms.forEach(s => expanded.add(s));
     }
   }
   return Array.from(expanded);
 }
 
+function isExcludedByKeyword(haystack: string, excludedKeywords: string[]): boolean {
+  const lowerHaystack = haystack.toLowerCase();
+  return excludedKeywords.some(keyword => lowerHaystack.includes(keyword.toLowerCase()));
+}
+
+function matchesKeywords(haystack: string, keywords: string[]): boolean {
+  if (keywords.length === 0) return true;
+  const lowerHaystack = haystack.toLowerCase();
+  return keywords.some(keyword => lowerHaystack.includes(keyword));
+}
+
 function applyHardConstraints(books: Book[], requirement: RequirementAnalysis): Book[] {
   const excludedKeywords = requirement.constraints.exclude_keywords ?? [];
-  const keywords = requirement.keywords.map((keyword) => keyword.toLowerCase()).filter((keyword) => keyword.length >= 2);
+  const keywords = requirement.keywords
+    .map(k => k.toLowerCase())
+    .filter(k => k.length >= MIN_KEYWORD_LENGTH);
 
-  const matchesAnyKeyword = (haystack: string): boolean => {
-    if (keywords.length === 0) return true;
-    return keywords.some((keyword) => haystack.includes(keyword));
-  };
-
-  const anyBookMatchesKeyword = keywords.length === 0 || books.some((book) => {
-    const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
-    return matchesAnyKeyword(haystack);
-  });
-
-  const strictFilter = (book: Book): boolean => {
+  const filterByConstraints = (book: Book): boolean => {
     const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
 
-    if (excludedKeywords.some((keyword) => haystack.includes(keyword.toLowerCase()))) {
+    if (isExcludedByKeyword(haystack, excludedKeywords)) {
       return false;
     }
 
@@ -72,41 +75,94 @@ function applyHardConstraints(books: Book[], requirement: RequirementAnalysis): 
       return false;
     }
 
-    if (anyBookMatchesKeyword && !matchesAnyKeyword(haystack)) {
+    if (keywords.length > 0 && !matchesKeywords(haystack, keywords)) {
       return false;
     }
 
     return true;
   };
 
-  const constrained = books.filter(strictFilter);
+  const filtered = books.filter(filterByConstraints);
 
-  if (constrained.length < 2) {
-    return books.filter((book) => {
-      const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
-      if (excludedKeywords.some((keyword) => haystack.includes(keyword.toLowerCase()))) {
-        return false;
-      }
-      if (requirement.constraints.budget && book.price > requirement.constraints.budget) {
-        return false;
-      }
-      return true;
-    });
+  if (filtered.length >= 2) {
+    return filtered;
   }
 
-  return constrained;
+  return books.filter(book => {
+    const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
+    if (isExcludedByKeyword(haystack, excludedKeywords)) return false;
+    if (requirement.constraints.budget && book.price > requirement.constraints.budget) return false;
+    return true;
+  });
+}
+
+function rankBooksByRelevance(books: Book[], queryKeywords: string[]): Book[] {
+  return books.sort((a, b) => {
+    const relevanceDiff = b.relevance_score - a.relevance_score;
+    if (Math.abs(relevanceDiff) > RELEVANCE_THRESHOLD) {
+      return relevanceDiff;
+    }
+
+    if (queryKeywords.length > 0) {
+      const aMatches = queryKeywords.some(kw =>
+        a.title.toLowerCase().includes(kw) || a.category.toLowerCase().includes(kw)
+      );
+      const bMatches = queryKeywords.some(kw =>
+        b.title.toLowerCase().includes(kw) || b.category.toLowerCase().includes(kw)
+      );
+
+      if (aMatches !== bMatches) {
+        return aMatches ? -1 : 1;
+      }
+    }
+
+    return (b.popularity_score ?? 0) - (a.popularity_score ?? 0);
+  });
+}
+
+async function performVectorSearch(
+  requirement: RequirementAnalysis,
+  topK: number
+): Promise<Book[]> {
+  const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
+  const expandedCategories = expandCategories(requirement.categories);
+
+  return vectorSearchDirect(vector, topK, sparseVector, {
+    categories: expandedCategories.length > 0 ? expandedCategories : undefined,
+    maxPrice: requirement.constraints.budget,
+  });
+}
+
+async function performKeywordSearch(
+  requirement: RequirementAnalysis,
+  existingIds: Set<string>,
+  maxResults: number
+): Promise<Book[]> {
+  const expandedCategories = expandCategories(requirement.categories);
+  const filters = {
+    categories: expandedCategories.length > 0 ? expandedCategories : undefined,
+    author: requirement.constraints.author,
+    query: requirement.keywords.slice(0, 3).join(' '),
+  };
+
+  const keywordResults = await searchCatalog(filters);
+  return keywordResults
+    .filter(book => !existingIds.has(book.book_id))
+    .slice(0, maxResults);
+}
+
+async function getPopularFallback(topK: number): Promise<Book[]> {
+  const { getPopularBooks } = await import('@/lib/clients/catalog-client');
+  return getPopularBooks(Math.min(5, topK));
 }
 
 export async function retrieveCandidatesVercel(
   requirement: RequirementAnalysis,
-  options: {
-    topK?: number;
-    enableKeyword?: boolean;
-  } = {}
+  options: { topK?: number; enableKeyword?: boolean } = {}
 ): Promise<RetrievalResult> {
   const { topK = 10, enableKeyword = true } = options;
 
-  ensureVectorStoreReady().then((triggered) => {
+  ensureVectorStoreReady().then(triggered => {
     if (triggered) {
       console.log('[retrieval] Background pre-computation triggered');
     }
@@ -116,13 +172,7 @@ export async function retrieveCandidatesVercel(
   const sources: ('semantic' | 'keyword' | 'popular')[] = [];
 
   try {
-    const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
-    // 直接在向量搜索中应用约束，提高效率
-    const expandedCategories = expandCategories(requirement.categories);
-    const books = await vectorSearchDirect(vector, topK, sparseVector, {
-      categories: expandedCategories.length > 0 ? expandedCategories : undefined,
-      maxPrice: requirement.constraints.budget,
-    });
+    const books = await performVectorSearch(requirement, topK);
     results.push(...books);
     sources.push('semantic');
   } catch (error) {
@@ -131,22 +181,9 @@ export async function retrieveCandidatesVercel(
 
   if (enableKeyword && results.length < topK) {
     try {
-      const expandedCategories = expandCategories(requirement.categories);
-      const filters = {
-        categories: expandedCategories.length > 0 ? expandedCategories : undefined,
-        author: requirement.constraints.author,
-        query: requirement.keywords.slice(0, 3).join(' '),
-      };
-
-      const keywordResults = await searchCatalog(filters);
       const existingIds = new Set(results.map(b => b.book_id));
-
-      for (const book of keywordResults) {
-        if (!existingIds.has(book.book_id) && results.length < topK) {
-          results.push(book);
-        }
-      }
-
+      const keywordBooks = await performKeywordSearch(requirement, existingIds, topK - results.length);
+      results.push(...keywordBooks);
       sources.push('keyword');
     } catch (error) {
       console.warn('[retrieval] Keyword search failed:', error);
@@ -155,8 +192,7 @@ export async function retrieveCandidatesVercel(
 
   if (results.length === 0) {
     try {
-      const { getPopularBooks } = await import('@/lib/clients/catalog-client');
-      const popularBooks = await getPopularBooks(Math.min(5, topK));
+      const popularBooks = await getPopularFallback(topK);
       results.push(...popularBooks);
       sources.push('popular');
     } catch (error) {
@@ -166,35 +202,8 @@ export async function retrieveCandidatesVercel(
 
   const filteredResults = await filterBlockedBooks(results);
   const constrained = applyHardConstraints(filteredResults.books, requirement);
-  
-  // 优化排序策略：结合相关性、流行度和关键字匹配
   const queryKeywords = requirement.keywords.map(k => k.toLowerCase());
-  const sorted = constrained.sort((a, b) => {
-    // 1. 主要按相关性排序（向量搜索得分）
-    const relevanceDiff = b.relevance_score - a.relevance_score;
-    if (Math.abs(relevanceDiff) > 0.01) {
-      return relevanceDiff;
-    }
-    
-    // 2. 考虑关键字匹配（如果有查询词）
-    if (queryKeywords.length > 0) {
-      const aHasKeywords = queryKeywords.some(kw => 
-        a.title.toLowerCase().includes(kw) || 
-        a.category.toLowerCase().includes(kw)
-      );
-      const bHasKeywords = queryKeywords.some(kw => 
-        b.title.toLowerCase().includes(kw) || 
-        b.category.toLowerCase().includes(kw)
-      );
-      
-      if (aHasKeywords !== bHasKeywords) {
-        return aHasKeywords ? -1 : 1;
-      }
-    }
-    
-    // 3. 最后按流行度排序
-    return (b.popularity_score || 0) - (a.popularity_score || 0);
-  });
+  const sorted = rankBooksByRelevance(constrained, queryKeywords);
 
   return {
     books: sorted.slice(0, topK),
@@ -211,14 +220,13 @@ export async function fastRetrieval(
     const { vector, sparseVector } = generateEmbeddingPair(query);
     const books = await vectorSearchDirect(vector, topK, sparseVector);
     const filtered = (await filterBlockedBooks(books)).books;
-    
-    // 对 fastRetrieval 结果也进行排序优化
+
     return filtered.sort((a, b) => {
       const relevanceDiff = b.relevance_score - a.relevance_score;
-      if (Math.abs(relevanceDiff) > 0.01) {
+      if (Math.abs(relevanceDiff) > RELEVANCE_THRESHOLD) {
         return relevanceDiff;
       }
-      return (b.popularity_score || 0) - (a.popularity_score || 0);
+      return (b.popularity_score ?? 0) - (a.popularity_score ?? 0);
     });
   } catch (error) {
     console.error('[fastRetrieval] Failed:', error);
@@ -248,7 +256,7 @@ export async function precomputeEmbeddings(): Promise<void> {
         const { vector, sparseVector } = generateEmbeddingPair(text);
 
         await upsertBookVector(
-          String(bookId),
+          bookId,
           vector,
           { bookId, title, author, category, description: '' },
           sparseVector
