@@ -117,7 +117,12 @@ export async function retrieveCandidatesVercel(
 
   try {
     const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
-    const books = await vectorSearchDirect(vector, topK, sparseVector);
+    // 直接在向量搜索中应用约束，提高效率
+    const expandedCategories = expandCategories(requirement.categories);
+    const books = await vectorSearchDirect(vector, topK, sparseVector, {
+      categories: expandedCategories.length > 0 ? expandedCategories : undefined,
+      maxPrice: requirement.constraints.budget,
+    });
     results.push(...books);
     sources.push('semantic');
   } catch (error) {
@@ -161,11 +166,40 @@ export async function retrieveCandidatesVercel(
 
   const filteredResults = await filterBlockedBooks(results);
   const constrained = applyHardConstraints(filteredResults.books, requirement);
+  
+  // 优化排序策略：结合相关性、流行度和关键字匹配
+  const queryKeywords = requirement.keywords.map(k => k.toLowerCase());
+  const sorted = constrained.sort((a, b) => {
+    // 1. 主要按相关性排序（向量搜索得分）
+    const relevanceDiff = b.relevance_score - a.relevance_score;
+    if (Math.abs(relevanceDiff) > 0.01) {
+      return relevanceDiff;
+    }
+    
+    // 2. 考虑关键字匹配（如果有查询词）
+    if (queryKeywords.length > 0) {
+      const aHasKeywords = queryKeywords.some(kw => 
+        a.title.toLowerCase().includes(kw) || 
+        a.category.toLowerCase().includes(kw)
+      );
+      const bHasKeywords = queryKeywords.some(kw => 
+        b.title.toLowerCase().includes(kw) || 
+        b.category.toLowerCase().includes(kw)
+      );
+      
+      if (aHasKeywords !== bHasKeywords) {
+        return aHasKeywords ? -1 : 1;
+      }
+    }
+    
+    // 3. 最后按流行度排序
+    return (b.popularity_score || 0) - (a.popularity_score || 0);
+  });
 
   return {
-    books: constrained.slice(0, topK),
+    books: sorted.slice(0, topK),
     sources,
-    total_candidates: constrained.length,
+    total_candidates: sorted.length,
   };
 }
 
@@ -176,7 +210,16 @@ export async function fastRetrieval(
   try {
     const { vector, sparseVector } = generateEmbeddingPair(query);
     const books = await vectorSearchDirect(vector, topK, sparseVector);
-    return (await filterBlockedBooks(books)).books;
+    const filtered = (await filterBlockedBooks(books)).books;
+    
+    // 对 fastRetrieval 结果也进行排序优化
+    return filtered.sort((a, b) => {
+      const relevanceDiff = b.relevance_score - a.relevance_score;
+      if (Math.abs(relevanceDiff) > 0.01) {
+        return relevanceDiff;
+      }
+      return (b.popularity_score || 0) - (a.popularity_score || 0);
+    });
   } catch (error) {
     console.error('[fastRetrieval] Failed:', error);
     return [];

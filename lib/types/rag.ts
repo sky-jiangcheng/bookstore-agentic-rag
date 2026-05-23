@@ -9,6 +9,7 @@ export interface Book {
   description: string;
   cover_url?: string;
   relevance_score: number;
+  popularity_score?: number;
 }
 
 export interface RequirementAnalysis {

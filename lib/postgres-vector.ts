@@ -116,15 +116,24 @@ export async function vectorSearchBooks(
 
 /**
  * 直接搜索书籍向量并返回完整 Book 对象（避免二次查询）
+ * 可选支持分类和价格预算的约束
  */
 export async function vectorSearchBooksDirect(
   queryVector: number[],
   topK: number = 10,
+  options?: {
+    categories?: string[];
+    maxPrice?: number;
+  },
 ): Promise<Book[]> {
   if (!isValidVector(queryVector)) {
     throw new Error(`Invalid vector dimension: expected ${VECTOR_DIMENSION}, got ${queryVector.length}`);
   }
 
+  const { categories, maxPrice } = options || {};
+
+  // 先执行向量搜索，然后在内存中应用约束
+  // 这样避免了复杂的 SQL 构建和类型问题
   const results = await sql`
     SELECT
       b.id,
@@ -145,7 +154,22 @@ export async function vectorSearchBooksDirect(
     LIMIT ${topK}
   `;
 
-  return results.rows.map((row) => ({
+  let filteredRows = results.rows;
+  
+  // 在内存中应用约束
+  if (categories && categories.length > 0) {
+    filteredRows = filteredRows.filter(row => 
+      categories.includes(row.category)
+    );
+  }
+  
+  if (maxPrice !== undefined) {
+    filteredRows = filteredRows.filter(row => 
+      Number(row.price) <= maxPrice
+    );
+  }
+
+  return filteredRows.map((row) => ({
     book_id: String(row.id),
     title: row.title,
     author: row.author || 'Unknown Author',

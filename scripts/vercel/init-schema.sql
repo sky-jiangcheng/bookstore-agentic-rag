@@ -46,5 +46,14 @@ CREATE INDEX IF NOT EXISTS idx_books_fulltext ON books USING gin(to_tsvector('si
 
 -- 为 book_embeddings 创建向量索引（HNSW）
 -- vector_cosine_ops 支持余弦相似度搜索
-CREATE INDEX IF NOT EXISTS idx_book_embeddings_vector ON book_embeddings USING hnsw (embedding vector_cosine_ops);
+-- m: 每个节点的最大边数，影响内存和查询质量
+-- ef_construction: 构造期间的候选队列大小，影响索引质量
+CREATE INDEX IF NOT EXISTS idx_book_embeddings_vector ON book_embeddings USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+-- 为 book_id 创建索引
 CREATE INDEX IF NOT EXISTS idx_book_embeddings_book_id ON book_embeddings(book_id);
+
+-- 为 books 表的复合查询优化索引
+CREATE INDEX IF NOT EXISTS idx_books_category_price ON books(category, price);
+CREATE INDEX IF NOT EXISTS idx_books_price ON books(price);

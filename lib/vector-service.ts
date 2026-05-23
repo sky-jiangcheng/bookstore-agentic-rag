@@ -118,18 +118,23 @@ export async function vectorSearch(
 
 /**
  * 直接搜索书籍向量并返回完整 Book 对象（避免二次查询）
+ * 可选支持分类和价格预算约束
  */
 export async function vectorSearchDirect(
   queryVector: number[],
   topK: number = 10,
   sparseVector?: SparseVector,
+  options?: {
+    categories?: string[];
+    maxPrice?: number;
+  },
 ): Promise<Book[]> {
   const backend = getVectorBackend();
 
   if (backend === 'pgvector') {
-    return pgVectorSearchBooksDirect(queryVector, topK);
+    return pgVectorSearchBooksDirect(queryVector, topK, options);
   } else {
-    // 对于 Upstash，需要先搜索再获取详情
+    // 对于 Upstash，需要先搜索再获取详情，然后在内存中过滤
     const results = await upstashVectorSearch(queryVector, topK, sparseVector);
     const bookIds = results.map(r => r.metadata.bookId).filter(Boolean) as string[];
     const { getBookDetailsBatch } = await import('@/lib/clients/catalog-client');
@@ -143,13 +148,27 @@ export async function vectorSearchDirect(
       }
     }
     
-    return books.map(book => {
+    let filteredBooks = books.map(book => {
       const score = scoreMap.get(book.book_id);
       if (score !== undefined && score > book.relevance_score) {
         book.relevance_score = score;
       }
       return book;
     });
+    
+    // 应用约束过滤（对于 Upstash，在内存中进行）
+    if (options?.categories && options.categories.length > 0) {
+      filteredBooks = filteredBooks.filter(book => 
+        options.categories!.includes(book.category)
+      );
+    }
+    if (options?.maxPrice !== undefined) {
+      filteredBooks = filteredBooks.filter(book => 
+        book.price <= options.maxPrice!
+      );
+    }
+    
+    return filteredBooks;
   }
 }
 
