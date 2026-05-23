@@ -12,6 +12,7 @@ export interface VectorBookMetadata {
   author: string;
   category: string;
   description?: string;
+  sourceId?: string;
 }
 
 export interface VectorSearchResult {
@@ -48,7 +49,7 @@ function formatVector(vector: number[]): string {
 export async function upsertBookVector(
   bookId: string,
   vector: number[],
-  metadata: VectorBookMetadata,
+  _metadata: VectorBookMetadata,
   textContent?: string,
 ): Promise<void> {
   if (!isValidVector(vector)) {
@@ -213,7 +214,9 @@ export async function deleteBookVector(bookId: string): Promise<void> {
 export async function deleteChunkVectorsByBookIds(bookIds: string[]): Promise<void> {
   if (bookIds.length === 0) return;
 
-  await sql`DELETE FROM book_embeddings WHERE book_id = ANY(${bookIds.map(id => BigInt(id))}::bigint[])`;
+  for (const bookId of bookIds) {
+    await sql`DELETE FROM book_embeddings WHERE book_id = ${bookId}::bigint`;
+  }
 }
 
 export async function getBookEmbeddingCount(): Promise<number> {

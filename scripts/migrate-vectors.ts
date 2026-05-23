@@ -47,10 +47,11 @@ async function fetchAllUpstashVectors(): Promise<UpstashVectorItem[]> {
   const index = new Index({ url: vectorUrl, token: vectorToken });
   const allVectors: UpstashVectorItem[] = [];
 
-  let cursor: string | undefined;
+  let cursor: string | number = 0;
   const BATCH_SIZE = 100;
+  let hasMore = true;
 
-  do {
+  while (hasMore) {
     const response = await index.range({
       cursor,
       limit: BATCH_SIZE,
@@ -62,7 +63,7 @@ async function fetchAllUpstashVectors(): Promise<UpstashVectorItem[]> {
         vector?: number[];
         metadata?: UpstashVectorItem['metadata'];
       }>;
-      nextCursor?: string;
+      nextCursor?: string | number;
     };
 
     if (response.items && response.items.length > 0) {
@@ -75,8 +76,13 @@ async function fetchAllUpstashVectors(): Promise<UpstashVectorItem[]> {
       }
     }
 
-    cursor = response.nextCursor;
-  } while (cursor);
+    if (response.nextCursor !== undefined && response.nextCursor !== null) {
+      cursor = response.nextCursor;
+      hasMore = true;
+    } else {
+      hasMore = false;
+    }
+  }
 
   return allVectors;
 }
