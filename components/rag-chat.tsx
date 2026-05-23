@@ -164,7 +164,7 @@ export function RAGChat() {
     });
   };
 
-  const handleExportExcel = useCallback(async (currentMessage: MessageType) => {
+  const handleExportExcel = async (currentMessage: MessageType) => {
     const seenBookIds = new Set<number | string>();
     const allBooks: Array<{
       book_id?: number;
@@ -236,7 +236,7 @@ export function RAGChat() {
     } catch (err) {
       console.error('Export failed:', err);
     }
-  }, []);
+  };
 
   const submitQuery = async (rawInput: string) => {
     const trimmed = rawInput.trim();
