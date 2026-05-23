@@ -1,6 +1,5 @@
 /**
- * Types aligned with bookstore-local-platform
- * `app/api/v1/book_list/schemas.py` for Gateway / frontend contract.
+ * Book-list API contract types.
  */
 
 export interface CategoryRequirement {

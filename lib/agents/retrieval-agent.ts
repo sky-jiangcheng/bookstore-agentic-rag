@@ -1,6 +1,6 @@
 // lib/agents/retrieval-agent.ts
 import type { Book, RetrievalResult, RequirementAnalysis } from '@/lib/types/rag';
-import { vectorSearch } from '@/lib/upstash';
+import { vectorSearch } from '@/lib/vector-service';
 import { searchCatalog, getPopularBooks, getBookDetailsBatch } from '@/lib/clients/catalog-client';
 import { generateEmbeddingPair } from '@/lib/embeddings';
 import { rerankBooks, type RerankerConfig } from '@/lib/reranking';
@@ -177,7 +177,6 @@ export async function retrieveCandidates(
   ],
   options?: RetrievalOptions,
 ): Promise<RetrievalResult> {
-  // Collect all enabled retrieval promises
   const retrievalPromises: Promise<{ books: Book[]; type: 'semantic' | 'keyword' | 'popular' }>[] = [];
 
   for (const strategy of strategies) {
@@ -190,7 +189,6 @@ export async function retrieveCandidates(
             try {
               const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
               const vectorResults = await vectorSearch(vector, strategy.topK, sparseVector);
-              // Batch-fetch book details instead of N+1 individual calls
               const ids = vectorResults.map((result) => result.id);
               let bookMap = new Map<string, Book>();
               if (ids.length > 0) {
@@ -201,7 +199,6 @@ export async function retrieveCandidates(
                   console.warn('[semantic] Failed to batch get book details:', error);
                 }
               }
-              // Map vector results to books, skipping any whose details weren't found
               const books = vectorResults
                 .map((result) => bookMap.get(result.id) ?? null)
                 .filter((book): book is Book => book !== null);
@@ -221,7 +218,6 @@ export async function retrieveCandidates(
               const searchTerms = expandSearchTerms(requirement);
               const merged = new Map<string, Book>();
 
-              // Single combined query — tokenized internally into all individual terms
               const books = await searchCatalog({
                 author: requirement.constraints.author,
                 price_min: requirement.constraints.price_min,
@@ -235,7 +231,6 @@ export async function retrieveCandidates(
                 }
               }
 
-              // Limit to topK
               const limitedBooks = Array.from(merged.values()).slice(0, strategy.topK * 2);
               return { books: limitedBooks, type: 'keyword' };
             } catch (error) {
@@ -265,23 +260,18 @@ export async function retrieveCandidates(
     }
   }
 
-  // Wait for all retrievals to complete in parallel
   const results = await Promise.all(retrievalPromises);
 
-  // Extract just the book lists for RRF
   const bookLists: Book[][] = results.map(r => r.books);
   const sources = results.map(r => r.type);
 
-  // Apply RRF fusion
   let fusedBooks = reciprocalRankFusion(bookLists);
   fusedBooks = enforceHardConstraints(fusedBooks, requirement);
 
-  // Apply reranking if enabled (Classic RAG component)
   if (options?.enableReranking && options.rerankerConfig) {
     const rerankerTopK = options.enableRerankingOnTopK || Math.min(50, fusedBooks.length);
 
     if (fusedBooks.length > rerankerTopK) {
-      // Rerank top N candidates
       const topCandidates = fusedBooks.slice(0, rerankerTopK);
       const remainingBooks = fusedBooks.slice(rerankerTopK);
 
@@ -292,14 +282,11 @@ export async function retrieveCandidates(
           options.rerankerConfig
         );
 
-        // Combine reranked results with remaining books
         fusedBooks = [...reranked, ...remainingBooks];
       } catch (error) {
         console.warn('[retrieval] Reranking failed, using RRF results:', error);
-        // Continue with RRF results if reranking fails
       }
     } else {
-      // Rerank all results if we have fewer than topK
       try {
         fusedBooks = await rerankBooks(
           requirement.original_query,
@@ -324,7 +311,6 @@ export async function retrieveCandidates(
   };
 }
 
-// RRF 融合算法
 function reciprocalRankFusion(
   results: Book[][],
   k: number = 60,
@@ -332,33 +318,26 @@ function reciprocalRankFusion(
   const scores = new Map<string, number>();
   const bookMap = new Map<string, Book>();
 
-  // Process each result list
   for (const resultList of results) {
-    // rank starts from 1 as per RRF algorithm
     for (let i = 0; i < resultList.length; i++) {
       const book = resultList[i];
       const rank = i + 1;
       const bookId = book.book_id;
       const score = 1 / (k + rank);
 
-      // Accumulate score
       const currentScore = scores.get(bookId) || 0;
       scores.set(bookId, currentScore + score);
 
-      // Store book reference
       if (!bookMap.has(bookId)) {
         bookMap.set(bookId, book);
       }
     }
   }
 
-  // Deduplicate and sort by score descending
   return deduplicateAndMerge(scores, bookMap);
 }
 
-// 去重: 按 bookId 去重，保留最高分
 function deduplicateAndMerge(scores: Map<string, number>, bookMap: Map<string, Book>): Book[] {
-  // Convert to array of [bookId, score]
   return Array.from(scores.entries())
     .sort((a, b) => b[1] - a[1])
     .filter(([bookId]) => bookMap.has(bookId))

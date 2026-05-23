@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 
 import { Conversation, ConversationContent } from '@/components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
@@ -11,6 +11,7 @@ import { FeedbackButtons } from '@/components/ui/feedback-buttons';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
+import { Download } from 'lucide-react';
 import { buildFollowUpPrompts, type BookRecommendation, type RequirementSnapshot } from '@/components/rag-chat-utils';
 
 interface MessageType {
@@ -93,6 +94,49 @@ export function RAGChat() {
       return [...prev, updater(undefined)];
     });
   };
+
+  const handleExportExcel = useCallback(async (message: MessageType) => {
+    if (!message.recommendations || message.recommendations.length === 0) return;
+
+    const books = message.recommendations.map((b) => ({
+      book_id: typeof b.book_id === 'number' ? b.book_id : undefined,
+      title: b.title,
+      author: b.author || null,
+      price: b.price || null,
+      remark: b.explanation || null,
+    }));
+
+    const body = {
+      booklist_name: '推荐书单',
+      books,
+      budget: message.requirement?.constraints.budget ?? null,
+      total_price: message.totalPrice ?? null,
+    };
+
+    try {
+      const res = await fetch('/api/v1/book-list/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) throw new Error('Export failed');
+
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename\*=UTF-8''(.+)/);
+      const filename = match ? decodeURIComponent(match[1]) : '书单.xlsx';
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  }, []);
 
   const submitQuery = async (rawInput: string) => {
     const trimmed = rawInput.trim();
@@ -414,29 +458,41 @@ export function RAGChat() {
                               </MessageResponse>
 
                               {message.recommendations && message.recommendations.length > 0 ? (
-                                <div className="grid gap-4 md:grid-cols-2">
-                                  {message.recommendations.map((book) => (
-                                    <Card key={book.book_id} className="border-white/10 bg-white/5 p-4 shadow-lg shadow-black/10">
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0 flex-1">
-                                          <h3 className="line-clamp-2 text-base font-semibold text-white">{book.title}</h3>
-                                          <p className="mt-1 text-sm text-slate-400">{book.author}</p>
+                                <div className="space-y-3">
+                                  <div className="grid gap-4 md:grid-cols-2">
+                                    {message.recommendations.map((book) => (
+                                      <Card key={book.book_id} className="border-white/10 bg-white/5 p-4 shadow-lg shadow-black/10">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0 flex-1">
+                                            <h3 className="line-clamp-2 text-base font-semibold text-white">{book.title}</h3>
+                                            <p className="mt-1 text-sm text-slate-400">{book.author}</p>
+                                          </div>
+                                          <Badge className="bg-emerald-500/15 text-emerald-200">¥{book.price.toFixed(2)}</Badge>
                                         </div>
-                                        <Badge className="bg-emerald-500/15 text-emerald-200">¥{book.price.toFixed(2)}</Badge>
-                                      </div>
-                                      <p className="mt-3 text-sm leading-6 text-slate-300">{book.explanation}</p>
-                                      {book.book_id && message.sessionId ? (
-                                        <div className="mt-4 border-t border-white/10 pt-3">
-                                          <FeedbackButtons
-                                            bookId={String(book.book_id)}
-                                            sessionId={message.sessionId}
-                                            query={previousUserMessage?.content || ''}
-                                            className="text-xs"
-                                          />
-                                        </div>
-                                      ) : null}
-                                    </Card>
-                                  ))}
+                                        <p className="mt-3 text-sm leading-6 text-slate-300">{book.explanation}</p>
+                                        {book.book_id && message.sessionId ? (
+                                          <div className="mt-4 border-t border-white/10 pt-3">
+                                            <FeedbackButtons
+                                              bookId={String(book.book_id)}
+                                              sessionId={message.sessionId}
+                                              query={previousUserMessage?.content || ''}
+                                              className="text-xs"
+                                            />
+                                          </div>
+                                        ) : null}
+                                      </Card>
+                                    ))}
+                                  </div>
+                                  {message.status === 'done' ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleExportExcel(message)}
+                                      className="border-white/10 bg-white/5 text-slate-200 hover:bg-sky-400/10 hover:border-sky-400/60"
+                                    >
+                                      <Download className="mr-2 h-4 w-4" /> 导出 Excel
+                                    </Button>
+                                  ) : null}
                                 </div>
                               ) : null}
 

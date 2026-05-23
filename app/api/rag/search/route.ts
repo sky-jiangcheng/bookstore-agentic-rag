@@ -2,14 +2,14 @@
  * Simple Vector Search API
  *
  * Lightweight endpoint that performs semantic vector search.
- * Returns JSON results compatible with local-platform's vector_search_tool.
+ * Returns JSON results for vector search.
  *
  * GET /api/rag/search?query=...&top_k=20
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { generateEmbeddingPair } from '@/lib/embeddings';
-import { vectorSearch } from '@/lib/upstash';
+import { vectorSearch } from '@/lib/vector-service';
 import { getBookDetailsBatch } from '@/lib/clients/catalog-client';
 import { validateConfig } from '@/lib/config/environment';
 import { corsHeaders, handleCorsPreflightRequest } from '@/lib/utils/cors';

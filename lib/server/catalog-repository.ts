@@ -6,7 +6,7 @@ import config, { hasCatalogServiceConfig, hasVectorConfig } from '@/lib/config/e
 import { buildCatalogSearchQuery, buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 import { buildEmbeddingPair } from '@/lib/local-vector';
-import { vectorSearch } from '@/lib/upstash';
+import { vectorSearch } from '@/lib/vector-service';
 import { AsyncTimeoutError, withTimeout } from '@/lib/utils/async-timeout';
 import { fetchWithTimeout } from '@/lib/utils/fetch-timeout';
 

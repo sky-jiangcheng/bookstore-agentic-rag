@@ -1,11 +1,12 @@
 /**
  * Vector Store Initializer
  *
- * Automatically checks and populates the Upstash vector index with book embeddings.
+ * Automatically checks and populates the vector index with book embeddings.
+ * Supports both pgvector (PostgreSQL) and Upstash Vector backends.
  * No manual step required — triggers lazily on first request when store is empty.
  */
 
-import { getVectorStoreInfo } from '@/lib/upstash';
+import { getVectorStoreInfo } from '@/lib/vector-service';
 import { precomputeEmbeddings } from '@/lib/vercel/simplified-retrieval';
 
 /** Singleton flag: prevent concurrent precompute runs */
@@ -40,7 +41,6 @@ export async function ensureVectorStoreReady(): Promise<boolean> {
 
   const info = await getVectorStoreInfo();
   if (info === null) {
-    // No vector config — nothing we can do
     return false;
   }
 

@@ -8,3 +8,5 @@ export type {
   ParsedRequirements,
 } from '@/lib/book-list/types';
 export { BookListHttpError, generateBookList, parseBookListRequirements } from '@/lib/book-list/service';
+export { buildExcelBuffer } from '@/lib/book-list/excel-export';
+export type { ExportBookItem, ExportBookListRequest } from '@/lib/book-list/excel-export';

@@ -7,7 +7,7 @@
 
 import { generateEmbeddingPair } from '@/lib/embeddings';
 import { searchCatalog, getBookDetailsBatch } from '@/lib/clients/catalog-client';
-import { vectorSearch, upsertBookVector } from '@/lib/upstash';
+import { vectorSearch, upsertBookVector } from '@/lib/vector-service';
 import type { Book, RequirementAnalysis, RetrievalResult } from '@/lib/types/rag';
 import { filterBlockedBooks } from '@/lib/server/book-filters';
 import { ensureVectorStoreReady } from '@/lib/vector-initializer';
@@ -56,13 +56,11 @@ function applyHardConstraints(books: Book[], requirement: RequirementAnalysis): 
     return keywords.some((keyword) => haystack.includes(keyword));
   };
 
-  // Check if any book matches at least one keyword; if none do, skip keyword filtering
   const anyBookMatchesKeyword = keywords.length === 0 || books.some((book) => {
     const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
     return matchesAnyKeyword(haystack);
   });
 
-  // Strict mode: apply keyword + exclude + budget
   const strictFilter = (book: Book): boolean => {
     const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
 
@@ -83,7 +81,6 @@ function applyHardConstraints(books: Book[], requirement: RequirementAnalysis): 
 
   const constrained = books.filter(strictFilter);
 
-  // Relaxed fallback: if strict mode yields fewer than 2 results, only apply exclude + budget
   if (constrained.length < 2) {
     return books.filter((book) => {
       const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
@@ -100,12 +97,6 @@ function applyHardConstraints(books: Book[], requirement: RequirementAnalysis): 
   return constrained;
 }
 
-/**
- * Simplified retrieval for Vercel serverless
- * - Single-path retrieval (vector only)
- * - No reranking (time-consuming)
- * - Limited candidates (reduce processing time)
- */
 export async function retrieveCandidatesVercel(
   requirement: RequirementAnalysis,
   options: {
@@ -115,7 +106,6 @@ export async function retrieveCandidatesVercel(
 ): Promise<RetrievalResult> {
   const { topK = 10, enableKeyword = true } = options;
 
-  // Lazy-init: if vector store is empty, trigger precompute in background
   ensureVectorStoreReady().then((triggered) => {
     if (triggered) {
       console.log('[retrieval] Background pre-computation triggered');
@@ -125,7 +115,6 @@ export async function retrieveCandidatesVercel(
   const results: Book[] = [];
   const sources: ('semantic' | 'keyword' | 'popular')[] = [];
 
-  // 1. Vector search (fastest for relevant results)
   try {
     const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
     const vectorResults = await vectorSearch(vector, topK, sparseVector);
@@ -152,14 +141,13 @@ export async function retrieveCandidatesVercel(
     console.warn('[retrieval] Vector search failed:', error);
   }
 
-  // 2. Keyword search (only if needed and time permits)
   if (enableKeyword && results.length < topK) {
     try {
       const expandedCategories = expandCategories(requirement.categories);
       const filters = {
         categories: expandedCategories.length > 0 ? expandedCategories : undefined,
         author: requirement.constraints.author,
-        query: requirement.keywords.slice(0, 3).join(' '), // Limit keywords
+        query: requirement.keywords.slice(0, 3).join(' '),
       };
 
       const keywordResults = await searchCatalog(filters);
@@ -177,7 +165,6 @@ export async function retrieveCandidatesVercel(
     }
   }
 
-  // 3. Fallback to popular if no results
   if (results.length === 0) {
     try {
       const { getPopularBooks } = await import('@/lib/clients/catalog-client');
@@ -199,10 +186,6 @@ export async function retrieveCandidatesVercel(
   };
 }
 
-/**
- * Ultra-fast retrieval with minimal processing
- * Use when execution time is critical
- */
 export async function fastRetrieval(
   query: string,
   topK: number = 5
@@ -225,10 +208,6 @@ export async function fastRetrieval(
   }
 }
 
-/**
- * Pre-compute and cache embeddings for all books
- * Run this during build/deployment, not at request time
- */
 export async function precomputeEmbeddings(): Promise<void> {
   console.log('[precompute] Starting embedding pre-computation...');
 
