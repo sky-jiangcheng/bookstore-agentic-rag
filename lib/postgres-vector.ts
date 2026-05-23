@@ -5,6 +5,7 @@
  */
 
 import { sql } from '@vercel/postgres';
+import type { Book } from '@/lib/types/rag';
 
 export interface VectorBookMetadata {
   bookId: string;
@@ -83,11 +84,15 @@ export async function vectorSearchBooks(
   const results = await sql`
     SELECT
       be.book_id,
-      be.embedding,
       b.title,
       b.author,
       b.category,
       b.description,
+      b.publisher,
+      b.price,
+      b.stock,
+      b.cover_url,
+      b.popularity_score,
       1 - (be.embedding <=> ${formatVector(queryVector)}::vector) AS similarity
     FROM book_embeddings be
     JOIN books b ON be.book_id = b.id
@@ -106,6 +111,51 @@ export async function vectorSearchBooks(
       category: row.category || 'general',
       description: row.description || '',
     },
+  }));
+}
+
+/**
+ * 直接搜索书籍向量并返回完整 Book 对象（避免二次查询）
+ */
+export async function vectorSearchBooksDirect(
+  queryVector: number[],
+  topK: number = 10,
+): Promise<Book[]> {
+  if (!isValidVector(queryVector)) {
+    throw new Error(`Invalid vector dimension: expected ${VECTOR_DIMENSION}, got ${queryVector.length}`);
+  }
+
+  const results = await sql`
+    SELECT
+      b.id,
+      b.title,
+      b.author,
+      b.publisher,
+      b.description,
+      b.cover_url,
+      b.price,
+      b.stock,
+      b.category,
+      b.popularity_score,
+      1 - (be.embedding <=> ${formatVector(queryVector)}::vector) AS similarity
+    FROM book_embeddings be
+    JOIN books b ON be.book_id = b.id
+    WHERE be.embedding IS NOT NULL
+    ORDER BY be.embedding <=> ${formatVector(queryVector)}::vector
+    LIMIT ${topK}
+  `;
+
+  return results.rows.map((row) => ({
+    book_id: String(row.id),
+    title: row.title,
+    author: row.author || 'Unknown Author',
+    publisher: row.publisher || '',
+    description: row.description || '',
+    cover_url: row.cover_url || '',
+    price: Number(row.price || 0),
+    stock: Number(row.stock || 0),
+    category: row.category || 'general',
+    relevance_score: Number(row.similarity || 0),
   }));
 }
 

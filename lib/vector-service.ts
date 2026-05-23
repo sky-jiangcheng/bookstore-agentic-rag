@@ -6,6 +6,7 @@
 
 import {
   vectorSearchBooks as pgVectorSearchBooks,
+  vectorSearchBooksDirect as pgVectorSearchBooksDirect,
   upsertBookVector as pgUpsertBookVector,
   upsertChunkVector as pgUpsertChunkVector,
   vectorSearchChunks as pgVectorSearchChunks,
@@ -18,6 +19,7 @@ import {
   type VectorSearchResult,
   type ChunkSearchResult,
 } from './postgres-vector';
+import type { Book } from '@/lib/types/rag';
 
 import { Index } from '@upstash/vector';
 import { config, hasVectorConfig } from '@/lib/config/environment';
@@ -111,6 +113,43 @@ export async function vectorSearch(
     return upstashVectorSearch(queryVector, topK, sparseVector);
   } else {
     return pgVectorSearchBooks(queryVector, topK);
+  }
+}
+
+/**
+ * 直接搜索书籍向量并返回完整 Book 对象（避免二次查询）
+ */
+export async function vectorSearchDirect(
+  queryVector: number[],
+  topK: number = 10,
+  sparseVector?: SparseVector,
+): Promise<Book[]> {
+  const backend = getVectorBackend();
+
+  if (backend === 'pgvector') {
+    return pgVectorSearchBooksDirect(queryVector, topK);
+  } else {
+    // 对于 Upstash，需要先搜索再获取详情
+    const results = await upstashVectorSearch(queryVector, topK, sparseVector);
+    const bookIds = results.map(r => r.metadata.bookId).filter(Boolean) as string[];
+    const { getBookDetailsBatch } = await import('@/lib/clients/catalog-client');
+    const books = await getBookDetailsBatch(bookIds);
+    
+    // 更新 relevance_score
+    const scoreMap = new Map<string, number>();
+    for (const result of results) {
+      if (result.metadata.bookId) {
+        scoreMap.set(result.metadata.bookId, result.score);
+      }
+    }
+    
+    return books.map(book => {
+      const score = scoreMap.get(book.book_id);
+      if (score !== undefined && score > book.relevance_score) {
+        book.relevance_score = score;
+      }
+      return book;
+    });
   }
 }
 

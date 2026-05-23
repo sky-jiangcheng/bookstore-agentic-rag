@@ -8,7 +8,7 @@
 import crypto from 'crypto';
 import { analyzeRequirement } from '@/lib/agents/requirement-agent';
 import { conversationMemory } from '@/lib/vercel/storage';
-import { fastRetrieval, retrieveCandidatesVercel } from '@/lib/vercel/simplified-retrieval';
+import { retrieveCandidatesVercel } from '@/lib/vercel/simplified-retrieval';
 import type {
   AgentProgress,
   Book,
@@ -118,31 +118,18 @@ export async function runVercelRAGPipeline(
     const targetCount = requirement.constraints.target_count ?? 10000;
     const candidateTopK = Math.max(targetCount * 3, 30);
 
-    // Run primary and fallback retrieval in parallel to cut latency
-    const [primaryCandidates, fallbackRetrieval] = await Promise.all([
-      fastRetrieval(userQuery, candidateTopK),
-      retrieveCandidatesVercel(requirement, {
-        topK: candidateTopK,
-        enableKeyword: true,
-      }).catch((error) => {
-        console.warn('[pipeline] Fallback retrieval failed:', error);
-        return { books: [], sources: [], total_candidates: 0 } as RetrievalResult;
-      }),
-    ]);
-
-    const merged = new Map<string, Book>();
-    for (const book of primaryCandidates) {
-      merged.set(book.book_id, book);
-    }
-    for (const book of fallbackRetrieval.books) {
-      if (!merged.has(book.book_id)) {
-        merged.set(book.book_id, book);
-      }
-    }
+    // Only one retrieval call - use retrieveCandidatesVercel which supports keyword fallback
+    const candidatesRetrieval = await retrieveCandidatesVercel(requirement, {
+      topK: candidateTopK,
+      enableKeyword: true,
+    }).catch((error) => {
+      console.warn('[pipeline] Retrieval failed:', error);
+      return { books: [], sources: [], total_candidates: 0 } as RetrievalResult;
+    });
 
     // 额外的去重：按书名去重，保留分数最高的版本
     const titleMap = new Map<string, Book>();
-    for (const book of merged.values()) {
+    for (const book of candidatesRetrieval.books) {
       const existing = titleMap.get(book.title);
       if (!existing || book.relevance_score > existing.relevance_score) {
         titleMap.set(book.title, book);
@@ -153,7 +140,7 @@ export async function runVercelRAGPipeline(
 
     retrieval = {
       books: candidatePool.slice(0, candidateTopK),
-      sources: ['semantic'],
+      sources: candidatesRetrieval.sources,
       total_candidates: candidatePool.length,
     };
 
