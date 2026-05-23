@@ -2,9 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@import 'tdesign-react/es/style/index.css';
+
 :root {
   --foreground-rgb: 0, 0, 0;
   --background-rgb: 255, 255, 255;
+  --td-brand-color: #0052d9;
+  --td-brand-color-hover: #0043bd;
+  --td-brand-color-active: #00308f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,4 +22,36 @@
 body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-rgb));
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.tdesign-dark-theme {
+  --td-brand-color: #4582f9;
+  --td-brand-color-hover: #6b9df9;
+  --td-brand-color-active: #2b6ad9;
+}
+
+.tdesign-book-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.tdesign-book-card {
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.tdesign-book-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+  border-color: rgba(69, 130, 249, 0.5);
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
