@@ -220,6 +220,11 @@ export function RAGChat() {
           price: Number(book.price),
           explanation: book.explanation,
           book_id: book.book_id,
+          publisher: book.publisher,
+          category: book.category,
+          stock: book.stock,
+          match_score: book.match_score,
+          source: book.source,
         })) ?? [];
 
         if (data.sessionId && data.sessionId !== sessionId) {

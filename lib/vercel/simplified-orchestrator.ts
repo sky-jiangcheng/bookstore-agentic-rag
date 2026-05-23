@@ -169,6 +169,8 @@ export async function runVercelRAGPipeline(
       books: retrieval.books.slice(0, targetCount).map(book => ({
         ...book,
         explanation: '',
+        match_score: book.relevance_score * 100,
+        source: '智能推荐',
       })),
       total_price: retrieval.books.reduce((sum, b) => sum + b.price, 0),
       quality_score: 0.8,
@@ -237,6 +239,8 @@ export async function runFastRAGPipeline(
       books: retrieval.books.map(book => ({
         ...book,
         explanation: '基于您的查询找到的相关书籍。',
+        match_score: book.relevance_score * 100,
+        source: '智能推荐',
       })),
       total_price: retrieval.books.reduce((sum, b) => sum + b.price, 0),
       quality_score: 0.8,

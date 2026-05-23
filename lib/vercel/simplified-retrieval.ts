@@ -204,7 +204,7 @@ export async function retrieveCandidatesVercel(
 
 export async function fastRetrieval(
   query: string,
-  topK: number = 5
+  topK: number = 100
 ): Promise<Book[]> {
   try {
     const { vector, sparseVector } = generateEmbeddingPair(query);
