@@ -60,33 +60,23 @@ export async function getBookDetails(bookId: string): Promise<Book> {
 
   if (hasDatabaseConfig()) {
     book = await getBookDetailsFromDatabase(bookId);
-    if (!book) {
-      throw new Error(`Book ${bookId} was not found in database`);
-    }
   } else if (hasCatalogServiceConfig()) {
     book = await getBookDetailsFromService(bookId);
-    if (!book) {
-      throw new Error(`Book ${bookId} was not found in catalog service`);
-    }
   } else {
     throw unavailableDataSourceError();
+  }
+
+  if (!book) {
+    throw new Error(`Book not found: ${bookId}`);
   }
 
   return assertBookVisible(book);
 }
 
 /**
- * Check inventory for a book.
- */
-export async function checkInventory(bookId: string): Promise<{ stock: number }> {
-  const book = await getBookDetails(bookId);
-  return { stock: book.stock };
-}
-
-/**
  * Get popular books.
  */
-export async function getPopularBooks(count: number = 20): Promise<Book[]> {
+export async function getPopularBooks(count: number): Promise<Book[]> {
   let books: Book[];
 
   if (hasDatabaseConfig()) {
