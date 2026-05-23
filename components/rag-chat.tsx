@@ -72,23 +72,20 @@ function getPhaseText(phase: string) {
 
 function BookCard({ book }: { book: BookRecommendation }) {
   return (
-    <Card
-      className="tdesign-book-card"
-      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
-    >
-      <div className="flex flex-col gap-3 p-1">
+    <Card className="cnbc-book-card">
+      <div className="flex flex-col gap-3 p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h3 className="text-base font-semibold text-white line-clamp-2">{book.title}</h3>
-            <p className="text-sm text-gray-400 mt-1">{book.author}</p>
+            <h3 className="text-lg font-semibold text-slate-900 line-clamp-2 leading-snug">{book.title}</h3>
+            <p className="text-sm text-slate-500 mt-1.5">{book.author}</p>
           </div>
           <Tag theme="success" variant="light">
             ¥{Number(book.price).toFixed(2)}
           </Tag>
         </div>
-        <p className="text-sm text-gray-300 leading-relaxed">{book.explanation}</p>
+        <p className="text-sm text-slate-600 leading-relaxed">{book.explanation}</p>
         {book.publisher && (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2 text-xs text-slate-400 pt-2 border-t border-slate-100">
             <span>出版社：{book.publisher}</span>
             {book.category && <span> | 分类：{book.category}</span>}
           </div>
@@ -439,103 +436,101 @@ export function RAGChat() {
   };
 
   return (
-    <div className="tdesign-dark-theme min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="max-w-[1200px] mx-auto py-6 px-4 pb-32">
-        <Card className="mb-6" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-            <div>
-              <div className="flex items-center gap-2 text-sm text-sky-400 mb-2">
-                <BookOpenIcon />
-                <span>Bookstore Agentic RAG</span>
-              </div>
-              <h1 className="text-2xl font-bold text-white">智能图书推荐系统</h1>
-              <p className="text-sm text-gray-400 mt-2 max-w-xl">
-                直接输入你的选书要求，我会给出推荐书单、推荐理由，以及下一步可以继续追问的方向。
-              </p>
-            </div>
+    <div className="min-h-screen bg-slate-50">
+      <div className="cnbc-header-line w-full" />
 
-            <Card
-              className="min-w-[260px]"
-              style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
-              <div className="text-xs text-gray-400 mb-2">当前状态</div>
-              <div className="flex items-center gap-2">
-                {isLoading ? (
+      <div className="max-w-[1280px] mx-auto py-8 px-6 pb-36">
+        <div className="mb-8">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-sky-700 font-semibold mb-3">
+            <BookOpenIcon />
+            <span>INTELLIGENT RECOMMENDATIONS</span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">智能图书推荐系统</h1>
+          <p className="text-slate-600 max-w-3xl text-lg leading-relaxed">
+            直接输入你的选书要求，我会给出推荐书单、推荐理由，以及下一步可以继续追问的方向。
+          </p>
+        </div>
+
+        <div className="cnbc-card p-6 mb-8">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">热门推荐词</h2>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              {isLoading ? (
+                <>
                   <Loading size="small" />
-                ) : (
-                  <div className="w-2 h-2 rounded-full bg-green-400" />
-                )}
-                <span className="text-sm text-gray-200">
-                  {isLoading && currentPhase ? getPhaseText(currentPhase) : '可以开始提需求了'}
-                </span>
-              </div>
-              <div className="text-xs text-gray-500 mt-3">
-                会话 ID：{sessionId ? sessionId.slice(0, 16) : '未创建'}
-              </div>
-            </Card>
+                  <span>{currentPhase ? getPhaseText(currentPhase) : '处理中'}</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>系统就绪</span>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {STARTER_PROMPTS.map((prompt) => (
               <Button
                 key={prompt}
                 variant="outline"
                 theme="default"
-                size="medium"
+                size="large"
                 onClick={() => setInput(prompt)}
-                style={{ border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.05)' }}
+                className="cnbc-starter-btn"
               >
                 {prompt}
               </Button>
             ))}
           </div>
-        </Card>
+        </div>
 
-        <Row gutter={[16, 16]}>
-          <Col xs={24} lg={18}>
-            <Card
-              style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
-              <div ref={scrollAreaRef} className="overflow-y-auto px-2 py-2" style={{ maxHeight: '65vh' }}>
+        <Row gutter={[24, 24]}>
+          <Col xs={24} lg={17}>
+            <Card className="cnbc-card">
+              <div ref={scrollAreaRef} className="overflow-y-auto px-4 py-6" style={{ maxHeight: '68vh' }}>
                 {messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <div className="w-20 h-20 rounded-full bg-sky-500/10 flex items-center justify-center mb-5 text-4xl">
+                    <div className="w-24 h-24 rounded-full bg-sky-50 flex items-center justify-center mb-6 text-5xl">
                       📚
                     </div>
-                    <h2 className="text-xl font-semibold text-white mb-3">把需求说具体一点，结果会更好</h2>
-                    <p className="text-sm text-gray-400 max-w-lg">
+                    <h2 className="text-2xl font-semibold text-slate-900 mb-4">把需求说具体一点，结果会更好</h2>
+                    <p className="text-slate-600 max-w-xl leading-relaxed">
                       例如告诉我目标读者、主题方向、预算、希望推荐几本，或者直接说"排除教材""适合陈列销售"等要求。
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-8">
+                  <div className="space-y-10">
                     {messages.map((message) => (
-                      <div key={message.id} className="space-y-4">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Tag variant="outline" theme={message.role === 'assistant' ? 'primary' : 'warning'}>
-                            {message.role === 'assistant' ? '系统回复' : '你的需求'}
-                          </Tag>
+                      <div key={message.id} className="space-y-6">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${message.role === 'assistant' ? 'bg-sky-600' : 'bg-amber-500'}`} />
+                            <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+                              {message.role === 'assistant' ? '系统推荐' : '您的需求'}
+                            </span>
+                          </div>
                           {message.status === 'streaming' && (
-                            <Tag variant="outline" theme="success">
+                            <Tag variant="outline" theme="primary" size="small">
                               <Loading size="small" /> 处理中
                             </Tag>
                           )}
                           {message.status === 'error' && (
-                            <Tag theme="danger">需要重试</Tag>
+                            <Tag theme="danger" size="small">需要重试</Tag>
                           )}
                         </div>
 
-                        <div className="whitespace-pre-wrap text-sm text-gray-200 leading-relaxed">
+                        <div className="whitespace-pre-wrap text-base text-slate-800 leading-relaxed">
                           {message.content}
                         </div>
 
                         {message.recommendations && message.recommendations.length > 0 && (
-                          <div className="space-y-4 mt-4">
-                            <div className="flex items-center justify-between">
-                              <div className="text-sm text-gray-400">
-                                共推荐 {message.recommendations.length} 本书
+                          <div className="space-y-5 mt-6">
+                            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                              <div className="text-sm text-slate-600 font-medium">
+                                共推荐 <span className="text-sky-700 font-semibold">{message.recommendations.length}</span> 本书
                                 {message.totalPrice && (
-                                  <span className="ml-2"> | 总价：¥{message.totalPrice.toFixed(2)}</span>
+                                  <span className="ml-3"> | 总价：<span className="font-semibold text-emerald-700">¥{message.totalPrice.toFixed(2)}</span></span>
                                 )}
                               </div>
                               <Button
@@ -548,7 +543,7 @@ export function RAGChat() {
                                 导出书单
                               </Button>
                             </div>
-                            <div className="tdesign-book-grid">
+                            <div className="cnbc-book-grid">
                               {message.recommendations.map((book) => (
                                 <BookCard key={book.book_id} book={book} />
                               ))}
@@ -563,11 +558,12 @@ export function RAGChat() {
             </Card>
           </Col>
 
-          <Col xs={24} lg={6}>
-            <Card
-              style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
-              <div className="text-sm font-medium text-gray-300 mb-4">继续探索</div>
+          <Col xs={24} lg={7}>
+            <Card className="cnbc-card">
+              <div className="flex items-center gap-2 mb-5 pb-3 border-b border-slate-100">
+                <ChatIcon className="text-sky-600" />
+                <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">继续探索</h3>
+              </div>
               {followUpPrompts.length > 0 ? (
                 <Space direction="vertical" className="w-full">
                   {followUpPrompts.map((prompt, index) => (
@@ -576,27 +572,24 @@ export function RAGChat() {
                       variant="text"
                       block
                       onClick={() => submitQuery(prompt)}
-                      style={{ textAlign: 'left', color: '#7dd3fc' }}
+                      style={{ textAlign: 'left', color: '#0070d2', padding: '10px 8px' }}
                     >
-                      <ChatIcon className="mr-2" />
                       {prompt}
                     </Button>
                   ))}
                 </Space>
               ) : (
-                <p className="text-sm text-gray-500">开始对话后，这里会出现推荐问题</p>
+                <p className="text-sm text-slate-500 leading-relaxed">开始对话后，这里会出现推荐问题，帮助你继续探索更多书籍选择。</p>
               )}
             </Card>
           </Col>
         </Row>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900 via-slate-900/95 to-transparent pt-8 pb-4 px-4">
-        <div className="max-w-[1200px] mx-auto">
-          <Card
-            style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.2)' }}
-          >
-            <form onSubmit={handleSubmit} className="flex gap-3 p-2">
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-slate-50 via-slate-50/95 to-transparent pt-10 pb-6 px-6">
+        <div className="max-w-[1280px] mx-auto">
+          <div className="cnbc-input-container p-2">
+            <form onSubmit={handleSubmit} className="flex gap-3">
               <Input
                 value={input}
                 onChange={(value) => setInput(String(value))}
@@ -604,7 +597,7 @@ export function RAGChat() {
                 size="large"
                 className="flex-1"
                 disabled={isLoading}
-                style={{ background: 'rgba(255,255,255,0.05)' }}
+                style={{ border: 'none', boxShadow: 'none' }}
               />
               <Button
                 type="submit"
@@ -614,10 +607,10 @@ export function RAGChat() {
                 disabled={!input.trim() || isLoading}
                 icon={<SearchIcon />}
               >
-                搜索
+                搜索推荐
               </Button>
             </form>
-          </Card>
+          </div>
         </div>
       </div>
     </div>
