@@ -52,48 +52,59 @@ function isExcludedByKeyword(haystack: string, excludedKeywords: string[]): bool
   return excludedKeywords.some(keyword => lowerHaystack.includes(keyword.toLowerCase()));
 }
 
-function matchesKeywords(haystack: string, keywords: string[]): boolean {
-  if (keywords.length === 0) return true;
-  const lowerHaystack = haystack.toLowerCase();
-  return keywords.some(keyword => lowerHaystack.includes(keyword));
-}
-
 function applyHardConstraints(books: Book[], requirement: RequirementAnalysis): Book[] {
   const excludedKeywords = requirement.constraints.exclude_keywords ?? [];
   const keywords = requirement.keywords
     .map(k => k.toLowerCase())
     .filter(k => k.length >= MIN_KEYWORD_LENGTH);
 
-  const filterByConstraints = (book: Book): boolean => {
+  // 给书打分，带有关键词匹配的优先
+  const scoredBooks = books.map(book => {
     const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
+    let score = 0;
+    let pass = true;
 
     if (isExcludedByKeyword(haystack, excludedKeywords)) {
-      return false;
+      pass = false;
     }
 
     if (requirement.constraints.budget && book.price > requirement.constraints.budget) {
-      return false;
+      // 预算超了但还是保留，只是分数低一些
+      score -= 0.5;
     }
 
-    if (keywords.length > 0 && !matchesKeywords(haystack, keywords)) {
-      return false;
+    // 关键词匹配加分
+    if (keywords.length > 0) {
+      let matchCount = 0;
+      keywords.forEach(keyword => {
+        if (haystack.includes(keyword)) {
+          matchCount++;
+        }
+      });
+      if (matchCount > 0) {
+        score += matchCount * 0.3;
+      }
     }
 
-    return true;
-  };
-
-  const filtered = books.filter(filterByConstraints);
-
-  if (filtered.length >= 2) {
-    return filtered;
-  }
-
-  return books.filter(book => {
-    const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
-    if (isExcludedByKeyword(haystack, excludedKeywords)) return false;
-    if (requirement.constraints.budget && book.price > requirement.constraints.budget) return false;
-    return true;
+    return {
+      book,
+      score,
+      pass
+    };
   });
+
+  // 先按 score 降序，然后按 pass，然后按 relevance_score
+  scoredBooks.sort((a, b) => {
+    if (a.pass !== b.pass) {
+      return a.pass ? -1 : 1; // 通过的排前面
+    }
+    if (a.score !== b.score) {
+      return b.score - a.score; // 分数高的排前面
+    }
+    return b.book.relevance_score - a.book.relevance_score; // 最后按 relevance_score
+  });
+
+  return scoredBooks.map(sb => sb.book);
 }
 
 function rankBooksByRelevance(books: Book[], queryKeywords: string[]): Book[] {
@@ -130,6 +141,7 @@ async function performVectorSearch(
   return vectorSearchDirect(vector, topK, sparseVector, {
     categories: expandedCategories.length > 0 ? expandedCategories : undefined,
     maxPrice: requirement.constraints.budget,
+    queryText: requirement.original_query,
   });
 }
 

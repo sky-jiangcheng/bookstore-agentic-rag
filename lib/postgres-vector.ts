@@ -237,15 +237,37 @@ export async function vectorSearchBooksDirect(
   options?: {
     categories?: string[];
     maxPrice?: number;
+    queryText?: string;
   },
 ): Promise<Book[]> {
   if (!isValidVector(queryVector)) {
     throw new Error(`Invalid vector dimension: expected ${VECTOR_DIMENSION}, got ${queryVector.length}`);
   }
 
-  const { categories, maxPrice } = options || {};
+  const { categories, maxPrice, queryText } = options || {};
 
-  const results = await sql`
+  // 构建 WHERE 条件
+  const conditions: string[] = ['be.embedding IS NOT NULL'];
+  const params: unknown[] = [];
+
+  if (categories && categories.length > 0) {
+    const placeholders = categories.map((_, i) => `$${params.length + i + 1}`).join(',');
+    conditions.push(`b.category IN (${placeholders})`);
+    params.push(...categories);
+  }
+
+  if (maxPrice !== undefined) {
+    params.push(maxPrice);
+    conditions.push(`b.price <= $${params.length}`);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  // 使用更大的查询范围，然后取 topK，确保有足够的符合条件的结果
+  const queryTopK = Math.max(topK * 3, 50);
+
+  // 构建查询
+  const results = await sql.query(`
     SELECT
       b.id,
       b.title,
@@ -257,25 +279,56 @@ export async function vectorSearchBooksDirect(
       b.stock,
       b.category,
       b.popularity_score,
-      1 - (be.embedding <=> ${formatVector(queryVector)}::vector) AS similarity
+      1 - (be.embedding <=> $1::vector) AS similarity
     FROM book_embeddings be
     JOIN books b ON be.book_id = b.id
-    WHERE be.embedding IS NOT NULL
-    ORDER BY be.embedding <=> ${formatVector(queryVector)}::vector
-    LIMIT ${topK}
-  `;
+    ${whereClause}
+    ORDER BY be.embedding <=> $1::vector
+    LIMIT $2
+  `, [formatVector(queryVector), queryTopK, ...params]);
 
-  let filteredRows = results.rows;
+  let books = results.rows.map(mapRowToBook);
 
-  if (categories && categories.length > 0) {
-    filteredRows = filteredRows.filter(row => categories.includes(row.category as string));
+  // 如果有查询文本，尝试做简单的关键词匹配增强排序
+  if (queryText && queryText.trim()) {
+    const keywords = queryText.toLowerCase().split(/\s+/).filter(Boolean);
+    
+    books = books.map(book => {
+      let keywordScore = 0;
+      const searchText = `${book.title} ${book.author} ${book.category} ${book.description}`.toLowerCase();
+      
+      keywords.forEach(keyword => {
+        if (searchText.includes(keyword)) {
+          keywordScore += 1;
+        }
+      });
+      
+      // 将关键词匹配分数和相似度分数结合
+      const combinedScore = book.relevance_score + keywordScore * 0.3;
+      
+      return {
+        ...book,
+        relevance_score: combinedScore
+      };
+    });
+    
+    // 重新排序
+    books.sort((a, b) => b.relevance_score - a.relevance_score);
   }
 
-  if (maxPrice !== undefined) {
-    filteredRows = filteredRows.filter(row => Number(row.price) <= maxPrice);
+  // 去重（同一本书可能有多个 chunk）
+  const seen = new Set();
+  const uniqueBooks: Book[] = [];
+  
+  for (const book of books) {
+    if (!seen.has(book.book_id)) {
+      seen.add(book.book_id);
+      uniqueBooks.push(book);
+    }
+    if (uniqueBooks.length >= topK) break;
   }
 
-  return filteredRows.map(mapRowToBook);
+  return uniqueBooks;
 }
 
 export async function deleteBookVector(bookId: string): Promise<void> {

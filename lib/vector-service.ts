@@ -127,6 +127,7 @@ export async function vectorSearchDirect(
   options?: {
     categories?: string[];
     maxPrice?: number;
+    queryText?: string;
   },
 ): Promise<Book[]> {
   const backend = getVectorBackend();
