@@ -26,10 +26,10 @@ interface MessageType {
 }
 
 const STARTER_PROMPTS = [
-  '推荐10本人工智能入门书',
-  '给高中生推荐10本历史阅读书单',
-  '预算200元，推荐5本适合运营学习的书',
-  '推荐10本适合书店陈列的畅销科普书',
+  '推荐人工智能入门书籍',
+  '给高中生推荐历史阅读书籍',
+  '预算200元，推荐适合运营学习的书籍',
+  '推荐适合书店陈列的畅销科普书籍',
 ];
 
 function generateBooklistName(userInput: string, requirement?: RequirementSnapshot): string {
