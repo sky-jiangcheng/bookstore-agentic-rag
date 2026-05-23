@@ -76,7 +76,7 @@ function BookCard({ book }: { book: BookRecommendation }) {
       className="tdesign-book-card"
       style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 p-1">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-white line-clamp-2">{book.title}</h3>
@@ -440,7 +440,7 @@ export function RAGChat() {
 
   return (
     <div className="tdesign-dark-theme min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="max-w-[1200px] mx-auto py-6 px-4">
+      <div className="max-w-[1200px] mx-auto py-6 px-4 pb-32">
         <Card className="mb-6" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
@@ -494,12 +494,11 @@ export function RAGChat() {
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={18}>
             <Card
-              className="min-h-[70vh]"
               style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }}
             >
-              <div ref={scrollAreaRef} className="max-h-[70vh] overflow-y-auto px-2">
+              <div ref={scrollAreaRef} className="overflow-y-auto px-2 py-2" style={{ maxHeight: '65vh' }}>
                 {messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
+                  <div className="flex flex-col items-center justify-center py-20 text-center">
                     <div className="w-20 h-20 rounded-full bg-sky-500/10 flex items-center justify-center mb-5 text-4xl">
                       📚
                     </div>
@@ -509,9 +508,9 @@ export function RAGChat() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-8">
                     {messages.map((message) => (
-                      <div key={message.id} className="space-y-3">
+                      <div key={message.id} className="space-y-4">
                         <div className="flex items-center gap-2 flex-wrap">
                           <Tag variant="outline" theme={message.role === 'assistant' ? 'primary' : 'warning'}>
                             {message.role === 'assistant' ? '系统回复' : '你的需求'}
@@ -532,26 +531,27 @@ export function RAGChat() {
 
                         {message.recommendations && message.recommendations.length > 0 && (
                           <div className="space-y-4 mt-4">
-                            <div className="text-sm text-gray-400">
-                              共推荐 {message.recommendations.length} 本书
-                              {message.totalPrice && (
-                                <span className="ml-2"> | 总价：¥{message.totalPrice.toFixed(2)}</span>
-                              )}
-                            </div>
-                            <div className="tdesign-book-grid">
-                              {message.recommendations.map((book) => (
-                                <BookCard key={book.book_id} book={book} />
-                              ))}
-                            </div>
-                            <div className="flex justify-end mt-4">
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm text-gray-400">
+                                共推荐 {message.recommendations.length} 本书
+                                {message.totalPrice && (
+                                  <span className="ml-2"> | 总价：¥{message.totalPrice.toFixed(2)}</span>
+                                )}
+                              </div>
                               <Button
                                 theme="primary"
                                 variant="outline"
                                 icon={<DownloadIcon />}
                                 onClick={() => handleExportExcel(message)}
+                                size="medium"
                               >
                                 导出书单
                               </Button>
+                            </div>
+                            <div className="tdesign-book-grid">
+                              {message.recommendations.map((book) => (
+                                <BookCard key={book.book_id} book={book} />
+                              ))}
                             </div>
                           </div>
                         )}
@@ -589,33 +589,36 @@ export function RAGChat() {
             </Card>
           </Col>
         </Row>
+      </div>
 
-        <Card
-          className="mt-6 sticky bottom-4"
-          style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)' }}
-        >
-          <form onSubmit={handleSubmit} className="flex gap-3">
-            <Input
-              value={input}
-              onChange={(value) => setInput(String(value))}
-              placeholder="输入你的选书要求..."
-              size="large"
-              className="flex-1"
-              disabled={isLoading}
-              style={{ background: 'rgba(255,255,255,0.05)' }}
-            />
-            <Button
-              type="submit"
-              theme="primary"
-              size="large"
-              loading={isLoading}
-              disabled={!input.trim() || isLoading}
-              icon={<SearchIcon />}
-            >
-              搜索
-            </Button>
-          </form>
-        </Card>
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900 via-slate-900/95 to-transparent pt-8 pb-4 px-4">
+        <div className="max-w-[1200px] mx-auto">
+          <Card
+            style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.2)' }}
+          >
+            <form onSubmit={handleSubmit} className="flex gap-3 p-2">
+              <Input
+                value={input}
+                onChange={(value) => setInput(String(value))}
+                placeholder="输入你的选书要求..."
+                size="large"
+                className="flex-1"
+                disabled={isLoading}
+                style={{ background: 'rgba(255,255,255,0.05)' }}
+              />
+              <Button
+                type="submit"
+                theme="primary"
+                size="large"
+                loading={isLoading}
+                disabled={!input.trim() || isLoading}
+                icon={<SearchIcon />}
+              >
+                搜索
+              </Button>
+            </form>
+          </Card>
+        </div>
       </div>
     </div>
   );
