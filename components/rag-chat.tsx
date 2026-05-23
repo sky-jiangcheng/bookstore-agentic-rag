@@ -102,8 +102,13 @@ export function RAGChat() {
       book_id: typeof b.book_id === 'number' ? b.book_id : undefined,
       title: b.title,
       author: b.author || null,
+      publisher: b.publisher || null,
+      category: b.category || null,
       price: b.price || null,
-      remark: b.explanation || null,
+      stock: b.stock || null,
+      score: b.match_score !== undefined ? Math.round(b.match_score * 100) : null,
+      source: b.source || '智能推荐',
+      remark: b.explanation || b.remark || null,
     }));
 
     const body = {

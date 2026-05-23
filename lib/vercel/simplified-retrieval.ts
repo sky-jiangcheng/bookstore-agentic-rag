@@ -114,6 +114,7 @@ export async function retrieveCandidatesVercel(
 
   const results: Book[] = [];
   const sources: ('semantic' | 'keyword' | 'popular')[] = [];
+  const semanticScores = new Map<string, number>();
 
   try {
     const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
@@ -125,12 +126,23 @@ export async function retrieveCandidatesVercel(
         .filter((bookId): bookId is string => typeof bookId === 'string' && bookId.length > 0)
     ));
 
+    // 保存向量搜索分数
+    for (const result of vectorResults) {
+      if (typeof result.metadata.bookId === 'string') {
+        semanticScores.set(result.metadata.bookId, result.score);
+      }
+    }
+
     if (bookIds.length > 0) {
       const books = await getBookDetailsBatch(bookIds);
       const bookMap = new Map(books.map((book) => [book.book_id, book]));
       for (const bookId of bookIds) {
         const book = bookMap.get(bookId);
         if (book) {
+          const semanticScore = semanticScores.get(bookId);
+          if (semanticScore !== undefined && semanticScore > book.relevance_score) {
+            book.relevance_score = semanticScore;
+          }
           results.push(book);
         }
       }
@@ -155,6 +167,10 @@ export async function retrieveCandidatesVercel(
 
       for (const book of keywordResults) {
         if (!existingIds.has(book.book_id) && results.length < topK) {
+          // 如果没有语义分数，使用数据库中的相关性分数
+          if (!semanticScores.has(book.book_id)) {
+            semanticScores.set(book.book_id, book.relevance_score);
+          }
           results.push(book);
         }
       }
@@ -199,7 +215,27 @@ export async function fastRetrieval(
         .map((result) => result.metadata.bookId)
         .filter((bookId): bookId is string => typeof bookId === 'string' && bookId.length > 0)
     ));
-    const books = bookIds.length > 0 ? await getBookDetailsBatch(bookIds) : [];
+    
+    if (bookIds.length === 0) {
+      return [];
+    }
+
+    const books = await getBookDetailsBatch(bookIds);
+    
+    // 使用向量搜索分数更新书籍的相关性分数
+    const scoreMap = new Map<string, number>();
+    for (const result of vectorResults) {
+      if (typeof result.metadata.bookId === 'string') {
+        scoreMap.set(result.metadata.bookId, result.score);
+      }
+    }
+
+    for (const book of books) {
+      const semanticScore = scoreMap.get(book.book_id);
+      if (semanticScore !== undefined && semanticScore > book.relevance_score) {
+        book.relevance_score = semanticScore;
+      }
+    }
 
     return (await filterBlockedBooks(books)).books;
   } catch (error) {

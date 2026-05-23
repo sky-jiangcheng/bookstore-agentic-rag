@@ -4,6 +4,12 @@ export interface BookRecommendation {
   price: number;
   explanation: string;
   book_id: number | string;
+  publisher?: string | null;
+  category?: string | null;
+  stock?: number | null;
+  match_score?: number;
+  source?: string | null;
+  remark?: string | null;
 }
 
 export interface RequirementSnapshot {
@@ -83,6 +89,12 @@ export function normalizeBookRecommendations(
       price: typeof item.price === 'number' ? item.price : Number(item.price) || 0,
       explanation: typeof item.explanation === 'string' ? item.explanation.trim() : '',
       book_id: String(item.book_id ?? ''),
+      publisher: typeof item.publisher === 'string' ? item.publisher.trim() || null : null,
+      category: typeof item.category === 'string' ? item.category.trim() || null : null,
+      stock: typeof item.stock === 'number' ? item.stock : null,
+      match_score: typeof item.match_score === 'number' ? item.match_score : undefined,
+      source: typeof item.source === 'string' ? item.source.trim() || null : null,
+      remark: typeof item.remark === 'string' ? item.remark.trim() || null : null,
     }))
     .filter((r) => r.title !== '未命名图书' || r.author !== '未知作者');
 }

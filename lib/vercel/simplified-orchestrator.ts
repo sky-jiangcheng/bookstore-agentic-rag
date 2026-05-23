@@ -140,7 +140,16 @@ export async function runVercelRAGPipeline(
       }
     }
 
-    let candidatePool = Array.from(merged.values());
+    // 额外的去重：按书名去重，保留分数最高的版本
+    const titleMap = new Map<string, Book>();
+    for (const book of merged.values()) {
+      const existing = titleMap.get(book.title);
+      if (!existing || book.relevance_score > existing.relevance_score) {
+        titleMap.set(book.title, book);
+      }
+    }
+
+    let candidatePool = Array.from(titleMap.values());
 
     retrieval = {
       books: candidatePool.slice(0, candidateTopK),
