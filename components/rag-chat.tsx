@@ -104,6 +104,28 @@ export function RAGChat() {
   const [lastUserQuery, setLastUserQuery] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  const getAggregatedStats = useCallback(() => {
+    const seenBookIds = new Set<number | string>();
+    let totalBooks = 0;
+    let totalPrice = 0;
+
+    messages.forEach(msg => {
+      if (msg.role === 'assistant' && msg.recommendations) {
+        msg.recommendations.forEach(book => {
+          if (book.book_id && !seenBookIds.has(book.book_id)) {
+            seenBookIds.add(book.book_id);
+            totalBooks++;
+            if (book.price) {
+              totalPrice += Number(book.price);
+            }
+          }
+        });
+      }
+    });
+
+    return { totalBooks, totalPrice };
+  }, [messages]);
+
   useEffect(() => {
     const storedSessionId = localStorage.getItem('rag-session-id');
     if (storedSessionId) {
@@ -142,28 +164,53 @@ export function RAGChat() {
     });
   };
 
-  const handleExportExcel = useCallback(async (message: MessageType) => {
-    if (!message.recommendations || message.recommendations.length === 0) return;
+  const handleExportExcel = useCallback(async (currentMessage: MessageType) => {
+    const seenBookIds = new Set<number | string>();
+    const allBooks: Array<{
+      book_id?: number;
+      title: string;
+      author?: string | null;
+      publisher?: string | null;
+      category?: string | null;
+      price?: number | null;
+      stock?: number | null;
+      score?: number | null;
+      source?: string;
+      remark?: string | null;
+    }> = [];
 
-    const books = message.recommendations.map((b) => ({
-      book_id: typeof b.book_id === 'number' ? b.book_id : undefined,
-      title: b.title,
-      author: b.author || null,
-      publisher: b.publisher || null,
-      category: b.category || null,
-      price: b.price || null,
-      stock: b.stock || null,
-      score: b.match_score !== undefined ? Math.round(b.match_score * 100) : null,
-      source: b.source || '智能推荐',
-      remark: b.explanation || b.remark || null,
-    }));
+    messages.forEach(msg => {
+      if (msg.role === 'assistant' && msg.recommendations && msg.recommendations.length > 0) {
+        msg.recommendations.forEach(book => {
+          const bookId = book.book_id;
+          if (bookId && !seenBookIds.has(bookId)) {
+            seenBookIds.add(bookId);
+            allBooks.push({
+              book_id: typeof bookId === 'number' ? bookId : undefined,
+              title: book.title,
+              author: book.author || null,
+              publisher: book.publisher || null,
+              category: book.category || null,
+              price: book.price || null,
+              stock: book.stock || null,
+              score: book.match_score !== undefined ? Math.round(book.match_score * 100) : null,
+              source: book.source || '智能推荐',
+              remark: book.explanation || book.remark || null,
+            });
+          }
+        });
+      }
+    });
 
-    const booklistName = generateBooklistName(message.content, message.requirement);
+    if (allBooks.length === 0) return;
+
+    const totalPrice = allBooks.reduce((sum, b) => sum + (b.price || 0), 0);
+    const booklistName = generateBooklistName(currentMessage.content, currentMessage.requirement);
     const body = {
       booklist_name: booklistName,
-      books,
-      budget: message.requirement?.constraints.budget ?? null,
-      total_price: message.totalPrice ?? null,
+      books: allBooks,
+      budget: currentMessage.requirement?.constraints.budget ?? null,
+      total_price: totalPrice,
     };
 
     try {
@@ -528,20 +575,25 @@ export function RAGChat() {
                           <div className="space-y-5 mt-6">
                             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                               <div className="text-sm text-slate-600 font-medium">
-                                共推荐 <span className="text-sky-700 font-semibold">{message.recommendations.length}</span> 本书
+                                本轮推荐 <span className="text-sky-700 font-semibold">{message.recommendations.length}</span> 本书
                                 {message.totalPrice && (
-                                  <span className="ml-3"> | 总价：<span className="font-semibold text-emerald-700">¥{message.totalPrice.toFixed(2)}</span></span>
+                                  <span className="ml-3"> | 本轮总价：<span className="font-semibold text-emerald-700">¥{message.totalPrice.toFixed(2)}</span></span>
                                 )}
                               </div>
-                              <Button
-                                theme="primary"
-                                variant="outline"
-                                icon={<DownloadIcon />}
-                                onClick={() => handleExportExcel(message)}
-                                size="medium"
-                              >
-                                导出书单
-                              </Button>
+                              <div className="flex items-center gap-3">
+                                <div className="text-xs text-slate-500">
+                                  （导出含 <span className="text-sky-700 font-semibold">{getAggregatedStats().totalBooks}</span> 本，总计 <span className="text-emerald-700 font-semibold">¥{getAggregatedStats().totalPrice.toFixed(2)}</span>）
+                                </div>
+                                <Button
+                                  theme="primary"
+                                  variant="outline"
+                                  icon={<DownloadIcon />}
+                                  onClick={() => handleExportExcel(message)}
+                                  size="medium"
+                                >
+                                  导出书单
+                                </Button>
+                              </div>
                             </div>
                             <div className="cnbc-book-grid">
                               {message.recommendations.map((book) => (
