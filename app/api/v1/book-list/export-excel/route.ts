@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}.xlsx`,
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}`,
         'Access-Control-Expose-Headers': 'Content-Disposition',
       },
     });

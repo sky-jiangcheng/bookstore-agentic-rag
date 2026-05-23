@@ -49,11 +49,13 @@ export interface BookRecommendation {
   author: string | null;
   publisher: string | null;
   price: number | null;
-  stock: number;
+  stock: number | null;
   category: string | null;
   cognitive_level: string | null;
   difficulty_level: number | null;
   match_score: number;
+  score?: number | null;
+  source?: string | null;
   remark: string | null;
 }
 

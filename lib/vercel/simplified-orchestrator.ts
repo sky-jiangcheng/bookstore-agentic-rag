@@ -157,7 +157,7 @@ export async function runVercelRAGPipeline(
 
     // Step 5: Build recommendation (heuristic only — no LLM call)
     recommendation = {
-      books: retrieval.books.slice(0, Math.max(targetCount, 5)).map(book => ({
+      books: retrieval.books.slice(0, targetCount).map(book => ({
         ...book,
         explanation: '',
       })),

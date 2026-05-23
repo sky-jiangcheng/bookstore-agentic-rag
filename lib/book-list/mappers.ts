@@ -155,6 +155,7 @@ export function recommendedBookToApiBook(
   matchScore: number,
 ): BookRecommendation {
   const idNum = /^\d+$/.test(book.book_id) ? Number(book.book_id) : stableIntFromString(book.book_id);
+  const normalizedScore = Math.min(1, Math.max(0, matchScore));
 
   return {
     book_id: idNum,
@@ -163,11 +164,13 @@ export function recommendedBookToApiBook(
     author: book.author || null,
     publisher: book.publisher || null,
     price: book.price,
-    stock: book.stock,
+    stock: book.stock ?? null,
     category: book.category || null,
     cognitive_level: null,
     difficulty_level: null,
-    match_score: Math.min(1, Math.max(0, matchScore)),
+    match_score: normalizedScore,
+    score: normalizedScore * 100,
+    source: (book as any).source || '智能推荐',
     remark: book.explanation || null,
   };
 }
