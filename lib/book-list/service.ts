@@ -22,6 +22,7 @@ import type {
 } from '@/lib/book-list/types';
 import type { RecommendedBook } from '@/lib/types/rag';
 import { runVercelRAGPipeline } from '@/lib/vercel/simplified-orchestrator';
+import { logServerError } from '@/lib/utils/safe-error';
 
 export class BookListHttpError extends Error {
   constructor(
@@ -33,6 +34,10 @@ export class BookListHttpError extends Error {
   }
 }
 
+/**
+ * 规范化输入的需求参数
+ * 确保类别百分比在有效范围内，关键词和约束非空
+ */
 function normalizeIncomingParsedRequirements(raw: ParsedRequirements): ParsedRequirements {
   const categories = Array.isArray(raw.categories)
     ? raw.categories.map((c) => ({
@@ -53,45 +58,67 @@ function normalizeIncomingParsedRequirements(raw: ParsedRequirements): ParsedReq
   };
 }
 
+/**
+ * 解析用户输入的阅读需求
+ * 使用LLM分析用户需求，生成结构化的需求描述
+ *
+ * @param body - 包含用户输入的请求体
+ * @returns 结构化的需求解析结果
+ * @throws BookListHttpError - 当输入过短或解析失败时
+ */
 export async function parseBookListRequirements(
   body: ParseRequirementsRequest,
 ): Promise<ParseRequirementsResponse> {
   const user_input = body.user_input?.trim() ?? '';
+
   if (user_input.length < 5) {
     throw new BookListHttpError(400, 'user_input 长度至少为 5');
   }
 
-  const analysis = await analyzeRequirement(user_input, {});
-  const parsed = requirementAnalysisToParsed(analysis);
-  const request_id = randomUUID();
-  const session_id = stableIntFromString(request_id);
+  try {
+    const analysis = await analyzeRequirement(user_input, {});
+    const parsed = requirementAnalysisToParsed(analysis);
+    const request_id = randomUUID();
+    const session_id = stableIntFromString(request_id);
 
-  await saveBookListParseSession(request_id, {
-    original_input: user_input,
-    parsed_requirements: parsed,
-    created_at: Date.now(),
-  });
+    await saveBookListParseSession(request_id, {
+      original_input: user_input,
+      parsed_requirements: parsed,
+      created_at: Date.now(),
+    });
 
-  const confidence_score = analysis.needs_clarification ? 0.78 : 0.92;
-  const suggestions = analysis.needs_clarification
-    ? analysis.clarification_questions
-    : analysis.preferences.slice(0, 5);
+    const confidence_score = analysis.needs_clarification ? 0.78 : 0.92;
+    const suggestions = analysis.needs_clarification
+      ? analysis.clarification_questions
+      : analysis.preferences.slice(0, 5);
 
-  return {
-    request_id,
-    session_id,
-    original_input: user_input,
-    parsed_requirements: parsed,
-    confidence_score,
-    suggestions,
-    needs_confirmation: confidence_score < 0.9,
-    message:
-      confidence_score < 0.9
-        ? '需求解析完成，请确认是否符合您的要求'
-        : '需求解析完成，置信度较高',
-  };
+    return {
+      request_id,
+      session_id,
+      original_input: user_input,
+      parsed_requirements: parsed,
+      confidence_score,
+      suggestions,
+      needs_confirmation: confidence_score < 0.9,
+      message:
+        confidence_score < 0.9
+          ? '需求解析完成，请确认是否符合您的要求'
+          : '需求解析完成，置信度较高',
+    };
+  } catch (error) {
+    logServerError('[book-list/parse]', error);
+    throw new BookListHttpError(500, '需求解析失败，请稍后重试');
+  }
 }
 
+/**
+ * 生成推荐书单
+ * 根据用户需求（通过request_id关联会话或直接传入）生成个性化书籍推荐
+ *
+ * @param body - 生成书单的请求参数
+ * @returns 包含推荐书籍列表的响应
+ * @throws BookListHttpError - 当请求无效、超时或服务不可用时
+ */
 export async function generateBookList(
   body: GenerateBookListRequest,
 ): Promise<GenerateBookListResponse> {
@@ -127,36 +154,46 @@ export async function generateBookList(
 
   const pipelineTask = useVercelSimplified
     ? (async () => {
-        const preReq = parsedRequirementsToRequirementAnalysis(userQuery, requirements, limit);
-        preReq.constraints = { ...preReq.constraints, target_count: limit };
+        try {
+          const preReq = parsedRequirementsToRequirementAnalysis(userQuery, requirements, limit);
+          preReq.constraints = { ...preReq.constraints, target_count: limit };
 
-        const vercelResult = await runVercelRAGPipeline({
-          userQuery,
-          requirement: preReq,
-          skipConversationMemory: true,
-        });
+          const vercelResult = await runVercelRAGPipeline({
+            userQuery,
+            requirement: preReq,
+            skipConversationMemory: true,
+          });
 
-        return {
-          recommendationBooks: vercelResult.recommendation?.books ?? [],
-          pipelineRequirement: vercelResult.requirement,
-          pipelineSuccess: vercelResult.success,
-          pipelineError: vercelResult.error,
-        };
+          return {
+            recommendationBooks: vercelResult.recommendation?.books ?? [],
+            pipelineRequirement: vercelResult.requirement,
+            pipelineSuccess: vercelResult.success,
+            pipelineError: vercelResult.error,
+          };
+        } catch (error) {
+          logServerError('[book-list/generate/vercel]', error);
+          throw error;
+        }
       })()
     : (async () => {
-        const fullQuery = requestId ? `${userQuery}\n请推荐约 ${limit} 本书。` : userQuery;
-        const classic = await runRAGPipeline({
-          userQuery: fullQuery,
-          enableConversationMemory: false,
-          maxIterations: config.rag.maxIterations,
-        });
+        try {
+          const fullQuery = requestId ? `${userQuery}\n请推荐约 ${limit} 本书。` : userQuery;
+          const classic = await runRAGPipeline({
+            userQuery: fullQuery,
+            enableConversationMemory: false,
+            maxIterations: config.rag.maxIterations,
+          });
 
-        return {
-          recommendationBooks: classic.recommendation?.books ?? [],
-          pipelineRequirement: classic.requirement,
-          pipelineSuccess: classic.success,
-          pipelineError: classic.error,
-        };
+          return {
+            recommendationBooks: classic.recommendation?.books ?? [],
+            pipelineRequirement: classic.requirement,
+            pipelineSuccess: classic.success,
+            pipelineError: classic.error,
+          };
+        } catch (error) {
+          logServerError('[book-list/generate/classic]', error);
+          throw error;
+        }
       })();
 
   const timeoutPromise = new Promise<never>(
@@ -167,11 +204,19 @@ export async function generateBookList(
       ),
   );
 
-  const pipelineResult = await Promise.race([pipelineTask, timeoutPromise]);
-  recommendationBooks = pipelineResult.recommendationBooks;
-  pipelineRequirement = pipelineResult.pipelineRequirement;
-  pipelineSuccess = pipelineResult.pipelineSuccess;
-  pipelineError = pipelineResult.pipelineError;
+  try {
+    const pipelineResult = await Promise.race([pipelineTask, timeoutPromise]);
+    recommendationBooks = pipelineResult.recommendationBooks;
+    pipelineRequirement = pipelineResult.pipelineRequirement;
+    pipelineSuccess = pipelineResult.pipelineSuccess;
+    pipelineError = pipelineResult.pipelineError;
+  } catch (error) {
+    if (error instanceof BookListHttpError) {
+      throw error;
+    }
+    logServerError('[book-list/generate]', error);
+    throw new BookListHttpError(500, '生成书单时发生内部错误');
+  }
 
   const sliced = recommendationBooks.slice(0, limit);
   const recommendations = sliced.map((b, i) =>

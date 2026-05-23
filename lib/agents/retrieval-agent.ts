@@ -4,6 +4,7 @@ import { vectorSearch } from '@/lib/vector-service';
 import { searchCatalog, getPopularBooks, getBookDetailsBatch } from '@/lib/clients/catalog-client';
 import { generateEmbeddingPair } from '@/lib/embeddings';
 import { rerankBooks, type RerankerConfig } from '@/lib/reranking';
+import { RETRIEVAL_CONSTANTS } from '@/lib/constants';
 
 export interface RetrievalStrategy {
   type: 'semantic' | 'keyword' | 'popular';
@@ -17,29 +18,16 @@ export interface RetrievalOptions {
   enableRerankingOnTopK?: number;
 }
 
-const CATEGORY_ALIASES: Record<string, string[]> = {
-  历史: ['历史', '党史', '地方史', '人物传记', '地方文化', '革命', '传记'],
-  计算机: ['计算机', '编程', '算法', '人工智能', '软件', '开发', 'python', 'java'],
-  教育: ['教育', '教材', '教辅', '学习'],
-  文学: ['文学', '小说', '散文', '诗歌'],
-  旅游: ['旅游', '旅行', '城市', '地理'],
-  科普: ['科普', '科学', '物理', '化学', '生物'],
-  艺术: ['艺术', '美术', '设计', '摄影', '音乐'],
-  少儿: ['少儿', '儿童', '绘本', '亲子'],
-  金融: ['金融', '投资', '理财', '财务'],
-  成长: ['职场', '沟通', '思维', '写作', '演讲'],
-  哲学: ['哲学', '思想', '伦理'],
-};
-
-const KEYWORD_STOPWORDS = new Set(['推荐', '书', '书籍', '书单', '适合', '相关', '一个', '一些', '用户']);
-
 function expandSearchTerms(requirement: RequirementAnalysis): string[] {
   const terms = new Set<string>(requirement.keywords);
 
   for (const category of requirement.categories) {
     terms.add(category);
-    for (const alias of CATEGORY_ALIASES[category] ?? []) {
-      terms.add(alias);
+    const aliases = RETRIEVAL_CONSTANTS.CATEGORY_ALIASES[category];
+    if (aliases) {
+      for (const alias of aliases) {
+        terms.add(alias);
+      }
     }
   }
 
@@ -61,8 +49,12 @@ function getPrimaryBookText(book: Book): string {
 function getStrongKeywords(requirement: RequirementAnalysis): string[] {
   return requirement.keywords
     .map((keyword) => keyword.trim().toLowerCase())
-    .filter((keyword) => keyword.length >= 2 && !KEYWORD_STOPWORDS.has(keyword))
-    .slice(0, 18);
+    .filter(
+      (keyword) =>
+        keyword.length >= RETRIEVAL_CONSTANTS.MIN_KEYWORD_LENGTH &&
+        !RETRIEVAL_CONSTANTS.STOPWORDS.has(keyword),
+    )
+    .slice(0, RETRIEVAL_CONSTANTS.MAX_KEYWORDS);
 }
 
 function hasKeywordMatch(book: Book, keywords: string[]): boolean {
@@ -95,8 +87,9 @@ function matchesRequestedCategories(book: Book, categories: string[]): boolean {
 
   const primaryHaystack = `${book.title} ${book.category}`.toLowerCase();
   return categories.some((category) => {
-    const aliasSet = CATEGORY_ALIASES[category] ?? [category];
-    return aliasSet.some((alias) => primaryHaystack.includes(alias.toLowerCase()));
+    const aliases = RETRIEVAL_CONSTANTS.CATEGORY_ALIASES[category];
+    const aliasSet = aliases ?? [category];
+    return aliasSet.some((alias: string) => primaryHaystack.includes(alias.toLowerCase()));
   });
 }
 
@@ -106,26 +99,28 @@ function computeRelevanceBoost(book: Book, requirement: RequirementAnalysis): nu
   const strongKeywords = getStrongKeywords(requirement);
   const excludedKeywords = requirement.constraints.exclude_keywords ?? [];
 
+  const { SCORE_WEIGHTS } = RETRIEVAL_CONSTANTS;
+
   if (matchesRequestedCategories(book, requirement.categories)) {
-    score += 2;
+    score += SCORE_WEIGHTS.CATEGORY_MATCH;
   }
 
   for (const keyword of strongKeywords) {
     if (haystack.includes(keyword)) {
-      score += 0.8;
+      score += SCORE_WEIGHTS.KEYWORD_MATCH;
     }
   }
 
   if (strongKeywords.length > 0 && !hasKeywordMatch(book, strongKeywords)) {
-    score -= 2;
+    score -= SCORE_WEIGHTS.KEYWORD_MISMATCH_PENALTY;
   }
 
   if (hasExcludedKeyword(book, excludedKeywords)) {
-    score -= 8;
+    score -= SCORE_WEIGHTS.EXCLUDED_KEYWORD_PENALTY;
   }
 
   if (requirement.constraints.budget && book.price > requirement.constraints.budget) {
-    score -= 5;
+    score -= SCORE_WEIGHTS.BUDGET_EXCEED_PENALTY;
   }
 
   return score;
@@ -168,152 +163,104 @@ function enforceHardConstraints(books: Book[], requirement: RequirementAnalysis)
   return [...ranked].sort((a, b) => computeRelevanceBoost(b, requirement) - computeRelevanceBoost(a, requirement));
 }
 
-export async function retrieveCandidates(
+/**
+ * 执行语义检索
+ */
+async function retrieveSemantic(
   requirement: RequirementAnalysis,
-  strategies: RetrievalStrategy[] = [
-    { type: 'semantic', enabled: true, topK: 10 },
-    { type: 'keyword', enabled: true, topK: 10 },
-    { type: 'popular', enabled: true, topK: 10 },
-  ],
-  options?: RetrievalOptions,
-): Promise<RetrievalResult> {
-  const retrievalPromises: Promise<{ books: Book[]; type: 'semantic' | 'keyword' | 'popular' }>[] = [];
+  topK: number,
+): Promise<Book[]> {
+  try {
+    const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
+    const vectorResults = await vectorSearch(vector, topK, sparseVector);
+    const ids = vectorResults.map((result) => result.id);
 
-  for (const strategy of strategies) {
-    if (!strategy.enabled) continue;
-
-    switch (strategy.type) {
-      case 'semantic':
-        retrievalPromises.push(
-          (async () => {
-            try {
-              const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
-              const vectorResults = await vectorSearch(vector, strategy.topK, sparseVector);
-              const ids = vectorResults.map((result) => result.id);
-              let bookMap = new Map<string, Book>();
-              if (ids.length > 0) {
-                try {
-                  const books = await getBookDetailsBatch(ids);
-                  bookMap = new Map(books.map((book) => [book.book_id, book]));
-                } catch (error) {
-                  console.warn('[semantic] Failed to batch get book details:', error);
-                }
-              }
-              const books = vectorResults
-                .map((result) => bookMap.get(result.id) ?? null)
-                .filter((book): book is Book => book !== null);
-              return { books, type: 'semantic' };
-            } catch (error) {
-              console.warn('[semantic] retrieval failed:', error);
-              return { books: [], type: 'semantic' };
-            }
-          })()
-        );
-        break;
-
-      case 'keyword':
-        retrievalPromises.push(
-          (async () => {
-            try {
-              const searchTerms = expandSearchTerms(requirement);
-              const merged = new Map<string, Book>();
-
-              const books = await searchCatalog({
-                author: requirement.constraints.author,
-                price_min: requirement.constraints.price_min,
-                price_max: requirement.constraints.price_max,
-                query: searchTerms.join(' '),
-              });
-
-              for (const book of books) {
-                if (!merged.has(book.book_id)) {
-                  merged.set(book.book_id, book);
-                }
-              }
-
-              const limitedBooks = Array.from(merged.values()).slice(0, strategy.topK * 2);
-              return { books: limitedBooks, type: 'keyword' };
-            } catch (error) {
-              console.warn('[keyword] retrieval failed:', error);
-              return { books: [], type: 'keyword' };
-            }
-          })()
-        );
-        break;
-
-      case 'popular':
-        retrievalPromises.push(
-          (async () => {
-            try {
-              if (requirement.categories.length > 0 || requirement.keywords.length > 0) {
-                return { books: [], type: 'popular' };
-              }
-              const books = await getPopularBooks(strategy.topK);
-              return { books, type: 'popular' };
-            } catch (error) {
-              console.warn('[popular] retrieval failed:', error);
-              return { books: [], type: 'popular' };
-            }
-          })()
-        );
-        break;
+    if (ids.length === 0) {
+      return [];
     }
-  }
 
-  const results = await Promise.all(retrievalPromises);
-
-  const bookLists: Book[][] = results.map(r => r.books);
-  const sources = results.map(r => r.type);
-
-  let fusedBooks = reciprocalRankFusion(bookLists);
-  fusedBooks = enforceHardConstraints(fusedBooks, requirement);
-
-  if (options?.enableReranking && options.rerankerConfig) {
-    const rerankerTopK = options.enableRerankingOnTopK || Math.min(50, fusedBooks.length);
-
-    if (fusedBooks.length > rerankerTopK) {
-      const topCandidates = fusedBooks.slice(0, rerankerTopK);
-      const remainingBooks = fusedBooks.slice(rerankerTopK);
-
-      try {
-        const reranked = await rerankBooks(
-          requirement.original_query,
-          topCandidates,
-          options.rerankerConfig
-        );
-
-        fusedBooks = [...reranked, ...remainingBooks];
-      } catch (error) {
-        console.warn('[retrieval] Reranking failed, using RRF results:', error);
-      }
-    } else {
-      try {
-        fusedBooks = await rerankBooks(
-          requirement.original_query,
-          fusedBooks,
-          options.rerankerConfig
-        );
-      } catch (error) {
-        console.warn('[retrieval] Reranking failed, using RRF results:', error);
-      }
+    let bookMap = new Map<string, Book>();
+    try {
+      const books = await getBookDetailsBatch(ids);
+      bookMap = new Map(books.map((book) => [book.book_id, book]));
+    } catch (error) {
+      console.error('[semantic] Failed to batch get book details:', error);
     }
+
+    const books = vectorResults
+      .map((result) => bookMap.get(result.id) ?? null)
+      .filter((book): book is Book => book !== null);
+
+    console.log(`[semantic] Retrieved ${books.length} books from vector search`);
+    return books;
+  } catch (error) {
+    console.error('[semantic] retrieval failed:', error);
+    throw error;
   }
-
-  const hasSpecificIntent = requirement.categories.length > 0 || requirement.keywords.length > 0;
-  const finalBooks = hasSpecificIntent
-    ? fusedBooks
-    : fusedBooks.slice(0, Math.max(5, requirement.constraints.target_count ?? 5));
-
-  return {
-    books: finalBooks,
-    sources: [...sources, ...(options?.enableReranking ? ['reranker' as const] : [])],
-    total_candidates: finalBooks.length,
-  };
 }
 
+/**
+ * 执行关键词检索
+ */
+async function retrieveKeyword(
+  requirement: RequirementAnalysis,
+  topK: number,
+): Promise<Book[]> {
+  try {
+    const searchTerms = expandSearchTerms(requirement);
+    const merged = new Map<string, Book>();
+
+    const books = await searchCatalog({
+      author: requirement.constraints.author,
+      price_min: requirement.constraints.price_min,
+      price_max: requirement.constraints.price_max,
+      query: searchTerms.join(' '),
+    });
+
+    for (const book of books) {
+      if (!merged.has(book.book_id)) {
+        merged.set(book.book_id, book);
+      }
+    }
+
+    const limitedBooks = Array.from(merged.values()).slice(0, topK * 2);
+    console.log(`[keyword] Retrieved ${limitedBooks.length} books from catalog search`);
+    return limitedBooks;
+  } catch (error) {
+    console.error('[keyword] retrieval failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * 执行热门书籍检索
+ */
+async function retrievePopular(
+  requirement: RequirementAnalysis,
+  topK: number,
+): Promise<Book[]> {
+  try {
+    if (requirement.categories.length > 0 || requirement.keywords.length > 0) {
+      return [];
+    }
+
+    const books = await getPopularBooks(topK);
+    console.log(`[popular] Retrieved ${books.length} popular books`);
+    return books;
+  } catch (error) {
+    console.error('[popular] retrieval failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * 互惠排名融合算法
+ * @param results 各检索策略返回的书籍列表
+ * @param k 融合参数，默认60
+ */
 function reciprocalRankFusion(
   results: Book[][],
-  k: number = 60,
+  k: number = RETRIEVAL_CONSTANTS.RRF_K,
 ): Book[] {
   const scores = new Map<string, number>();
   const bookMap = new Map<string, Book>();
@@ -334,12 +281,116 @@ function reciprocalRankFusion(
     }
   }
 
-  return deduplicateAndMerge(scores, bookMap);
-}
-
-function deduplicateAndMerge(scores: Map<string, number>, bookMap: Map<string, Book>): Book[] {
   return Array.from(scores.entries())
     .sort((a, b) => b[1] - a[1])
     .filter(([bookId]) => bookMap.has(bookId))
     .map(([bookId]) => bookMap.get(bookId) as Book);
+}
+
+export async function retrieveCandidates(
+  requirement: RequirementAnalysis,
+  strategies: RetrievalStrategy[] = [
+    { type: 'semantic', enabled: true, topK: RETRIEVAL_CONSTANTS.SEMANTIC_TOP_K },
+    { type: 'keyword', enabled: true, topK: RETRIEVAL_CONSTANTS.KEYWORD_TOP_K },
+    { type: 'popular', enabled: true, topK: RETRIEVAL_CONSTANTS.POPULAR_TOP_K },
+  ],
+  options?: RetrievalOptions,
+): Promise<RetrievalResult> {
+  const retrievalPromises: Promise<{ books: Book[]; type: 'semantic' | 'keyword' | 'popular' }>[] = [];
+
+  for (const strategy of strategies) {
+    if (!strategy.enabled) continue;
+
+    switch (strategy.type) {
+      case 'semantic':
+        retrievalPromises.push(
+          retrieveSemantic(requirement, strategy.topK).then((books) => ({
+            books,
+            type: 'semantic' as const,
+          })),
+        );
+        break;
+
+      case 'keyword':
+        retrievalPromises.push(
+          retrieveKeyword(requirement, strategy.topK).then((books) => ({
+            books,
+            type: 'keyword' as const,
+          })),
+        );
+        break;
+
+      case 'popular':
+        retrievalPromises.push(
+          retrievePopular(requirement, strategy.topK).then((books) => ({
+            books,
+            type: 'popular' as const,
+          })),
+        );
+        break;
+    }
+  }
+
+  const results = await Promise.allSettled(retrievalPromises);
+
+  const bookLists: Book[][] = [];
+  const sources: ('semantic' | 'keyword' | 'popular' | 'reranker')[] = [];
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      bookLists.push(result.value.books);
+      sources.push(result.value.type);
+    } else {
+      console.error('[retrieval] Strategy failed:', result.reason);
+    }
+  }
+
+  let fusedBooks = reciprocalRankFusion(bookLists);
+  fusedBooks = enforceHardConstraints(fusedBooks, requirement);
+
+  if (options?.enableReranking && options.rerankerConfig) {
+    const rerankerTopK = options.enableRerankingOnTopK || Math.min(
+      RETRIEVAL_CONSTANTS.RERANKER_MAX_INPUT,
+      fusedBooks.length,
+    );
+
+    if (fusedBooks.length > rerankerTopK) {
+      const topCandidates = fusedBooks.slice(0, rerankerTopK);
+      const remainingBooks = fusedBooks.slice(rerankerTopK);
+
+      try {
+        const reranked = await rerankBooks(
+          requirement.original_query,
+          topCandidates,
+          options.rerankerConfig,
+        );
+        fusedBooks = [...reranked, ...remainingBooks];
+        sources.push('reranker');
+      } catch (error) {
+        console.warn('[retrieval] Reranking failed, using RRF results:', error);
+      }
+    } else {
+      try {
+        fusedBooks = await rerankBooks(
+          requirement.original_query,
+          fusedBooks,
+          options.rerankerConfig,
+        );
+        sources.push('reranker');
+      } catch (error) {
+        console.warn('[retrieval] Reranking failed, using RRF results:', error);
+      }
+    }
+  }
+
+  const hasSpecificIntent = requirement.categories.length > 0 || requirement.keywords.length > 0;
+  const finalBooks = hasSpecificIntent
+    ? fusedBooks
+    : fusedBooks.slice(0, Math.max(RETRIEVAL_CONSTANTS.MIN_RECOMMENDATIONS, requirement.constraints.target_count ?? RETRIEVAL_CONSTANTS.MIN_RECOMMENDATIONS));
+
+  return {
+    books: finalBooks,
+    sources,
+    total_candidates: finalBooks.length,
+  };
 }

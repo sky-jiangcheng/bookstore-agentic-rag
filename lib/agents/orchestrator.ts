@@ -1,4 +1,3 @@
-// lib/agents/orchestrator.ts
 import config from '@/lib/config/environment';
 import { analyzeRequirement } from './requirement-agent';
 import { retrieveCandidates } from './retrieval-agent';
@@ -40,6 +39,18 @@ export interface RAGPipelineResult {
   error?: string;
 }
 
+/**
+ * 运行完整的RAG管道
+ *
+ * 管道包含以下阶段：
+ * 1. 需求分析 - 解析用户查询，理解用户意图
+ * 2. 检索 - 从向量数据库和目录服务检索候选项
+ * 3. 生成 - 基于需求和候选项生成推荐
+ * 4. 评估 - 评估推荐质量，决定是否需要迭代优化
+ *
+ * @param options - RAG管道配置选项
+ * @returns 包含管道执行结果的最终响应
+ */
 export async function runRAGPipeline(
   options: RAGPipelineOptions
 ): Promise<RAGPipelineResult> {
@@ -60,26 +71,22 @@ export async function runRAGPipeline(
   let recommendation: RecommendationResult | undefined;
   let evaluation: EvaluationResult | undefined;
 
-  // Get or create conversation session
   let session = enableConversationMemory
     ? await getOrCreateSession(inputSessionId, userId)
     : null;
 
   const sessionId = session?.id;
 
-  // Get conversation context for requirement analysis
   const conversationContext = session
     ? await getConversationContext(session.id, 3)
     : undefined;
 
-  // Default retrieval strategies
   let retrievalStrategies: RetrievalStrategy[] = [
     { type: 'semantic', enabled: true, topK: 10 },
     { type: 'keyword', enabled: true, topK: 10 },
     { type: 'popular', enabled: true, topK: 10 },
   ];
 
-  // Add user turn for the query
   if (session) {
     await addTurn(session.id, {
       timestamp: Date.now(),
@@ -89,7 +96,6 @@ export async function runRAGPipeline(
   }
 
   try {
-    // Step 1: Requirement Analysis
     onProgress?.({
       type: 'phase_start',
       phase: 'requirement_analysis',
@@ -106,7 +112,6 @@ export async function runRAGPipeline(
       data: requirementResult as unknown as Record<string, unknown>,
     });
 
-    // Check if clarification is needed
     if (requirement.needs_clarification) {
       onProgress?.({
         type: 'error',
@@ -122,7 +127,6 @@ export async function runRAGPipeline(
       };
     }
 
-    // Iterative optimization loop
     while (iterations < maxIterations) {
       iterations++;
 
@@ -134,7 +138,6 @@ export async function runRAGPipeline(
         });
       }
 
-      // Step 2: Retrieval
       onProgress?.({
         type: 'phase_start',
         phase: 'retrieval',
@@ -144,7 +147,7 @@ export async function runRAGPipeline(
         enableReranking,
         rerankerConfig: enableReranking ? {
           enabled: true,
-          type: 'local', // Use mock reranker for now
+          type: 'local',
           topK: Math.min(20, requirement.constraints.target_count || 5 * 2),
         } : undefined,
       });
@@ -155,7 +158,6 @@ export async function runRAGPipeline(
         data: retrieval as unknown as Record<string, unknown>,
       });
 
-      // Step 3: Recommendation Generation
       onProgress?.({
         type: 'phase_start',
         phase: 'generation',
@@ -172,7 +174,6 @@ export async function runRAGPipeline(
         data: recommendation as unknown as Record<string, unknown>,
       });
 
-      // Step 4: Evaluation
       onProgress?.({
         type: 'phase_start',
         phase: 'evaluation',
@@ -189,9 +190,7 @@ export async function runRAGPipeline(
         data: evaluation as unknown as Record<string, unknown>,
       });
 
-      // Check if optimization is needed
       if (!evaluation.needs_improvement) {
-        // Add assistant turn for successful recommendation
         if (session && recommendation) {
           await addTurn(session.id, {
             timestamp: Date.now(),
@@ -226,7 +225,6 @@ export async function runRAGPipeline(
         };
       }
 
-      // Need optimization
       onProgress?.({
         type: 'optimization_needed',
         content: '推荐质量需要改进，准备优化...',
@@ -237,11 +235,9 @@ export async function runRAGPipeline(
         } as unknown as Record<string, unknown>,
       });
 
-      // Implement optimization logic based on evaluation suggestions
       for (const suggestion of evaluation.suggestions) {
         switch (suggestion.target) {
           case 'diversity':
-            // Increase topK for semantic/keyword retrieval to get more candidates
             retrievalStrategies = retrievalStrategies.map(strategy => {
               if (strategy.type === 'semantic' || strategy.type === 'keyword') {
                 return { ...strategy, topK: Math.min(strategy.topK + 5, 30) };
@@ -250,8 +246,6 @@ export async function runRAGPipeline(
             });
             break;
           case 'budget':
-            // Budget is a hard constraint: never relax user-provided upper bound.
-            // Keep retrieval candidates broader instead of changing user constraints.
             retrievalStrategies = retrievalStrategies.map((strategy) => {
               if (strategy.type === 'semantic' || strategy.type === 'keyword') {
                 return { ...strategy, topK: Math.min(strategy.topK + 5, 35) };
@@ -260,8 +254,6 @@ export async function runRAGPipeline(
             });
             break;
           case 'requirement_match':
-            // Add more keywords to retrieval for better requirement matching
-            // We can extract additional keywords from the evaluation issues or suggestions
             const additionalKeywords = extractKeywordsFromSuggestions(evaluation.issues);
             requirement.keywords = [...new Set([...requirement.keywords, ...additionalKeywords])];
             break;
@@ -269,7 +261,6 @@ export async function runRAGPipeline(
       }
     }
 
-    // Max iterations reached
     onProgress?.({
       type: 'error',
       content: `已达到最大迭代次数 (${maxIterations})，返回当前结果`,
@@ -311,7 +302,12 @@ export async function runRAGPipeline(
   }
 }
 
-// Helper function to extract keywords from evaluation issues
+/**
+ * 从评估建议中提取关键词
+ *
+ * @param issues - 评估问题列表
+ * @returns 提取的关键词数组
+ */
 function extractKeywordsFromSuggestions(issues: string[]): string[] {
   const issueText = issues.join(' ');
   return extractKnownBookKeywords(issueText);
