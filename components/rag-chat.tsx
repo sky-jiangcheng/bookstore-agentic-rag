@@ -33,19 +33,21 @@ const STARTER_PROMPTS = [
 ];
 
 function generateBooklistName(userInput: string, requirement?: RequirementSnapshot): string {
-  const cleanInput = userInput.trim().replace(/[^\w\u4e00-\u9fa5\s]/g, '').slice(0, 20);
+  const cleanInput = userInput.trim().replace(/[^\w\u4e00-\u9fa5\s]/g, '').replace(/_+/g, '').replace(/\s+/g, '_').slice(0, 20);
   const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
   if (!requirement || !requirement.categories || requirement.categories.length === 0) {
     return cleanInput ? `${cleanInput}_${timestamp}` : `书单_${timestamp}`;
   }
 
-  const primaryCategory = requirement.categories[0];
-  const targetAudience = requirement.constraints?.target_count;
+  const primaryCategory = requirement.categories[0].replace(/_+/g, '');
+  const targetCount = requirement.constraints?.target_count;
 
-  let name = cleanInput || primaryCategory;
-  if (targetAudience) {
-    name = `${primaryCategory}书单_${targetAudience}本`;
+  let name: string;
+  if (targetCount) {
+    name = `${primaryCategory}_${targetCount}本`;
+  } else {
+    name = primaryCategory || cleanInput || '书单';
   }
 
   return `${name}_${timestamp}`;
