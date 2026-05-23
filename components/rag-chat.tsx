@@ -32,6 +32,25 @@ const STARTER_PROMPTS = [
   '推荐几本适合书店陈列的畅销科普书',
 ];
 
+function generateBooklistName(userInput: string, requirement?: RequirementSnapshot): string {
+  const cleanInput = userInput.trim().replace(/[^\w\u4e00-\u9fa5\s]/g, '').slice(0, 20);
+  const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+  if (!requirement || !requirement.categories || requirement.categories.length === 0) {
+    return cleanInput ? `${cleanInput}_${timestamp}` : `书单_${timestamp}`;
+  }
+
+  const primaryCategory = requirement.categories[0];
+  const targetAudience = requirement.constraints?.target_count;
+
+  let name = cleanInput || primaryCategory;
+  if (targetAudience) {
+    name = `${primaryCategory}书单_${targetAudience}本`;
+  }
+
+  return `${name}_${timestamp}`;
+}
+
 function getPhaseText(phase: string) {
   switch (phase) {
     case 'requirement_analysis':
@@ -111,8 +130,9 @@ export function RAGChat() {
       remark: b.explanation || b.remark || null,
     }));
 
+    const booklistName = generateBooklistName(message.content, message.requirement);
     const body = {
-      booklist_name: '推荐书单',
+      booklist_name: booklistName,
       books,
       budget: message.requirement?.constraints.budget ?? null,
       total_price: message.totalPrice ?? null,
