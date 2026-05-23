@@ -115,7 +115,7 @@ export async function runVercelRAGPipeline(
       content: '检索书籍...',
     });
 
-    const targetCount = requirement.constraints.target_count ?? 5;
+    const targetCount = requirement.constraints.target_count ?? 10;
     const candidateTopK = Math.max(targetCount * 3, 12);
 
     // Run primary and fallback retrieval in parallel to cut latency
@@ -226,7 +226,7 @@ export async function runFastRAGPipeline(
 ): Promise<VercelRAGPipelineResult> {
   try {
     const requirement = await analyzeRequirement(query, {});
-    const candidateTopK = Math.max((requirement.constraints.target_count ?? 5) * 4, 16);
+    const candidateTopK = Math.max((requirement.constraints.target_count ?? 10) * 4, 16);
     const retrieval = await retrieveCandidatesVercel(requirement, {
       topK: candidateTopK,
       enableKeyword: true,
