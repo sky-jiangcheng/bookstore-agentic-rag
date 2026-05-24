@@ -10,20 +10,20 @@ const exportSchema = z.object({
     .array(
       z.object({
         book_id: z.number().int().optional(),
-        title: z.string().min(1),
-        author: z.string().optional().nullable(),
-        publisher: z.string().optional().nullable(),
-        category: z.string().optional().nullable(),
-        price: z.number().nonnegative().optional().nullable(),
-        stock: z.number().int().nonnegative().optional().nullable(),
-        score: z.number().min(0).max(100).optional().nullable(),
-        source: z.string().optional().nullable(),
-        remark: z.string().optional().nullable(),
+        title: z.string().min(1).default('未知书名'),
+        author: z.string().optional().nullable().default(null),
+        publisher: z.string().optional().nullable().default(null),
+        category: z.string().optional().nullable().default(null),
+        price: z.number().nonnegative().optional().nullable().default(null),
+        stock: z.number().int().nonnegative().optional().nullable().default(null),
+        score: z.number().min(0).max(100).optional().nullable().default(null),
+        source: z.string().optional().nullable().default(null),
+        remark: z.string().optional().nullable().default(null),
       }),
     )
     .min(1, '书籍列表至少需要1本书'),
-  budget: z.number().nonnegative().optional().nullable(),
-  total_price: z.number().nonnegative().optional().nullable(),
+  budget: z.number().nonnegative().optional().nullable().default(null),
+  total_price: z.number().nonnegative().optional().nullable().default(null),
 });
 
 export async function POST(req: NextRequest) {
