@@ -193,13 +193,13 @@ export function RAGChat() {
               seenBookIds.add(bookId);
               allBooks.push({
                 book_id: typeof bookId === 'number' ? bookId : undefined,
-                title: book.title,
+                title: (book.title && book.title.trim()) ? book.title.trim() : '未知书名',
                 author: book.author || null,
                 publisher: book.publisher || null,
                 category: book.category || null,
                 price: typeof book.price === 'number' ? book.price : null,
                 stock: typeof book.stock === 'number' ? book.stock : null,
-                score: book.match_score !== undefined ? Math.round(book.match_score * 100) : null,
+                score: typeof book.match_score === 'number' ? Math.round(book.match_score * 100) : null,
                 source: book.source || '智能推荐',
                 remark: book.explanation || book.remark || null,
               });
