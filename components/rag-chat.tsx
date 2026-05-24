@@ -102,6 +102,7 @@ export function RAGChat() {
   const [currentPhase, setCurrentPhase] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastUserQuery, setLastUserQuery] = useState('');
+  const [exporting, setExporting] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const getAggregatedStats = useCallback(() => {
@@ -165,62 +166,72 @@ export function RAGChat() {
   };
 
   const handleExportExcel = async (currentMessage: MessageType) => {
-    const seenBookIds = new Set<number | string>();
-    const allBooks: Array<{
-      book_id?: number;
-      title: string;
-      author?: string | null;
-      publisher?: string | null;
-      category?: string | null;
-      price?: number | null;
-      stock?: number | null;
-      score?: number | null;
-      source?: string;
-      remark?: string | null;
-    }> = [];
-
-    messages.forEach(msg => {
-      if (msg.role === 'assistant' && msg.recommendations && msg.recommendations.length > 0) {
-        msg.recommendations.forEach(book => {
-          const bookId = book.book_id;
-          if (bookId && !seenBookIds.has(bookId)) {
-            seenBookIds.add(bookId);
-            allBooks.push({
-              book_id: typeof bookId === 'number' ? bookId : undefined,
-              title: book.title,
-              author: book.author || null,
-              publisher: book.publisher || null,
-              category: book.category || null,
-              price: book.price || null,
-              stock: book.stock || null,
-              score: book.match_score !== undefined ? Math.round(book.match_score * 100) : null,
-              source: book.source || '智能推荐',
-              remark: book.explanation || book.remark || null,
-            });
-          }
-        });
-      }
-    });
-
-    if (allBooks.length === 0) return;
-
-    const totalPrice = allBooks.reduce((sum, b) => sum + (b.price || 0), 0);
-    const booklistName = generateBooklistName(currentMessage.content, currentMessage.requirement);
-    const body = {
-      booklist_name: booklistName,
-      books: allBooks,
-      budget: currentMessage.requirement?.constraints.budget ?? null,
-      total_price: totalPrice,
-    };
-
+    if (exporting) return;
+    
+    setExporting(true);
+    
     try {
+      const seenBookIds = new Set<number | string>();
+      const allBooks: Array<{
+        book_id?: number;
+        title: string;
+        author?: string | null;
+        publisher?: string | null;
+        category?: string | null;
+        price?: number | null;
+        stock?: number | null;
+        score?: number | null;
+        source?: string;
+        remark?: string | null;
+      }> = [];
+
+      messages.forEach(msg => {
+        if (msg.role === 'assistant' && msg.recommendations && msg.recommendations.length > 0) {
+          msg.recommendations.forEach(book => {
+            const bookId = book.book_id;
+            if (bookId && !seenBookIds.has(bookId)) {
+              seenBookIds.add(bookId);
+              allBooks.push({
+                book_id: typeof bookId === 'number' ? bookId : undefined,
+                title: book.title,
+                author: book.author || null,
+                publisher: book.publisher || null,
+                category: book.category || null,
+                price: book.price || null,
+                stock: book.stock || null,
+                score: book.match_score !== undefined ? Math.round(book.match_score * 100) : null,
+                source: book.source || '智能推荐',
+                remark: book.explanation || book.remark || null,
+              });
+            }
+          });
+        }
+      });
+
+      if (allBooks.length === 0) {
+        alert('没有可导出的书籍');
+        return;
+      }
+
+      const totalPrice = allBooks.reduce((sum, b) => sum + (b.price || 0), 0);
+      const booklistName = generateBooklistName(currentMessage.content, currentMessage.requirement);
+      const body = {
+        booklist_name: booklistName,
+        books: allBooks,
+        budget: currentMessage.requirement?.constraints.budget ?? null,
+        total_price: totalPrice,
+      };
+
       const res = await fetch('/api/v1/book-list/export-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 
-      if (!res.ok) throw new Error('Export failed');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `导出失败：HTTP ${res.status}`);
+      }
 
       const blob = await res.blob();
       const disposition = res.headers.get('Content-Disposition') || '';
@@ -228,13 +239,19 @@ export function RAGChat() {
       const filename = match ? decodeURIComponent(match[1]) : '书单.xlsx';
 
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Export failed:', err);
+      const errorMessage = err instanceof Error ? err.message : '导出失败，请重试';
+      alert(errorMessage);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -590,6 +607,8 @@ export function RAGChat() {
                                   icon={<DownloadIcon />}
                                   onClick={() => handleExportExcel(message)}
                                   size="medium"
+                                  loading={exporting}
+                                  disabled={exporting}
                                 >
                                   导出书单
                                 </Button>
