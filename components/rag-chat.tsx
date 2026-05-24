@@ -307,7 +307,7 @@ export function RAGChat() {
         const recommendations = data.recommendation?.books?.map((book: BookRecommendation) => ({
           title: book.title,
           author: book.author,
-          price: Number(book.price),
+          price: book.price != null ? Number(book.price) : null,
           explanation: book.explanation,
           book_id: book.book_id,
           publisher: book.publisher,
@@ -416,7 +416,7 @@ export function RAGChat() {
               const recommendations = data.recommendation?.books?.map((book: BookRecommendation) => ({
                 title: book.title,
                 author: book.author,
-                price: Number(book.price),
+                price: book.price != null ? Number(book.price) : null,
                 explanation: book.explanation,
                 book_id: book.book_id,
               })) ?? [];

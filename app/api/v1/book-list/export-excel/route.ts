@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
+      console.error('[export-excel] Zod validation error:', err.flatten());
       return NextResponse.json({ error: 'Invalid request', details: err.flatten() }, { status: 400 });
     }
     logServerError('[book-list/export-excel]', err);
