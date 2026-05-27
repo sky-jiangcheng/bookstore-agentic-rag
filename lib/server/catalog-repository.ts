@@ -2,15 +2,13 @@ import 'server-only';
 
 import { sql } from '@vercel/postgres';
 
-import config, { hasCatalogServiceConfig, hasVectorConfig } from '@/lib/config/environment';
+import config, { hasVectorConfig } from '@/lib/config/environment';
 import { buildCatalogSearchQuery, buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 import { buildEmbeddingPair } from '@/lib/local-vector';
 import { vectorSearch } from '@/lib/vector-service';
 import { AsyncTimeoutError, withTimeout } from '@/lib/utils/async-timeout';
-import { fetchWithTimeout } from '@/lib/utils/fetch-timeout';
 
-const CATALOG_SERVICE_TIMEOUT_MS = 8000;
 const VECTOR_SEARCH_TIMEOUT_MS = 2500;
 
 interface CatalogApiBook {
@@ -102,31 +100,6 @@ export async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
 
   const byId = new Map(result.rows.map((row) => [String(row.book_id ?? row.id), mapBook(row)]));
   return ids.map((id) => byId.get(String(id))).filter((book): book is Book => Boolean(book));
-}
-
-async function fetchFromCatalogService<T>(path: string, init?: RequestInit): Promise<T> {
-  if (!hasCatalogServiceConfig()) {
-    throw new Error('Catalog service is not configured');
-  }
-
-  const response = await fetchWithTimeout(
-    `${config.services.catalogUrl}${path}`,
-    {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init?.headers ?? {}),
-      },
-      cache: 'no-store',
-    },
-    CATALOG_SERVICE_TIMEOUT_MS,
-  );
-
-  if (!response.ok) {
-    throw new Error(`Catalog service request failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
 }
 
 export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): Promise<Book[]> {
@@ -302,33 +275,4 @@ export async function getPopularBooksFromDatabase(count: number): Promise<Book[]
 
   const result = await sql.query<CatalogApiBook>(query, [count]);
   return normalizeBooks(result.rows);
-}
-
-export async function searchCatalogFromService(filters: CatalogSearchFilters): Promise<Book[]> {
-  const payload = await fetchFromCatalogService<{ books?: CatalogApiBook[]; items?: CatalogApiBook[] }>(
-    '/api/rag/books/search',
-    {
-      method: 'POST',
-      body: JSON.stringify(filters),
-    }
-  );
-
-  const searchQuery = filters.query ? buildCatalogSearchQuery(filters.query) : '';
-  return rerankCatalogBooks(
-    normalizeBooks(payload.books ?? payload.items ?? []),
-    searchQuery || (filters.query ?? '')
-  );
-}
-
-export async function getBookDetailsFromService(bookId: string): Promise<Book | null> {
-  const payload = await fetchFromCatalogService<{ book?: CatalogApiBook }>(`/api/rag/books/${bookId}`);
-  return payload.book ? mapBook(payload.book) : null;
-}
-
-export async function getPopularBooksFromService(count: number): Promise<Book[]> {
-  const payload = await fetchFromCatalogService<{ books?: CatalogApiBook[]; items?: CatalogApiBook[] }>(
-    `/api/rag/books/popular?count=${count}`
-  );
-
-  return normalizeBooks(payload.books ?? payload.items ?? []);
 }

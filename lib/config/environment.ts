@@ -15,7 +15,6 @@ export const config = {
   },
   services: {
     authUrl: process.env.AUTH_SERVICE_URL || '',
-    catalogUrl: process.env.CATALOG_SERVICE_URL || '',
   },
   app: {
     url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
@@ -75,10 +74,6 @@ export function hasVectorConfig(): boolean {
 
 export function hasRedisConfig(): boolean {
   return Boolean(config.upstash.redisUrl && config.upstash.redisToken);
-}
-
-export function hasCatalogServiceConfig(): boolean {
-  return Boolean(config.services.catalogUrl);
 }
 
 export default config;

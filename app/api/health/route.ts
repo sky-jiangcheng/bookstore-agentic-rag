@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
 import {
-  hasCatalogServiceConfig,
   hasDatabaseConfig,
   hasRedisConfig,
   hasVectorConfig,
@@ -12,7 +11,6 @@ export async function GET() {
   const database = hasDatabaseConfig();
   const vector = hasVectorConfig();
   const redis = hasRedisConfig();
-  const catalogService = hasCatalogServiceConfig();
 
   const vectorStoreStatus = await checkVectorStoreStatus();
 
@@ -25,7 +23,6 @@ export async function GET() {
       database,
       vector,
       redis,
-      catalogService,
     },
     vectorStore: {
       configured: vector,

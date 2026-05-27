@@ -1,19 +1,16 @@
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
-import { hasCatalogServiceConfig, hasDatabaseConfig } from '@/lib/config/environment';
+import { hasDatabaseConfig } from '@/lib/config/environment';
 import {
   fetchBooksByIds,
   getBookDetailsFromDatabase,
-  getBookDetailsFromService,
   getPopularBooksFromDatabase,
-  getPopularBooksFromService,
   searchCatalogFromDatabase,
-  searchCatalogFromService,
 } from '@/lib/server/catalog-repository';
 import { assertBookVisible, filterBlockedBooks } from '@/lib/server/book-filters';
 
 function unavailableDataSourceError(): Error {
   return new Error(
-    'Catalog data source is unavailable. Configure DATABASE_URL/POSTGRES_URL or CATALOG_SERVICE_URL.'
+    'Catalog data source is unavailable. Configure DATABASE_URL or POSTGRES_URL.'
   );
 }
 
@@ -21,33 +18,23 @@ function unavailableDataSourceError(): Error {
  * Search catalog with given filters.
  */
 export async function searchCatalog(filters: CatalogSearchFilters): Promise<Book[]> {
-  let books: Book[];
-
-  if (hasDatabaseConfig()) {
-    books = await searchCatalogFromDatabase(filters);
-  } else if (hasCatalogServiceConfig()) {
-    books = await searchCatalogFromService(filters);
-  } else {
+  if (!hasDatabaseConfig()) {
     throw unavailableDataSourceError();
   }
 
-  return (await filterBlockedBooks(books)).books;
+  return (await filterBlockedBooks(await searchCatalogFromDatabase(filters))).books;
 }
 
 /**
  * Get details for multiple books by their IDs.
  */
 export async function getBookDetailsBatch(ids: string[]): Promise<Book[]> {
-  let books: Book[];
-
-  if (hasDatabaseConfig()) {
-    books = await fetchBooksByIds(ids);
-    books = (await filterBlockedBooks(books)).books;
-  } else if (hasCatalogServiceConfig()) {
-    books = (await Promise.all(ids.map((id) => getBookDetailsFromService(id)))).filter((b): b is Book => b !== null);
-  } else {
+  if (!hasDatabaseConfig()) {
     throw unavailableDataSourceError();
   }
+
+  let books = await fetchBooksByIds(ids);
+  books = (await filterBlockedBooks(books)).books;
 
   return books;
 }
@@ -56,15 +43,11 @@ export async function getBookDetailsBatch(ids: string[]): Promise<Book[]> {
  * Get details for a specific book.
  */
 export async function getBookDetails(bookId: string): Promise<Book> {
-  let book: Book | null = null;
-
-  if (hasDatabaseConfig()) {
-    book = await getBookDetailsFromDatabase(bookId);
-  } else if (hasCatalogServiceConfig()) {
-    book = await getBookDetailsFromService(bookId);
-  } else {
+  if (!hasDatabaseConfig()) {
     throw unavailableDataSourceError();
   }
+
+  const book = await getBookDetailsFromDatabase(bookId);
 
   if (!book) {
     throw new Error(`Book not found: ${bookId}`);
@@ -77,15 +60,9 @@ export async function getBookDetails(bookId: string): Promise<Book> {
  * Get popular books.
  */
 export async function getPopularBooks(count: number): Promise<Book[]> {
-  let books: Book[];
-
-  if (hasDatabaseConfig()) {
-    books = await getPopularBooksFromDatabase(count);
-  } else if (hasCatalogServiceConfig()) {
-    books = await getPopularBooksFromService(count);
-  } else {
+  if (!hasDatabaseConfig()) {
     throw unavailableDataSourceError();
   }
 
-  return (await filterBlockedBooks(books)).books;
+  return (await filterBlockedBooks(await getPopularBooksFromDatabase(count))).books;
 }
