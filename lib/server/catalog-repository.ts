@@ -54,6 +54,11 @@ export async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
     return [];
   }
 
+  const numericIds = ids.map((id) => Number(id)).filter((n) => !isNaN(n));
+  if (numericIds.length === 0) {
+    return [];
+  }
+
   const result = await sql.query<CatalogApiBook>(
     `
       SELECT
@@ -68,9 +73,9 @@ export async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
         cover_url,
         COALESCE(popularity_score, 0) AS relevance_score
       FROM books
-      WHERE id::text = ANY($1::text[])
+      WHERE id = ANY($1::bigint[])
     `,
-    [ids]
+    [numericIds]
   );
 
   const byId = new Map(result.rows.map((row) => [String(row.book_id ?? row.id), mapBook(row)]));

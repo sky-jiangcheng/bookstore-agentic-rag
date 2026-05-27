@@ -338,9 +338,10 @@ export async function deleteBookVector(bookId: string): Promise<void> {
 export async function deleteChunkVectorsByBookIds(bookIds: string[]): Promise<void> {
   if (bookIds.length === 0) return;
 
-  for (const bookId of bookIds) {
-    await sql`DELETE FROM book_embeddings WHERE book_id = ${bookId}::bigint`;
-  }
+  const numericIds = bookIds.map((id) => Number(id)).filter((n) => !isNaN(n));
+  if (numericIds.length === 0) return;
+
+  await sql.query('DELETE FROM book_embeddings WHERE book_id = ANY($1::bigint[])', [numericIds]);
 }
 
 export async function getBookEmbeddingCount(): Promise<number> {

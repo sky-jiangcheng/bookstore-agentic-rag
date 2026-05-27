@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: false,
       status: 'unconfigured',
-      message: '未配置向量存储 (UPSTASH_VECTOR_REST_URL/TOKEN)',
+      message: '未配置向量存储，请确认 PostgreSQL 已启用 pgvector 扩展',
     });
   }
 
