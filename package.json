@@ -9,7 +9,7 @@
     "lint": "npm run typecheck",
     "typecheck": "next typegen && tsc --noEmit",
     "check": "npm run typecheck && npm run build",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test": "node --import tsx --test 'tests/*.test.ts' 'tests/*.test.mjs'",
     "import:books": "node ./scripts/import-books.mjs",
     "index:books": "tsx ./scripts/index-books.ts",
     "smoke:rag": "node ./scripts/smoke-rag.mjs",
@@ -73,14 +73,20 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@jest/types": "^30.4.1",
     "@playwright/test": "^1.59.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.11.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.16",
     "baseline-browser-mapping": "^2.10.22",
+    "jest": "^30.4.2",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
+    "ts-jest": "^29.4.11",
     "tsx": "^4.21.0",
     "typescript": "^5.5.4"
   }
