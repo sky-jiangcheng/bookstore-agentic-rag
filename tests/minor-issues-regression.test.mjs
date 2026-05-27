@@ -13,10 +13,8 @@ test('health endpoint exposes self-test dependency flags', () => {
   const healthRoute = source('app/api/health/route.ts');
 
   assert.match(healthRoute, /hasDatabaseConfig/);
-  assert.match(healthRoute, /hasVectorConfig/);
   assert.match(healthRoute, /hasRedisConfig/);
   assert.match(healthRoute, /^\s+database(?=,|:)/m);
-  assert.match(healthRoute, /^\s+vector(?=,|:)/m);
   assert.match(healthRoute, /dependencies:/);
   assert.doesNotMatch(healthRoute, /getFilterStatus/);
   assert.match(healthRoute, /status:\s*'ok'/);

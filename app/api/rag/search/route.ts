@@ -49,10 +49,10 @@ export async function GET(req: NextRequest) {
     const { query, top_k } = parseResult.data;
 
     // Generate embedding from the query text
-    const { vector, sparseVector } = generateEmbeddingPair(query.trim());
+    const { vector } = generateEmbeddingPair(query.trim());
 
     // Search the vector index
-    const searchResults = await vectorSearch(vector, top_k, sparseVector);
+    const searchResults = await vectorSearch(vector, top_k);
 
     // Extract book IDs for batch fetching
     const bookIds = searchResults.map((r) => r.metadata.bookId);

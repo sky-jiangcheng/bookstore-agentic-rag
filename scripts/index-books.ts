@@ -1,7 +1,6 @@
 import process from 'node:process';
 
-import { Index } from '@upstash/vector';
-import { createPool } from '@vercel/postgres';
+import { sql } from '@vercel/postgres';
 
 import { loadEnvFile } from './lib/load-env.mjs';
 import { buildBookDocument, buildEmbeddingPair } from '../lib/local-vector';
@@ -20,17 +19,6 @@ interface BookIndexRow {
   author: string | null;
   publisher: string | null;
   category: string | null;
-}
-
-type DatabasePool = ReturnType<typeof createPool>;
-
-function getRequiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-
-  return value;
 }
 
 function getDatabaseConnectionString(): string {
@@ -70,12 +58,15 @@ function parseArgs(argv: string[]): IndexBooksArgs {
   return args;
 }
 
+function formatVector(vector: number[]): string {
+  return `[${vector.join(',')}]`;
+}
+
 async function fetchBooks(
-  pool: DatabasePool,
   { limit, offset, bookId, afterId }: IndexBooksArgs
 ): Promise<BookIndexRow[]> {
   if (bookId) {
-    const result = await pool.sql`
+    const result = await sql`
       SELECT
         id,
         title,
@@ -91,7 +82,7 @@ async function fetchBooks(
   }
 
   if (afterId) {
-    const result = await pool.sql`
+    const result = await sql`
       SELECT
         id,
         title,
@@ -108,7 +99,7 @@ async function fetchBooks(
   }
 
   if (limit) {
-    const result = await pool.sql`
+    const result = await sql`
       SELECT
         id,
         title,
@@ -124,7 +115,7 @@ async function fetchBooks(
     return result.rows as BookIndexRow[];
   }
 
-  const result = await pool.sql`
+  const result = await sql`
     SELECT
       id,
       title,
@@ -138,6 +129,32 @@ async function fetchBooks(
   return result.rows as BookIndexRow[];
 }
 
+async function upsertBookEmbedding(
+  bookId: string,
+  vector: number[],
+  title: string,
+  author: string,
+  category: string,
+): Promise<void> {
+  const vectorString = formatVector(vector);
+  const textContent = [title, author, category].filter(Boolean).join('\n');
+
+  await sql`
+    INSERT INTO book_embeddings (book_id, chunk_index, text_content, embedding)
+    VALUES (
+      ${bookId}::bigint,
+      0,
+      ${textContent},
+      ${vectorString}::vector
+    )
+    ON CONFLICT (book_id, chunk_index)
+    DO UPDATE SET
+      text_content = EXCLUDED.text_content,
+      embedding = EXCLUDED.embedding,
+      updated_at = NOW()
+  `;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   loadEnvFile(args.envFile);
@@ -147,22 +164,9 @@ async function main() {
     throw new Error('Missing DATABASE_URL or POSTGRES_URL');
   }
 
-  const vectorUrl = getRequiredEnv('UPSTASH_VECTOR_REST_URL');
-  const vectorToken = getRequiredEnv('UPSTASH_VECTOR_REST_TOKEN');
-
-  const pool = createPool({
-    connectionString: databaseConnectionString,
-  });
-
-  const index = new Index({
-    url: vectorUrl,
-    token: vectorToken,
-  });
-
-  const books = await fetchBooks(pool, args);
+  const books = await fetchBooks(args);
   if (books.length === 0) {
     console.log('No books found for indexing.');
-    await pool.end();
     return;
   }
 
@@ -170,27 +174,20 @@ async function main() {
 
   for (const book of books) {
     const document = buildBookDocument(book);
-    const { vector, sparseVector } = buildEmbeddingPair(document);
+    const { vector } = buildEmbeddingPair(document);
 
-    await index.upsert([
-      {
-        id: String(book.id),
-        vector,
-        sparseVector,
-        metadata: {
-          bookId: String(book.id),
-          title: book.title,
-          author: book.author || 'Unknown Author',
-          category: book.category || 'general',
-        },
-      },
-    ]);
+    await upsertBookEmbedding(
+      String(book.id),
+      vector,
+      book.title || '',
+      book.author || 'Unknown Author',
+      book.category || 'general',
+    );
 
     indexed += 1;
     console.log(`Indexed book ${book.id}: ${book.title}`);
   }
 
-  await pool.end();
   console.log(`Completed vector indexing for ${indexed} books.`);
 }
 

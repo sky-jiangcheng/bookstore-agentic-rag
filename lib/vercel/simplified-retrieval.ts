@@ -135,10 +135,10 @@ async function performVectorSearch(
   requirement: RequirementAnalysis,
   topK: number
 ): Promise<Book[]> {
-  const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
+  const { vector } = generateEmbeddingPair(requirement.original_query);
   const expandedCategories = expandCategories(requirement.categories);
 
-  return vectorSearchDirect(vector, topK, sparseVector, {
+  return vectorSearchDirect(vector, topK, {
     categories: expandedCategories.length > 0 ? expandedCategories : undefined,
     maxPrice: requirement.constraints.budget,
     queryText: requirement.original_query,
@@ -229,8 +229,8 @@ export async function fastRetrieval(
   topK: number = 100
 ): Promise<Book[]> {
   try {
-    const { vector, sparseVector } = generateEmbeddingPair(query);
-    const books = await vectorSearchDirect(vector, topK, sparseVector);
+    const { vector } = generateEmbeddingPair(query);
+    const books = await vectorSearchDirect(vector, topK);
     const filtered = (await filterBlockedBooks(books)).books;
 
     return filtered.sort((a, b) => {
@@ -265,13 +265,12 @@ export async function precomputeEmbeddings(): Promise<void> {
         const author = row.author as string;
         const category = row.category as string;
         const text = `Title: ${title}\nAuthor: ${author}\nCategory: ${category}`;
-        const { vector, sparseVector } = generateEmbeddingPair(text);
+        const { vector } = generateEmbeddingPair(text);
 
         await upsertBookVector(
           bookId,
           vector,
           { bookId, title, author, category, description: '' },
-          sparseVector
         );
 
         computed++;
