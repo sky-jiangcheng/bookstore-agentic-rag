@@ -17,4 +17,4 @@ tsconfig.tsbuildinfo
 .env.railway.example
 
 # AtomCode local-scope configs (machine-specific)
-.atomcode/local/
+.atomcode/

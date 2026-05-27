@@ -4,19 +4,31 @@ import { Redis } from '@upstash/redis';
 import { config, hasRedisConfig, hasVectorConfig } from '@/lib/config/environment';
 import { buildBookDocument, buildSparseVector } from './local-vector';
 
-const vectorIndex = hasVectorConfig()
-  ? new Index({
+/** Lazy singleton: Upstash Vector index, null when unconfigured or URL invalid */
+const vectorIndex: Index | null = (() => {
+  if (!hasVectorConfig()) return null;
+  try {
+    return new Index({
       url: config.upstash.vectorUrl,
       token: config.upstash.vectorToken,
-    })
-  : null;
+    });
+  } catch {
+    return null;
+  }
+})();
 
-export const redis = hasRedisConfig()
-  ? new Redis({
+/** Lazy singleton: Upstash Redis client, null when unconfigured or URL invalid */
+export const redis: Redis | null = (() => {
+  if (!hasRedisConfig()) return null;
+  try {
+    return new Redis({
       url: config.upstash.redisUrl,
       token: config.upstash.redisToken,
-    })
-  : null;
+    });
+  } catch {
+    return null;
+  }
+})();
 
 export interface VectorBook {
   id: string;
