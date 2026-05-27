@@ -127,7 +127,7 @@ export async function vectorSearchBooks(
       1 - (be.embedding <=> ${formatVector(queryVector)}::vector) AS similarity
     FROM book_embeddings be
     JOIN books b ON be.book_id = b.id
-    WHERE be.embedding IS NOT NULL
+    WHERE be.embedding IS NOT NULL AND be.chunk_index = 0
     ORDER BY be.embedding <=> ${formatVector(queryVector)}::vector
     LIMIT ${topK}
   `;
@@ -186,6 +186,7 @@ export async function vectorSearchChunks(
         1 - (be.embedding <=> ${formatVector(queryVector)}::vector) AS similarity
       FROM book_embeddings be
       WHERE be.embedding IS NOT NULL
+        AND be.chunk_index > 0
         AND be.book_id = ${filter.bookId}::bigint
       ORDER BY be.embedding <=> ${formatVector(queryVector)}::vector
       LIMIT ${topK}
@@ -202,6 +203,7 @@ export async function vectorSearchChunks(
       JOIN books b ON be.book_id = b.id
       WHERE be.embedding IS NOT NULL
         AND b.category = ${filter.category}
+        AND be.chunk_index > 0
       ORDER BY be.embedding <=> ${formatVector(queryVector)}::vector
       LIMIT ${topK}
     `;
@@ -215,6 +217,7 @@ export async function vectorSearchChunks(
         1 - (be.embedding <=> ${formatVector(queryVector)}::vector) AS similarity
       FROM book_embeddings be
       WHERE be.embedding IS NOT NULL
+        AND be.chunk_index > 0
       ORDER BY be.embedding <=> ${formatVector(queryVector)}::vector
       LIMIT ${topK}
     `;
@@ -247,7 +250,7 @@ export async function vectorSearchBooksDirect(
   const { categories, maxPrice, queryText } = options || {};
 
   // 构建 WHERE 条件
-  const conditions: string[] = ['be.embedding IS NOT NULL'];
+  const conditions: string[] = ['be.embedding IS NOT NULL', 'be.chunk_index = 0'];
   const params: unknown[] = [];
 
   if (categories && categories.length > 0) {
