@@ -70,7 +70,7 @@ function getBookPrimaryText(book: Book): string {
   return `${book.title} ${book.category}`.toLowerCase();
 }
 
-function getStrongKeywords(requirement: RequirementAnalysis): string[] {
+export function getStrongKeywords(requirement: RequirementAnalysis): string[] {
   return requirement.keywords
     .map((keyword) => keyword.trim().toLowerCase())
     .filter(
@@ -101,7 +101,7 @@ function matchesFullKeywords(book: Book, keywords: string[]): boolean {
   return hasKeywordInText(keywords, fullText);
 }
 
-function hasExcludedKeywords(book: Book, excludedKeywords: string[]): boolean {
+export function hasExcludedKeywords(book: Book, excludedKeywords: string[]): boolean {
   if (excludedKeywords.length === 0) {
     return false;
   }
@@ -109,7 +109,7 @@ function hasExcludedKeywords(book: Book, excludedKeywords: string[]): boolean {
   return excludedKeywords.some((keyword) => fullText.includes(keyword.toLowerCase()));
 }
 
-function matchesCategories(book: Book, categories: string[]): boolean {
+export function matchesCategories(book: Book, categories: string[]): boolean {
   if (categories.length === 0) {
     return true;
   }
@@ -121,7 +121,7 @@ function matchesCategories(book: Book, categories: string[]): boolean {
   });
 }
 
-function computeRelevanceScore(book: Book, requirement: RequirementAnalysis): number {
+export function computeRelevanceScore(book: Book, requirement: RequirementAnalysis): number {
   let score = book.relevance_score ?? 0;
   const bookText = getBookText(book);
   const strongKeywords = getStrongKeywords(requirement);
@@ -146,8 +146,10 @@ function computeRelevanceScore(book: Book, requirement: RequirementAnalysis): nu
     score -= SCORE_WEIGHTS.EXCLUDED_KEYWORD_PENALTY;
   }
 
+  // Budget is a total price constraint, not per-book. Penalize expensive books
+  // but don't exclude them — the recommendation agent handles the total budget limit.
   if (requirement.constraints.budget && book.price > requirement.constraints.budget) {
-    score -= SCORE_WEIGHTS.BUDGET_EXCEED_PENALTY;
+    score -= SCORE_WEIGHTS.BUDGET_EXCEED_PENALTY / 2;
   }
 
   return score;
@@ -160,14 +162,13 @@ function isBookExcluded(book: Book, requirement: RequirementAnalysis): boolean {
     return true;
   }
 
-  if (requirement.constraints.budget && book.price > requirement.constraints.budget) {
-    return true;
-  }
+  // Budget is total price, not per-book limit. Don't exclude books by price here;
+  // the recommendation agent will enforce the total budget constraint.
 
   return false;
 }
 
-function enforceHardConstraints(books: Book[], requirement: RequirementAnalysis): Book[] {
+export function enforceHardConstraints(books: Book[], requirement: RequirementAnalysis): Book[] {
   const strongKeywords = getStrongKeywords(requirement);
 
   const filtered = books.filter((book) => {
@@ -264,7 +265,7 @@ async function retrievePopular(requirement: RequirementAnalysis, topK: number): 
   }
 }
 
-function applyReciprocalRankFusion(results: Book[][], k: number = RETRIEVAL_CONSTANTS.RRF_K): Book[] {
+export function applyReciprocalRankFusion(results: Book[][], k: number = RETRIEVAL_CONSTANTS.RRF_K): Book[] {
   const scores = new Map<string, number>();
   const bookMap = new Map<string, Book>();
 

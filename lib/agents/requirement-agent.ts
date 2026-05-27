@@ -32,12 +32,14 @@ export interface RequirementAgentOptions {
   previousRequirements?: RequirementAnalysis[];
 }
 
-function parseBudget(query: string): number | undefined {
+export function parseBudget(query: string): number | undefined {
   const patterns = [
     /预算(?:控制)?(?:在)?\s*(\d+(?:\.\d+)?)\s*元/iu,
     /总预算(?:在)?\s*(\d+(?:\.\d+)?)\s*元/iu,
     /不超过\s*(\d+(?:\.\d+)?)\s*元/iu,
     /控制总预算在\s*(\d+(?:\.\d+)?)\s*元(?:以内)?/iu,
+    /预算(?:控制)?(?:在)?\s*(\d+(?:\.\d+)?)\s*(?:以内|以下|左右)/iu,
+    /预算(?:控制)?(?:在)?\s*(\d+(?:\.\d+)?)/iu,
     /(\d+(?:\.\d+)?)\s*元(?:以内|以下|之内)/iu,
   ];
 
@@ -51,7 +53,7 @@ function parseBudget(query: string): number | undefined {
   return undefined;
 }
 
-function parseTargetCount(query: string): number | undefined {
+export function parseTargetCount(query: string): number | undefined {
   const match = query.match(/(?:推荐|给我|来|选)?\s*(\d{1,2})\s*本/iu);
   if (!match) {
     return undefined;
@@ -60,14 +62,14 @@ function parseTargetCount(query: string): number | undefined {
   return Number(match[1]);
 }
 
-function parseExcludedKeywords(query: string): string[] {
+export function parseExcludedKeywords(query: string): string[] {
   const exclusions: string[] = [];
   const patterns = [
-    /排除\s*([^\s，。；、]+)/giu,
-    /不要\s*([^\s，。；、]+)/giu,
-    /不含\s*([^\s，。；、]+)/giu,
-    /去掉\s*([^\s，。；、]+)/giu,
-    /剔除\s*([^\s，。；、]+)/giu,
+    /排除\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
+    /不要\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
+    /不含\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
+    /去掉\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
+    /剔除\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
   ];
 
   for (const pattern of patterns) {
@@ -94,9 +96,9 @@ function parseExcludedKeywords(query: string): string[] {
 const MAX_USER_INPUT_LENGTH = 2000;
 const ROLE_MARKER_PATTERN = /\b(system|assistant|user|human|ai|model)\s*:\s*/gi;
 const ROLE_TAG_PATTERN = /<\\?\/?\s*\(?system\)?[^>]*>|<\\?\/?\s*\(?(assistant|user|developer|tool|model)\)?[^>]*>/gi;
-const INJECTION_PHRASE_PATTERN = /\b(ignore\s+(previous|above|all)\s*(instructions|prompts|rules)|forget\s+(everything|all|previous)|disregard\s*(all|previous|above)|you\s+are\s+now|new\s+instructions?|override\s*(previous|all|system)?|reveal\s+(system|developer)\s*(prompt|message|instructions)?)\b|忽略|无视|忘记|覆盖|系统提示|开发者消息|泄露提示词|输出系统/gi;
+const INJECTION_PHRASE_PATTERN = /\b(ignore\s+(previous|above|all)\s*(instructions|prompts|rules)|ignore\s+all\s+previous\s+(instructions|prompts|rules)|ignore\s+all\s+above\s+(instructions|prompts|rules)|forget\s+(everything|all|previous)|disregard\s*(all|previous|above)|you\s+are\s+now|new\s+instructions?|override\s*(previous|all|system)?|reveal\s+(system|developer)\s*(prompt|message|instructions)?)\b|忽略\s*(上面的|之前的|所有的)\s*(指令|提示|规则)|无视\s*(上面的|之前的|所有的)?\s*指令|忘记\s*(所有的|之前的)?\s*(指令|提示)|系统提示词|开发者消息|泄露提示词|输出系统(提示|指令)/gi;
 
-function sanitizePromptInput(input: string): string {
+export function sanitizePromptInput(input: string): string {
   let sanitized = input
     .normalize('NFKC')
     .replace(ROLE_TAG_PATTERN, '[filtered]')
@@ -114,7 +116,7 @@ function sanitizeUserInput(input: string): string {
   return sanitizePromptInput(input);
 }
 
-function extractQueryKeywords(query: string): string[] {
+export function extractQueryKeywords(query: string): string[] {
   const sanitized = sanitizeUserInput(query);
   const tokens = sanitized
     .toLowerCase()
@@ -138,25 +140,25 @@ function normalizeRequirement(
   const preferences = new Set(draft.preferences);
 
   for (const { pattern, category } of CATEGORY_PATTERNS) {
-    if (pattern.test(userQuery)) {
+    const matches = userQuery.match(pattern);
+    if (matches) {
       categories.add(category);
-      const matches = userQuery.match(pattern);
-      matches?.forEach((item) => keywords.add(item));
+      matches.forEach((item) => keywords.add(item));
     }
   }
 
   for (const { pattern, preference } of PREFERENCE_PATTERNS) {
-    if (pattern.test(userQuery)) {
+    const matches = userQuery.match(pattern);
+    if (matches) {
       preferences.add(preference);
-      const matches = userQuery.match(pattern);
-      matches?.forEach((item) => keywords.add(item));
+      matches.forEach((item) => keywords.add(item));
     }
   }
 
   for (const pattern of AUDIENCE_PATTERNS) {
-    if (pattern.test(userQuery)) {
-      const matches = userQuery.match(pattern);
-      matches?.forEach((item) => {
+    const matches = userQuery.match(pattern);
+    if (matches) {
+      matches.forEach((item) => {
         preferences.add(`受众:${item}`);
         keywords.add(item);
       });
@@ -225,11 +227,11 @@ export async function analyzeRequirement(
   options?: RequirementAgentOptions,
 ): Promise<RequirementAnalysis> {
   try {
-    console.log('[RequirementAgent] Analyzing query:', userQuery);
+    console.log('[RequirementAgent] Analyzing query:', userQuery.slice(0, 100) + (userQuery.length > 100 ? '...[truncated]' : ''));
     console.log('[RequirementAgent] Conversation context:', options?.conversationContext ? 'present' : 'none');
 
     const { output } = await generateText({
-      model: 'google/gemini-3.1-flash',
+      model: 'google/gemini-2.0-flash',
       prompt: ANALYSIS_PROMPT(userQuery, options?.conversationContext),
       output: Output.object({
         schema: RequirementAnalysisSchema,
@@ -255,13 +257,10 @@ export async function analyzeRequirement(
 
     // Common book categories
     for (const { pattern, category } of CATEGORY_PATTERNS) {
-      if (pattern.test(userQuery)) {
+      const matches = userQuery.match(pattern);
+      if (matches) {
         extractedCategories.push(category);
-        // Also add matched terms as keywords
-        const matches = userQuery.match(pattern);
-        if (matches) {
-          extractedKeywords.push(...matches);
-        }
+        extractedKeywords.push(...matches);
       }
     }
 

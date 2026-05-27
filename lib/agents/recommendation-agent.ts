@@ -31,7 +31,7 @@ function rankForBudget(book: RecommendedBook, requirement: RequirementAnalysis):
   return score;
 }
 
-function containsExcludedKeyword(book: RecommendedBook, excludedKeywords: string[]): boolean {
+export function containsExcludedKeyword(book: RecommendedBook, excludedKeywords: string[]): boolean {
   if (excludedKeywords.length === 0) {
     return false;
   }
@@ -40,7 +40,7 @@ function containsExcludedKeyword(book: RecommendedBook, excludedKeywords: string
   return excludedKeywords.some((keyword) => haystack.includes(keyword.toLowerCase()));
 }
 
-function enforceBudget(
+export function enforceBudget(
   books: RecommendedBook[],
   requirement: RequirementAnalysis
 ): RecommendedBook[] {
@@ -67,7 +67,7 @@ function enforceBudget(
     return selected;
   }
 
-  const cheapest = affordable.sort((a, b) => a.price - b.price)[0];
+  const cheapest = [...books].sort((a, b) => a.price - b.price)[0];
   return cheapest ? [cheapest] : [];
 }
 
@@ -82,7 +82,7 @@ function enforceRecommendationConstraints(
   return budgetSafe.slice(0, Math.max(1, targetCount));
 }
 
-function buildHeuristicExplanation(book: Book, requirement: RequirementAnalysis): string {
+export function buildHeuristicExplanation(book: Book, requirement: RequirementAnalysis): string {
   const haystack = `${book.title} ${book.category}`.toLowerCase();
   const matchedCategories = requirement.categories.filter((category) => haystack.includes(category.toLowerCase()));
   const matchedKeywords = requirement.keywords.filter((keyword) => keyword.length >= 2 && haystack.includes(keyword.toLowerCase())).slice(0, 3);
@@ -138,7 +138,7 @@ export async function generateRecommendation(
   const { books: visibleCandidates } = await filterBlockedBooks(candidates);
 
   // Determine target count based on requirement or default to 5
-  const targetCount = requirement.constraints.target_count ?? Math.min(5, visibleCandidates.length);
+  const targetCount = Math.min(requirement.constraints.target_count ?? Math.min(5, visibleCandidates.length), visibleCandidates.length);
 
   // If no candidates available, return empty result
   if (visibleCandidates.length === 0) {
@@ -196,9 +196,8 @@ export async function generateRecommendation(
     // Calculate total price:
     const total_price = finalBooks.reduce((sum, book) => sum + book.price, 0);
 
-    // Calculate quality score: simple heuristic based on candidate coverage
-    // More candidates successfully used = higher quality (we found more good matches)
-    const quality_score = finalBooks.length / visibleCandidates.length;
+    // Coverage ratio: proportion of visible candidates that made it into the final selection
+    const coverage_score = finalBooks.length / visibleCandidates.length;
 
     // Calculate confidence: based on how clear the requirement is
     // More keywords and categories = higher confidence
@@ -213,7 +212,7 @@ export async function generateRecommendation(
     return {
       books: finalBooks,
       total_price,
-      quality_score,
+      quality_score: coverage_score,
       confidence,
       category_distribution,
     };

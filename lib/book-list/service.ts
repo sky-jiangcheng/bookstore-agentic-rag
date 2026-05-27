@@ -196,21 +196,25 @@ export async function generateBookList(
         }
       })();
 
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>(
-    (_, reject) =>
-      setTimeout(
+    (_, reject) => {
+      timeoutId = setTimeout(
         () => reject(new BookListHttpError(503, '生成书单超时')),
         timeoutMs,
-      ),
+      );
+    },
   );
 
   try {
     const pipelineResult = await Promise.race([pipelineTask, timeoutPromise]);
+    clearTimeout(timeoutId);
     recommendationBooks = pipelineResult.recommendationBooks;
     pipelineRequirement = pipelineResult.pipelineRequirement;
     pipelineSuccess = pipelineResult.pipelineSuccess;
     pipelineError = pipelineResult.pipelineError;
   } catch (error) {
+    clearTimeout(timeoutId);
     if (error instanceof BookListHttpError) {
       throw error;
     }
