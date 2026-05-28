@@ -59,7 +59,7 @@ export async function buildExcelBuffer(req: ExportBookListRequest): Promise<Buff
     ['书籍数量', String(req.books.length)],
     ['总价格', `¥${totalPrice.toFixed(2)}`],
   ];
-  if (req.budget) {
+  if (req.budget != null) {
     metaRows.push(['预算', `¥${req.budget.toFixed(2)}`]);
   }
   metaRows.push(['导出时间', new Date().toISOString().replace('T', ' ').slice(0, 19)]);

@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
     if (!parseResult.success) {
       return NextResponse.json(
-        { success: false, error: 'Invalid request', details: parseResult.error.flatten() },
+        { success: false, error: 'Invalid request' },
         { status: 400, headers: corsHeaders(req) }
       );
     }

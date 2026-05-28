@@ -3,6 +3,7 @@ import { Index } from '@upstash/vector';
 import { Redis } from '@upstash/redis';
 import { config, hasRedisConfig, hasVectorConfig } from '@/lib/config/environment';
 import { buildBookDocument, buildSparseVector } from './local-vector';
+import type { VectorBookMetadata, ChunkMetadata, SparseVector } from '@/lib/types/rag';
 
 const vectorIndex = hasVectorConfig()
   ? new Index({
@@ -29,11 +30,6 @@ export interface VectorBook {
   sourceId?: string;
 }
 
-export interface SparseVector {
-  indices: number[];
-  values: number[];
-}
-
 export async function upsertBookVector(
   bookId: string,
   vector: number[],
@@ -54,15 +50,6 @@ export async function upsertBookVector(
       metadata,
     },
   ]);
-}
-
-export interface VectorBookMetadata {
-  bookId: string;
-  title: string;
-  author: string;
-  category: string;
-  description: string;
-  sourceId?: string;
 }
 
 function isValidVectorBookMetadata(metadata: unknown): metadata is VectorBookMetadata {
@@ -134,15 +121,6 @@ export async function deleteBookVector(bookId: string): Promise<void> {
 /**
  * Chunk vector operations for Classic RAG
  */
-
-export interface ChunkMetadata {
-  bookId: string;
-  chunkIndex: number;
-  text: string;
-  title?: string;
-  author?: string;
-  category?: string;
-}
 
 export async function upsertChunkVector(
   chunkId: string,

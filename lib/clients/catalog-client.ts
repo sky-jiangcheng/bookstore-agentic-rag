@@ -45,6 +45,7 @@ export async function getBookDetailsBatch(ids: string[]): Promise<Book[]> {
     books = (await filterBlockedBooks(books)).books;
   } else if (hasCatalogServiceConfig()) {
     books = (await Promise.all(ids.map((id) => getBookDetailsFromService(id)))).filter((b): b is Book => b !== null);
+    books = (await filterBlockedBooks(books)).books;
   } else {
     throw unavailableDataSourceError();
   }

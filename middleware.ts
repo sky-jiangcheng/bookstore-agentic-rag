@@ -7,6 +7,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getAllowedOrigin } from '@/lib/utils/cors';
+
+function addCorsHeaders(response: NextResponse, request: NextRequest): NextResponse {
+  const origin = getAllowedOrigin(request);
+  if (origin) {
+    response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    response.headers.set('Access-Control-Max-Age', '3600');
+  }
+  return response;
+}
 
 // ============================================================
 // 分布式速率限制器（Upstash Redis 优先，内存降级）
@@ -28,8 +40,34 @@ const DEFAULT_WINDOW_MS = 60_000;
 
 /**
  * 尝试通过 Upstash Redis 进行分布式限流。
+ * 使用 Lua 脚本保证原子性，避免竞态条件。
  * Redis 不可用时返回 null，由调用方降级到内存限流。
  */
+const RATE_LIMIT_LUA_SCRIPT = `
+local windowKey = KEYS[1]
+local countKey = KEYS[2]
+local windowMs = tonumber(ARGV[1])
+local maxRequests = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+local ttl = math.ceil(windowMs / 1000) * 2
+
+local windowStart = redis.call('GET', windowKey)
+if not windowStart or (now - tonumber(windowStart)) > windowMs then
+  redis.call('SET', windowKey, now, 'EX', ttl)
+  redis.call('SET', countKey, 1, 'EX', ttl)
+  return {1, maxRequests - 1, now + windowMs}
+end
+
+local currentCount = redis.call('INCR', countKey)
+local remaining = math.max(0, maxRequests - currentCount)
+local allowed = 0
+if currentCount <= maxRequests then
+  allowed = 1
+end
+
+return {allowed, remaining, tonumber(windowStart) + windowMs}
+`;
+
 async function checkRedisRateLimit(
   key: string,
   maxRequests: number,
@@ -43,22 +81,17 @@ async function checkRedisRateLimit(
     const windowKey = `ratelimit:window:${key}`;
     const countKey = `ratelimit:count:${key}`;
 
-    // 使用 Redis MULTI 保证原子性
-    const windowStart = await redis.get<number>(windowKey);
-    if (!windowStart || now - windowStart > windowMs) {
-      // 新窗口
-      const multi = redis.multi();
-      multi.set(windowKey, now, { ex: Math.ceil(windowMs / 1000) * 2 });
-      multi.set(countKey, 1, { ex: Math.ceil(windowMs / 1000) * 2 });
-      await multi.exec();
-      return { allowed: true, remaining: maxRequests - 1, resetTime: now + windowMs };
-    }
+    const result = await redis.eval(
+      RATE_LIMIT_LUA_SCRIPT,
+      [windowKey, countKey],
+      [String(windowMs), String(maxRequests), String(now)]
+    ) as [number, number, number];
 
-    const currentCount = await redis.incr(countKey);
-    const remaining = Math.max(0, maxRequests - currentCount);
-    const allowed = currentCount <= maxRequests;
-
-    return { allowed, remaining, resetTime: windowStart + windowMs };
+    return {
+      allowed: result[0] === 1,
+      remaining: result[1],
+      resetTime: result[2],
+    };
   } catch {
     // Redis 错误时降级到内存限流
     return null;
@@ -186,6 +219,8 @@ function extractClientIp(request: NextRequest): string {
   }
 
   // 无法识别 IP 时使用 unknown（不使用 127.0.0.1 避免多用户共享同一限流桶）
+  // 注意: x-forwarded-for 可被客户端伪造。在生产环境（Vercel）中此头由边缘网络可信代理设置；
+  // 直接面向公网的部署应考虑使用可信代理列表验证或采用 True-Client-IP / CF-Connecting-IP 等替代来源。
   return 'unknown';
 }
 
@@ -238,11 +273,10 @@ export async function middleware(request: NextRequest) {
   // 放行不需要限流的路径
   if (RATE_LIMIT_EXEMPT_PATHS.some((p) => pathname.startsWith(p))) {
     const response = NextResponse.next();
-    // 安全头对所有响应都设置
     for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
       response.headers.set(key, value);
     }
-    return response;
+    return addCorsHeaders(response, request);
   }
 
   // 仅对 API 路由做限流
@@ -251,7 +285,7 @@ export async function middleware(request: NextRequest) {
     for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
       response.headers.set(key, value);
     }
-    return response;
+    return addCorsHeaders(response, request);
   }
 
   const ip = extractClientIp(request);
@@ -264,7 +298,7 @@ export async function middleware(request: NextRequest) {
 
   if (!allowed) {
     const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
-    return new NextResponse(
+    const response = new NextResponse(
       JSON.stringify({ error: '请求过于频繁，请稍后再试', retry_after: retryAfter }),
       {
         status: 429,
@@ -277,6 +311,7 @@ export async function middleware(request: NextRequest) {
         },
       },
     );
+    return addCorsHeaders(response, request);
   }
 
   const response = NextResponse.next();
@@ -285,7 +320,7 @@ export async function middleware(request: NextRequest) {
   }
   response.headers.set('X-RateLimit-Limit', String(DEFAULT_MAX_REQUESTS));
   response.headers.set('X-RateLimit-Remaining', String(remaining));
-  return response;
+  return addCorsHeaders(response, request);
 }
 
 export const config = {

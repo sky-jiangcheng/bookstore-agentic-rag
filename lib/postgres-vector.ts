@@ -5,33 +5,15 @@
  */
 
 import { sql } from '@vercel/postgres';
-import type { Book } from '@/lib/types/rag';
+import type { Book, VectorBookMetadata, ChunkMetadata } from '@/lib/types/rag';
+import { VECTOR_DIMENSION } from '@/lib/vector-service';
 
-const VECTOR_DIMENSION = 768;
 const DEFAULT_SIMILARITY = 0;
-
-export interface VectorBookMetadata {
-  bookId: string;
-  title: string;
-  author: string;
-  category: string;
-  description?: string;
-  sourceId?: string;
-}
 
 export interface VectorSearchResult {
   id: string;
   score: number;
   metadata: VectorBookMetadata;
-}
-
-export interface ChunkMetadata {
-  bookId: string;
-  chunkIndex: number;
-  text: string;
-  title?: string;
-  author?: string;
-  category?: string;
 }
 
 export interface ChunkSearchResult {
@@ -338,9 +320,10 @@ export async function deleteBookVector(bookId: string): Promise<void> {
 export async function deleteChunkVectorsByBookIds(bookIds: string[]): Promise<void> {
   if (bookIds.length === 0) return;
 
-  for (const bookId of bookIds) {
-    await sql`DELETE FROM book_embeddings WHERE book_id = ${bookId}::bigint`;
-  }
+  await sql.query(
+    `DELETE FROM book_embeddings WHERE book_id = ANY($1::bigint[])`,
+    [bookIds.map(id => String(id))]
+  );
 }
 
 export async function getBookEmbeddingCount(): Promise<number> {

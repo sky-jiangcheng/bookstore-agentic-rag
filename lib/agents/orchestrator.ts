@@ -87,6 +87,22 @@ export async function runRAGPipeline(
     { type: 'popular', enabled: true, topK: 10 },
   ];
 
+  // Track whether assistant turn has been recorded to avoid orphaned user turns
+  let assistantTurnRecorded = false;
+
+  const recordAssistantTurn = async (content: string) => {
+    if (session && !assistantTurnRecorded) {
+      assistantTurnRecorded = true;
+      await addTurn(session.id, {
+        timestamp: Date.now(),
+        role: 'assistant',
+        content,
+        requirement,
+        recommendations: recommendation?.books,
+      });
+    }
+  };
+
   if (session) {
     await addTurn(session.id, {
       timestamp: Date.now(),
@@ -119,6 +135,8 @@ export async function runRAGPipeline(
         data: requirement.clarification_questions as unknown as Record<string, unknown>,
       });
 
+      await recordAssistantTurn('需要澄清用户需求');
+
       return {
         success: false,
         requirement,
@@ -148,7 +166,7 @@ export async function runRAGPipeline(
         rerankerConfig: enableReranking ? {
           enabled: true,
           type: 'local',
-          topK: Math.min(20, requirement.constraints.target_count || 5 * 2),
+          topK: Math.min(20, (requirement.constraints.target_count || 5) * 2),
         } : undefined,
       });
       onProgress?.({
@@ -192,6 +210,7 @@ export async function runRAGPipeline(
 
       if (!evaluation.needs_improvement) {
         if (session && recommendation) {
+          assistantTurnRecorded = true;
           await addTurn(session.id, {
             timestamp: Date.now(),
             role: 'assistant',
@@ -255,7 +274,7 @@ export async function runRAGPipeline(
             break;
           case 'requirement_match':
             const additionalKeywords = extractKeywordsFromSuggestions(evaluation.issues);
-            requirement.keywords = [...new Set([...requirement.keywords, ...additionalKeywords])];
+            requirement = { ...requirement, keywords: [...new Set([...requirement.keywords, ...additionalKeywords])] };
             break;
         }
       }
@@ -273,6 +292,8 @@ export async function runRAGPipeline(
       } as unknown as Record<string, unknown>,
     });
 
+    await recordAssistantTurn(`已达到最大迭代次数，推荐了 ${recommendation?.books.length ?? 0} 本书`);
+
     return {
       success: false,
       requirement,
@@ -289,6 +310,8 @@ export async function runRAGPipeline(
       content: `流程执行失败: ${error}`,
       data: { error, iterations } as unknown as Record<string, unknown>,
     });
+
+    await recordAssistantTurn(`流程执行失败: ${error}`);
 
     return {
       success: false,

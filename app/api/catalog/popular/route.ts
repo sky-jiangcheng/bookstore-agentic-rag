@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     logServerError('[catalog/popular]', error);
     return NextResponse.json(
       buildSafeErrorResponse(error, '获取热门图书失败'),
-      { status: 503 }
+      { status: 500 }
     );
   }
 }

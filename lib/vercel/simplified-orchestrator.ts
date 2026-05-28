@@ -115,7 +115,7 @@ export async function runVercelRAGPipeline(
       content: '检索书籍...',
     });
 
-    const targetCount = requirement.constraints.target_count ?? 10000;
+    const targetCount = Math.min(requirement.constraints.target_count ?? 30, 100);
     const candidateTopK = Math.max(targetCount * 3, 30);
 
     // Only one retrieval call - use retrieveCandidatesVercel which supports keyword fallback
@@ -152,14 +152,15 @@ export async function runVercelRAGPipeline(
     });
 
     // Step 5: Build recommendation (heuristic only — no LLM call)
+    const recommendedBooks = retrieval.books.slice(0, targetCount);
     recommendation = {
-      books: retrieval.books.slice(0, targetCount).map(book => ({
+      books: recommendedBooks.map(book => ({
         ...book,
         explanation: '',
         match_score: book.relevance_score * 100,
         source: '智能推荐',
       })),
-      total_price: retrieval.books.reduce((sum, b) => sum + b.price, 0),
+      total_price: recommendedBooks.reduce((sum, b) => sum + b.price, 0),
       quality_score: 0.8,
       confidence: 0.7,
       category_distribution: {},
@@ -222,14 +223,15 @@ export async function runFastRAGPipeline(
     });
 
     // Simple recommendation (no LLM)
+    const recommendedBooks = retrieval.books;
     const recommendation = {
-      books: retrieval.books.map(book => ({
+      books: recommendedBooks.map(book => ({
         ...book,
         explanation: '基于您的查询找到的相关书籍。',
         match_score: book.relevance_score * 100,
         source: '智能推荐',
       })),
-      total_price: retrieval.books.reduce((sum, b) => sum + b.price, 0),
+      total_price: recommendedBooks.reduce((sum, b) => sum + b.price, 0),
       quality_score: 0.8,
       confidence: 0.7,
       category_distribution: {},

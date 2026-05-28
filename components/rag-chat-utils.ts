@@ -1,3 +1,14 @@
+export interface MessageType {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  recommendations?: BookRecommendation[];
+  requirement?: RequirementSnapshot;
+  totalPrice?: number;
+  sessionId?: string;
+  status?: 'streaming' | 'done' | 'error';
+}
+
 export interface BookRecommendation {
   title: string;
   author: string;
@@ -107,7 +118,7 @@ export function normalizeRequirementSnapshot(
     categories: Array.isArray(raw.categories) ? raw.categories as string[] : [],
     keywords: Array.isArray(raw.keywords) ? raw.keywords as string[] : [],
     constraints: {
-      budget: typeof constraints.budget === 'number' ? constraints.budget : Number(constraints.budget) || undefined,
+      budget: typeof constraints.budget === 'number' ? constraints.budget : (constraints.budget != null ? Number(constraints.budget) : undefined),
       target_count: typeof constraints.target_count === 'number' ? constraints.target_count : Number(constraints.target_count) || undefined,
       exclude_keywords: Array.isArray(constraints.exclude_keywords) ? constraints.exclude_keywords as string[] : [],
     },

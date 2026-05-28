@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(data);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid request', details: err.flatten() }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
     if (err instanceof DOMException && err.name === 'AbortError') {
       return NextResponse.json({ error: '生成书单超时，请稍后重试' }, { status: 503 });

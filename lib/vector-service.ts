@@ -14,20 +14,16 @@ import {
   deleteChunkVectorsByBookIds as pgDeleteChunkVectorsByBookIds,
   getBookEmbeddingCount as pgGetBookEmbeddingCount,
   hasPgVectorSupport as pgHasPgVectorSupport,
-  type VectorBookMetadata,
-  type ChunkMetadata,
   type VectorSearchResult,
   type ChunkSearchResult,
 } from './postgres-vector';
-import type { Book } from '@/lib/types/rag';
+import type { Book, VectorBookMetadata, ChunkMetadata, SparseVector } from '@/lib/types/rag';
 
 import { Index } from '@upstash/vector';
 import { config, hasVectorConfig } from '@/lib/config/environment';
 import { buildBookDocument, buildSparseVector } from './local-vector';
 
-export type { VectorBookMetadata, ChunkMetadata };
-
-const VECTOR_DIMENSION = 768;
+export const VECTOR_DIMENSION = 768;
 
 const upstashIndex = hasVectorConfig()
   ? new Index({
@@ -40,11 +36,6 @@ type VectorBackend = 'pgvector' | 'upstash';
 
 function getVectorBackend(): VectorBackend {
   return upstashIndex ? 'upstash' : 'pgvector';
-}
-
-export interface SparseVector {
-  indices: number[];
-  values: number[];
 }
 
 export interface VectorStoreInfo {
@@ -367,12 +358,10 @@ export async function deleteChunkVectors(bookIds: string[]): Promise<void> {
     if (!upstashIndex) {
       throw new Error('Upstash Vector is not configured');
     }
-    const chunkIds = bookIds.flatMap((id) => [
-      `chunk:${id}:0`,
-      `chunk:${id}:1`,
-      `chunk:${id}:2`,
-    ]);
-    await upstashIndex.delete(chunkIds);
+    for (const bookId of bookIds) {
+      const namespace = `chunk:${bookId}`;
+      await upstashIndex.delete({ prefix: namespace });
+    }
   } else {
     await pgDeleteChunkVectorsByBookIds(bookIds);
   }
@@ -428,7 +417,7 @@ export async function getVectorStoreInfo(): Promise<VectorStoreInfo | null> {
 }
 
 export function hasVectorSupport(): boolean {
-  return upstashIndex !== null || true;
+  return upstashIndex !== null;
 }
 
 export { getVectorBackend };

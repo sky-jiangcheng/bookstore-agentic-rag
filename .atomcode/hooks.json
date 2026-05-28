@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "typecheck-after-edit": {
+      "event": "post_tool_use",
+      "matcher": "edit_file",
+      "glob": "**/*.{ts,tsx}",
+      "command": "npx tsc --noEmit --pretty 2>&1 | tail -20",
+      "timeout_ms": 30000
+    },
+    "block-env-edit": {
+      "event": "pre_tool_use",
+      "matcher": "edit_file",
+      "command": "echo '{\"action\":\"block\",\"reason\":\"禁止直接编辑 .env.* 文件，请使用环境变量管理工具或联系管理员\"}'"
+    }
+  }
+}

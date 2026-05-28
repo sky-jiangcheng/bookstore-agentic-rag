@@ -8,6 +8,19 @@ export class AsyncTimeoutError extends Error {
   }
 }
 
+/**
+ * Create an AbortController that auto-aborts after the given timeout.
+ * Caller can pass controller.signal to fetch/LLM calls for proper cancellation.
+ */
+export function createTimeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timeoutId),
+  };
+}
+
 export async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -98,7 +111,7 @@ export async function withRetry<T>(
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (attempt < maxAttempts) {
-        const delay = delayMs * Math.pow(backoffMultiplier, attempt - 1);
+        const delay = delayMs * Math.pow(backoffMultiplier, attempt - 1) + Math.random() * 500;
         onRetry?.(attempt, lastError);
         await new Promise(resolve => setTimeout(resolve, delay));
       }

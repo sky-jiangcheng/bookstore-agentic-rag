@@ -175,6 +175,32 @@ export interface ConversationSession {
 }
 
 /**
+ * Vector search types
+ */
+export interface SparseVector {
+  indices: number[];
+  values: number[];
+}
+
+export interface VectorBookMetadata {
+  bookId: string;
+  title: string;
+  author: string;
+  category: string;
+  description?: string;
+  sourceId?: string;
+}
+
+export interface ChunkMetadata {
+  bookId: string;
+  chunkIndex: number;
+  text: string;
+  title?: string;
+  author?: string;
+  category?: string;
+}
+
+/**
  * Enhanced retrieval options with RAG features
  */
 export interface EnhancedRetrievalOptions {

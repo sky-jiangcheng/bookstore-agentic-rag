@@ -7,19 +7,8 @@
 import crypto from 'crypto';
 import { redis } from '@/lib/upstash';
 import type { UserFeedback, FeedbackStats } from '@/lib/types/rag';
-
-const FEEDBACK_PREFIX = 'rag:feedback:';
-const STATS_PREFIX = 'rag:stats:';
-const SESSION_FEEDBACK_PREFIX = 'rag:session:';
-
-async function getStringSetMembers(key: string): Promise<string[]> {
-  if (!redis) {
-    return [];
-  }
-
-  const members = await redis.smembers<unknown[]>(key);
-  return members.filter((member): member is string => typeof member === 'string');
-}
+import { getStringSetMembers } from '@/lib/utils/redis-helpers';
+import { REDIS_KEYS, TTL } from '@/lib/utils/redis-keys';
 
 /**
  * Store user feedback
@@ -31,15 +20,15 @@ export async function storeFeedback(feedback: Omit<UserFeedback, 'id'>): Promise
     id,
   };
 
-  // Store feedback in Redis
+  // Store feedback in Redis using JSON serialization
   if (redis) {
-    await redis.hset(`${FEEDBACK_PREFIX}${id}`, fullFeedback as unknown as Record<string, unknown>);
-    await redis.expire(`${FEEDBACK_PREFIX}${id}`, 60 * 60 * 24 * 30); // 30 days TTL
+    await redis.set(REDIS_KEYS.feedback(id), JSON.stringify(fullFeedback));
+    await redis.expire(REDIS_KEYS.feedback(id), TTL.FEEDBACK);
 
     // Add to session feedback list
-    const sessionFeedbackKey = `${SESSION_FEEDBACK_PREFIX}${feedback.sessionId}`;
+    const sessionFeedbackKey = REDIS_KEYS.sessionFeedback(feedback.sessionId);
     await redis.sadd(sessionFeedbackKey, id);
-    await redis.expire(sessionFeedbackKey, 60 * 60 * 24 * 30);
+    await redis.expire(sessionFeedbackKey, TTL.FEEDBACK);
 
     // Update feedback stats
     await updateFeedbackStats(feedback.bookId, feedback.feedbackType);
@@ -58,15 +47,20 @@ export async function getSessionFeedback(sessionId: string): Promise<UserFeedbac
     return [];
   }
 
-  const feedbackIds = await getStringSetMembers(`${SESSION_FEEDBACK_PREFIX}${sessionId}`);
+  const feedbackIds = await getStringSetMembers(REDIS_KEYS.sessionFeedback(sessionId), redis);
 
   if (!feedbackIds || feedbackIds.length === 0) {
     return [];
   }
 
   const feedbackPromises = feedbackIds.map(async (id) => {
-    const feedback = await redis!.hgetall(`${FEEDBACK_PREFIX}${id}`);
-    return feedback as UserFeedback | null;
+    const raw = await redis!.get<string>(REDIS_KEYS.feedback(id));
+    if (!raw || typeof raw !== 'string') return null;
+    try {
+      return JSON.parse(raw) as UserFeedback;
+    } catch {
+      return null;
+    }
   });
 
   const results = await Promise.all(feedbackPromises);
@@ -81,10 +75,10 @@ export async function getFeedbackStats(bookId: string): Promise<FeedbackStats | 
     return null;
   }
 
-  const statsKey = `${STATS_PREFIX}book:${bookId}`;
-  const stats = await redis.hgetall(statsKey);
+  const statsKey = REDIS_KEYS.stats(bookId);
+  const raw = await redis.get<string>(statsKey);
 
-  if (!stats || Object.keys(stats).length === 0) {
+  if (!raw || typeof raw !== 'string') {
     return {
       bookId,
       positiveCount: 0,
@@ -94,17 +88,61 @@ export async function getFeedbackStats(bookId: string): Promise<FeedbackStats | 
     };
   }
 
-  return {
-    bookId,
-    positiveCount: Number(stats.positiveCount || 0),
-    negativeCount: Number(stats.negativeCount || 0),
-    averageScore: Number(stats.averageScore || 0),
-    totalFeedback: Number(stats.totalFeedback || 0),
-  };
+  try {
+    const stats = JSON.parse(raw) as FeedbackStats;
+    return {
+      bookId,
+      positiveCount: Number(stats.positiveCount || 0),
+      negativeCount: Number(stats.negativeCount || 0),
+      averageScore: Number(stats.averageScore || 0),
+      totalFeedback: Number(stats.totalFeedback || 0),
+    };
+  } catch {
+    return {
+      bookId,
+      positiveCount: 0,
+      negativeCount: 0,
+      averageScore: 0,
+      totalFeedback: 0,
+    };
+  }
 }
 
 /**
- * Update feedback statistics
+ * Lua script for atomic feedback stats update.
+ * Guarantees no lost updates even under concurrent writes.
+ */
+const UPDATE_STATS_SCRIPT = `
+local key = KEYS[1]
+local ttl = tonumber(ARGV[1])
+local positiveDelta = tonumber(ARGV[2])
+local negativeDelta = tonumber(ARGV[3])
+local scoreDelta = tonumber(ARGV[4])
+
+local raw = redis.call('GET', key)
+local stats = {}
+if raw then
+  stats = cjson.decode(raw)
+end
+
+local totalFeedback = (stats.totalFeedback or 0) + 1
+local prevTotal = stats.totalFeedback or 0
+local prevAvg = stats.averageScore or 0
+local averageScore = (prevAvg * prevTotal + scoreDelta) / totalFeedback
+
+stats.bookId = KEYS[2]
+stats.positiveCount = (stats.positiveCount or 0) + positiveDelta
+stats.negativeCount = (stats.negativeCount or 0) + negativeDelta
+stats.averageScore = math.floor(averageScore * 10000 + 0.5) / 10000
+stats.totalFeedback = totalFeedback
+
+redis.call('SET', key, cjson.encode(stats))
+redis.call('EXPIRE', key, ttl)
+return cjson.encode(stats)
+`;
+
+/**
+ * Update feedback statistics atomically via Lua script.
  */
 async function updateFeedbackStats(
   bookId: string,
@@ -114,53 +152,57 @@ async function updateFeedbackStats(
     return;
   }
 
-  const statsKey = `${STATS_PREFIX}book:${bookId}`;
+  const statsKey = REDIS_KEYS.stats(bookId);
+  const ttl = TTL.FEEDBACK;
 
-  // Get current stats
-  const current = await getFeedbackStats(bookId) || {
-    positiveCount: 0,
-    negativeCount: 0,
-    averageScore: 0,
-    totalFeedback: 0,
-  };
-
-  // Update based on feedback type
-  let positiveCount = current.positiveCount;
-  let negativeCount = current.negativeCount;
-  let scoreIncrement = 0;
+  let positiveDelta = 0;
+  let negativeDelta = 0;
+  let scoreDelta = 0;
 
   switch (feedbackType) {
     case 'thumbs_up':
-      positiveCount++;
-      scoreIncrement = 1;
+      positiveDelta = 1;
+      scoreDelta = 1;
       break;
     case 'thumbs_down':
-      negativeCount++;
-      scoreIncrement = -1;
+      negativeDelta = 1;
+      scoreDelta = -1;
       break;
     case 'not_relevant':
-      negativeCount++;
-      scoreIncrement = -0.5;
+      negativeDelta = 1;
+      scoreDelta = -0.5;
       break;
     case 'click':
-      // Neutral feedback - slight positive boost
-      scoreIncrement = 0.1;
+      scoreDelta = 0.1;
       break;
   }
 
-  const totalFeedback = current.totalFeedback + 1;
-  const averageScore = (current.averageScore * current.totalFeedback + scoreIncrement) / totalFeedback;
-
-  // Save updated stats
-  await redis.hset(statsKey, {
-    bookId,
-    positiveCount,
-    negativeCount,
-    averageScore,
-    totalFeedback,
-  });
-
-  await redis.expire(statsKey, 60 * 60 * 24 * 30); // 30 days TTL
+  try {
+    await redis.eval(
+      UPDATE_STATS_SCRIPT,
+      [statsKey, bookId],
+      [String(ttl), String(positiveDelta), String(negativeDelta), String(scoreDelta)]
+    );
+  } catch (error) {
+    console.error('[feedback] Failed to update stats atomically:', error);
+    // Fallback: non-atomic update
+    const current = await getFeedbackStats(bookId) || {
+      positiveCount: 0,
+      negativeCount: 0,
+      averageScore: 0,
+      totalFeedback: 0,
+    };
+    const totalFeedback = current.totalFeedback + 1;
+    const averageScore = (current.averageScore * current.totalFeedback + scoreDelta) / totalFeedback;
+    await redis.set(statsKey, JSON.stringify({
+      bookId,
+      positiveCount: current.positiveCount + positiveDelta,
+      negativeCount: current.negativeCount + negativeDelta,
+      averageScore,
+      totalFeedback,
+    }));
+    await redis.expire(statsKey, ttl);
+  }
 }
 
 /**
@@ -210,7 +252,7 @@ async function getAllFeedbackStats(): Promise<FeedbackStats[]> {
 
   do {
     const scanResult: [cursor: string | number, keys: string[]] = await redis.scan(cursor, {
-      match: `${STATS_PREFIX}book:*`,
+      match: 'rag:stats:book:*',
       count: 100,
     });
 
@@ -219,10 +261,11 @@ async function getAllFeedbackStats(): Promise<FeedbackStats[]> {
 
     for (const key of keys) {
       try {
-        const stats = await redis.hgetall(key);
-        if (stats && Object.keys(stats).length > 0) {
+        const raw = await redis.get<string>(key);
+        if (raw && typeof raw === 'string') {
+          const stats = JSON.parse(raw) as FeedbackStats;
           allStats.push({
-            bookId: String(stats.bookId || key.replace(`${STATS_PREFIX}book:`, '')),
+            bookId: String(stats.bookId || key.replace('rag:stats:book:', '')),
             positiveCount: Number(stats.positiveCount || 0),
             negativeCount: Number(stats.negativeCount || 0),
             averageScore: Number(stats.averageScore || 0),
@@ -252,7 +295,7 @@ export async function clearOldFeedback(daysOld: number = 30): Promise<number> {
 
   do {
     const scanResult: [cursor: string | number, keys: string[]] = await redis.scan(cursor, {
-      match: `${FEEDBACK_PREFIX}*`,
+      match: 'rag:feedback:*',
       count: 100,
     });
 
@@ -261,16 +304,25 @@ export async function clearOldFeedback(daysOld: number = 30): Promise<number> {
 
     for (const key of keys) {
       try {
-        const feedback = await redis.hgetall(key);
+        const raw = await redis.get<string>(key);
+        if (!raw || typeof raw !== 'string') continue;
+
+        let feedback: Record<string, unknown>;
+        try {
+          feedback = JSON.parse(raw);
+        } catch {
+          continue;
+        }
+
         const timestamp = Number(feedback?.timestamp || key.match(/^rag:feedback:feedback-(\d+)-/)?.[1] || 0);
 
         if (timestamp > 0 && timestamp < cutoffTime) {
-          const feedbackId = String(feedback?.id || key.replace(FEEDBACK_PREFIX, ''));
+          const feedbackId = String(feedback?.id || key.replace('rag:feedback:', ''));
           const sessionId = typeof feedback?.sessionId === 'string' ? feedback.sessionId : '';
 
           await redis.del(key);
           if (sessionId) {
-            await redis.srem(`${SESSION_FEEDBACK_PREFIX}${sessionId}`, feedbackId);
+            await redis.srem(REDIS_KEYS.sessionFeedback(sessionId), feedbackId);
           }
           deletedCount++;
         }

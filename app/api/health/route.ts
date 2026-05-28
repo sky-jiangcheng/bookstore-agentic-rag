@@ -16,11 +16,13 @@ export async function GET() {
 
   const vectorStoreStatus = await checkVectorStoreStatus();
 
+  const requiredDepsMet = database || catalogService;
+  const status = requiredDepsMet ? 'ok' : 'degraded';
+
   return NextResponse.json({
-    status: 'ok',
+    status,
+    healthy: requiredDepsMet,
     service: 'bookstore-agentic-rag',
-    database,
-    vector,
     dependencies: {
       database,
       vector,
@@ -30,7 +32,6 @@ export async function GET() {
     vectorStore: {
       configured: vector,
       status: vectorStoreStatus,
-      // When empty and configured, the system auto-triggers precompute on first request
       autoPrecompute: vector && vectorStoreStatus === 'empty',
     },
     timestamp: new Date().toISOString(),

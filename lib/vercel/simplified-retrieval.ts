@@ -108,7 +108,7 @@ function applyHardConstraints(books: Book[], requirement: RequirementAnalysis): 
 }
 
 function rankBooksByRelevance(books: Book[], queryKeywords: string[]): Book[] {
-  return books.sort((a, b) => {
+  return [...books].sort((a, b) => {
     const relevanceDiff = b.relevance_score - a.relevance_score;
     if (Math.abs(relevanceDiff) > RELEVANCE_THRESHOLD) {
       return relevanceDiff;

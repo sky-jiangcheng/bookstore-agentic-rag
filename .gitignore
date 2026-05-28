@@ -15,3 +15,6 @@ tsconfig.tsbuildinfo
 .env.local.backup
 .env.production.check
 .env.railway.example
+
+# AtomCode local-scope configs (machine-specific)
+.atomcode/local/

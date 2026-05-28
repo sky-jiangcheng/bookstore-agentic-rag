@@ -9,8 +9,8 @@ import crypto from 'crypto';
 import { redis } from '@/lib/upstash';
 import type { ConversationSession, ConversationTurn } from '@/lib/types/rag';
 
-const SESSION_PREFIX = 'rag:session:';
-const SESSION_LIST_PREFIX = 'rag:sessions:';
+import { getStringSetMembers } from '@/lib/utils/redis-helpers';
+import { REDIS_KEYS } from '@/lib/utils/redis-keys';
 
 const DEFAULT_TTL = 60 * 60; // 1 hour
 const MAX_TURNS_PER_SESSION = 20;
@@ -24,15 +24,6 @@ async function cleanupOldSessionsIfDue(now: number = Date.now()): Promise<void> 
 
   lastLazyCleanupAt = now;
   await cleanupOldSessions(DEFAULT_TTL * 1000);
-}
-
-async function getStringSetMembers(key: string): Promise<string[]> {
-  if (!redis) {
-    return [];
-  }
-
-  const members = await redis.smembers<unknown[]>(key);
-  return members.filter((member): member is string => typeof member === 'string');
 }
 
 /**
@@ -67,33 +58,21 @@ export async function getSession(sessionId: string): Promise<ConversationSession
     return null;
   }
 
-  const sessionData = await redis.hgetall(`${SESSION_PREFIX}${sessionId}`);
+        const raw = await redis.get<string>(REDIS_KEYS.session(sessionId));
 
-  if (!sessionData || Object.keys(sessionData).length === 0) {
+  if (!raw || typeof raw !== 'string') {
     return null;
   }
 
-  // Redis HGETALL returns all values as strings; nested objects need JSON.parse
-  const parsed = { ...sessionData } as Record<string, unknown>;
-  if (typeof parsed.turns === 'string') {
-    try {
-      parsed.turns = JSON.parse(parsed.turns as string);
-    } catch {
-      parsed.turns = [];
+  try {
+    const parsed = JSON.parse(raw) as ConversationSession;
+    if (!parsed.id || !Array.isArray(parsed.turns)) {
+      return null;
     }
+    return parsed;
+  } catch {
+    return null;
   }
-  if (typeof parsed.metadata === 'string') {
-    try {
-      parsed.metadata = JSON.parse(parsed.metadata as string);
-    } catch {
-      parsed.metadata = { startTime: parsed.createdAt ? Number(parsed.createdAt) : Date.now(), turnCount: 0 };
-    }
-  }
-  // Ensure numeric fields
-  parsed.createdAt = Number(parsed.createdAt) || 0;
-  parsed.updatedAt = Number(parsed.updatedAt) || 0;
-
-  return parsed as unknown as ConversationSession;
 }
 
 /**
@@ -228,7 +207,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
     return;
   }
 
-  await redis.del(`${SESSION_PREFIX}${sessionId}`);
+  await redis.del(REDIS_KEYS.session(sessionId));
 }
 
 /**
@@ -244,7 +223,7 @@ export async function cleanupOldSessions(maxAgeMs: number = DEFAULT_TTL * 1000):
 
   try {
     // Get all session IDs from the session list set
-    const sessionIds = await getStringSetMembers(SESSION_LIST_PREFIX);
+    const sessionIds = await getStringSetMembers(REDIS_KEYS.sessionList, redis);
 
     if (!sessionIds || sessionIds.length === 0) {
       return 0;
@@ -252,20 +231,26 @@ export async function cleanupOldSessions(maxAgeMs: number = DEFAULT_TTL * 1000):
 
     for (const sessionId of sessionIds) {
       try {
-        const sessionData = await redis.hgetall(`${SESSION_PREFIX}${sessionId}`);
+  const raw = await redis.get<string>(REDIS_KEYS.session(sessionId));
 
-        if (!sessionData || Object.keys(sessionData).length === 0) {
+        if (!raw || typeof raw !== 'string') {
           // Session data is gone, remove from list
-          await redis.srem(SESSION_LIST_PREFIX, sessionId);
+          await redis.srem(REDIS_KEYS.sessionList, sessionId);
           deletedCount++;
           continue;
         }
 
-        const updatedAt = Number(sessionData.updatedAt || sessionData.createdAt || 0);
+        let updatedAt = 0;
+        try {
+          const parsed = JSON.parse(raw);
+          updatedAt = Number(parsed.updatedAt || parsed.createdAt || 0);
+        } catch {
+          updatedAt = 0;
+        }
 
         if (updatedAt > 0 && updatedAt < cutoffTime) {
-          await redis.del(`${SESSION_PREFIX}${sessionId}`);
-          await redis.srem(SESSION_LIST_PREFIX, sessionId);
+          await redis.del(REDIS_KEYS.session(sessionId));
+          await redis.srem(REDIS_KEYS.sessionList, sessionId);
           deletedCount++;
         }
       } catch (error) {
@@ -306,15 +291,15 @@ async function saveSession(session: ConversationSession): Promise<void> {
     return;
   }
 
-  const sessionKey = `${SESSION_PREFIX}${session.id}`;
+  const sessionKey = REDIS_KEYS.session(session.id);
 
-  // Save session data
-  await redis.hset(sessionKey, session as unknown as Record<string, unknown>);
+  // Save session data using JSON serialization to preserve nested structures
+  await redis.set(sessionKey, JSON.stringify(session));
   await redis.expire(sessionKey, DEFAULT_TTL);
 
   // Add to session list for cleanup
-  await redis.sadd(SESSION_LIST_PREFIX, session.id);
-  await redis.expire(SESSION_LIST_PREFIX, DEFAULT_TTL * 2);
+  await redis.sadd(REDIS_KEYS.sessionList, session.id);
+  await redis.expire(REDIS_KEYS.sessionList, DEFAULT_TTL * 2);
 }
 
 /**

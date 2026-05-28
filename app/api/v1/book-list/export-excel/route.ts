@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid request', details: err.flatten() }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
     logServerError('[book-list/export-excel]', err);
     return NextResponse.json(buildSafeErrorResponse(err, '导出失败'), { status: 500 });

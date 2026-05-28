@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 import { precomputeEmbeddings } from '@/lib/vercel/simplified-retrieval';
 import { validateToken } from '@/lib/clients/auth-client';
 import { checkVectorStoreStatus } from '@/lib/vector-initializer';
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 /**
  * POST /api/admin/embeddings/precompute
@@ -31,13 +39,13 @@ export async function POST(request: NextRequest) {
 
   let authorized = false;
 
-  // Method 1: static admin secret (CI/CD, deploy hooks)
-  if (adminSecret && headerAdminSecret && headerAdminSecret === adminSecret) {
+  // Method 1: static admin secret (CI/CD, deploy hooks) — timing-safe comparison
+  if (adminSecret && headerAdminSecret && timingSafeEqual(headerAdminSecret, adminSecret)) {
     authorized = true;
   }
 
-  // Method 2: Vercel Cron secret
-  if (!authorized && cronSecret && headerCronSecret && headerCronSecret === cronSecret) {
+  // Method 2: Vercel Cron secret — timing-safe comparison
+  if (!authorized && cronSecret && headerCronSecret && timingSafeEqual(headerCronSecret, cronSecret)) {
     authorized = true;
   }
 

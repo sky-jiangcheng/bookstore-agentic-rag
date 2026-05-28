@@ -321,7 +321,7 @@ export async function searchCatalogFromService(filters: CatalogSearchFilters): P
 }
 
 export async function getBookDetailsFromService(bookId: string): Promise<Book | null> {
-  const payload = await fetchFromCatalogService<{ book?: CatalogApiBook }>(`/api/rag/books/${bookId}`);
+  const payload = await fetchFromCatalogService<{ book?: CatalogApiBook }>(`/api/rag/books/${encodeURIComponent(bookId)}`);
   return payload.book ? mapBook(payload.book) : null;
 }
 

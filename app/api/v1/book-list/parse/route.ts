@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(data);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid request', details: err.flatten() }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
     if (err instanceof BookListHttpError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
