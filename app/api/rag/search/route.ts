@@ -22,7 +22,7 @@ const searchQuerySchema = z.object({
     .min(1, 'Query parameter is required')
     .max(500, 'Query too long (max 500 characters)')
     .transform((q) => q.trim()),
-  top_k: z.coerce.number().int().min(1).max(50).default(20),
+  top_k: z.coerce.number().int().min(1).max(50).catch(20),
 });
 
 export async function OPTIONS(req: NextRequest) {
@@ -49,10 +49,10 @@ export async function GET(req: NextRequest) {
     const { query, top_k } = parseResult.data;
 
     // Generate embedding from the query text
-    const { vector, sparseVector } = generateEmbeddingPair(query.trim());
+    const { vector } = generateEmbeddingPair(query.trim());
 
     // Search the vector index
-    const searchResults = await vectorSearch(vector, top_k, sparseVector);
+    const searchResults = await vectorSearch(vector, top_k);
 
     // Extract book IDs for batch fetching
     const bookIds = searchResults.map((r) => r.metadata.bookId);

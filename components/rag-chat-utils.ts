@@ -95,7 +95,7 @@ export function normalizeBookRecommendations(
 ): BookRecommendation[] {
   return raw
     .map((item) => ({
-      title: typeof item.title === 'string' ? item.title.trim() : '未命名图书',
+      title: typeof item.title === 'string' ? item.title.trim() || '未命名图书' : '未命名图书',
       author: typeof item.author === 'string' ? item.author.trim() : '未知作者',
       price: typeof item.price === 'number' ? item.price : Number(item.price) || 0,
       explanation: typeof item.explanation === 'string' ? item.explanation.trim() : '',

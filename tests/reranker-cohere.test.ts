@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as reranker from '../lib/reranking/reranker';
 
-import { CohereReranker } from '../lib/reranking/reranker.ts';
+const { CohereReranker } = reranker;
 
 test('CohereReranker returns an empty result list when the API payload is malformed', async () => {
   const originalFetch = globalThis.fetch;
@@ -12,8 +13,8 @@ test('CohereReranker returns an empty result list when the API payload is malfor
     });
 
   try {
-    const reranker = new CohereReranker('test-key');
-    const output = await reranker.rerank({
+    const rerankerInstance = new CohereReranker('test-key');
+    const output = await rerankerInstance.rerank({
       query: '健康',
       documents: [
         {

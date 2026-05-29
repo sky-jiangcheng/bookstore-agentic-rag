@@ -2,16 +2,14 @@ import 'server-only';
 
 import { sql } from '@vercel/postgres';
 
-import config, { hasCatalogServiceConfig, hasVectorConfig } from '@/lib/config/environment';
-import { buildCatalogSearchQuery, buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank';
+import { buildCatalogSearchQuery, rerankCatalogBooks } from '@/lib/search/query-rerank';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 import { buildEmbeddingPair } from '@/lib/local-vector';
 import { vectorSearch } from '@/lib/vector-service';
 import { AsyncTimeoutError, withTimeout } from '@/lib/utils/async-timeout';
-import { fetchWithTimeout } from '@/lib/utils/fetch-timeout';
 
-const CATALOG_SERVICE_TIMEOUT_MS = 8000;
 const VECTOR_SEARCH_TIMEOUT_MS = 2500;
+const MAX_RESULTS = 50;
 
 interface CatalogApiBook {
   book_id?: string | number;
@@ -51,33 +49,13 @@ function normalizeBooks(records: CatalogApiBook[]): Book[] {
   return records.map(mapBook);
 }
 
-function mergeBooksById(primary: Book[], secondary: Book[]): Book[] {
-  const merged = new Map<string, Book>();
-
-  for (const book of primary) {
-    merged.set(book.book_id, book);
-  }
-
-  for (const book of secondary) {
-    const existing = merged.get(book.book_id);
-    if (!existing) {
-      merged.set(book.book_id, book);
-      continue;
-    }
-
-    merged.set(book.book_id, {
-      ...existing,
-      relevance_score: Math.max(existing.relevance_score ?? 0, book.relevance_score ?? 0),
-      description: existing.description || book.description,
-      cover_url: existing.cover_url || book.cover_url,
-    });
-  }
-
-  return Array.from(merged.values());
-}
-
 export async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
   if (ids.length === 0) {
+    return [];
+  }
+
+  const numericIds = ids.map((id) => Number(id)).filter((n) => !isNaN(n));
+  if (numericIds.length === 0) {
     return [];
   }
 
@@ -95,167 +73,140 @@ export async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
         cover_url,
         COALESCE(popularity_score, 0) AS relevance_score
       FROM books
-      WHERE id::text = ANY($1::text[])
+      WHERE id = ANY($1::bigint[])
     `,
-    [ids]
+    [numericIds]
   );
 
   const byId = new Map(result.rows.map((row) => [String(row.book_id ?? row.id), mapBook(row)]));
   return ids.map((id) => byId.get(String(id))).filter((book): book is Book => Boolean(book));
 }
 
-async function fetchFromCatalogService<T>(path: string, init?: RequestInit): Promise<T> {
-  if (!hasCatalogServiceConfig()) {
-    throw new Error('Catalog service is not configured');
+/**
+ * 对 books 按非语义过滤器做 JS 端过滤：author(包含)、price_min、price_max、categories
+ */
+function applyFilters(books: Book[], filters: CatalogSearchFilters): Book[] {
+  let filtered = books;
+
+  if (filters.author) {
+    const authorLower = filters.author.toLowerCase();
+    filtered = filtered.filter((b) => b.author.toLowerCase().includes(authorLower));
+  }
+  if (filters.price_min !== undefined) {
+    filtered = filtered.filter((b) => b.price >= filters.price_min!);
+  }
+  if (filters.price_max !== undefined) {
+    filtered = filtered.filter((b) => b.price <= filters.price_max!);
+  }
+  if (filters.categories && filters.categories.length > 0) {
+    const catSet = new Set(filters.categories);
+    filtered = filtered.filter((b) => catSet.has(b.category));
   }
 
-  const response = await fetchWithTimeout(
-    `${config.services.catalogUrl}${path}`,
-    {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init?.headers ?? {}),
-      },
-      cache: 'no-store',
-    },
-    CATALOG_SERVICE_TIMEOUT_MS,
-  );
-
-  if (!response.ok) {
-    throw new Error(`Catalog service request failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
+  return filtered;
 }
 
-export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): Promise<Book[]> {
-  const searchTerms = filters.query ? buildCatalogSearchTerms(filters.query) : [];
-  const searchQuery = filters.query ? buildCatalogSearchQuery(filters.query) : '';
+/**
+ * 无文本查询时的浏览/筛选模式 → 简单 SQL（无 ILIKE 交叉乘积）
+ */
+async function searchCatalogByFilters(filters: CatalogSearchFilters): Promise<Book[]> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  let paramIdx = 0;
+
+  if (filters.author) {
+    paramIdx++;
+    conditions.push(`author ILIKE '%' || $${paramIdx} || '%'`);
+    params.push(filters.author);
+  }
+  if (filters.price_min !== undefined) {
+    paramIdx++;
+    conditions.push(`price >= $${paramIdx}`);
+    params.push(filters.price_min);
+  }
+  if (filters.price_max !== undefined) {
+    paramIdx++;
+    conditions.push(`price <= $${paramIdx}`);
+    params.push(filters.price_max);
+  }
+  if (filters.categories && filters.categories.length > 0) {
+    const placeholders = filters.categories.map((_, i) => `$${paramIdx + i + 1}`).join(',');
+    conditions.push(`category IN (${placeholders})`);
+    params.push(...filters.categories);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
   const query = `
-    WITH ranked_books AS (
-      SELECT
-        id AS book_id,
-        title,
-        author,
-        COALESCE(publisher, 'Unknown Publisher') AS publisher,
-        COALESCE(price, 0) AS price,
-        COALESCE(stock, 0) AS stock,
-        COALESCE(category, 'general') AS category,
-        COALESCE(description, '') AS description,
-        cover_url,
-        COALESCE(popularity_score, 0) AS popularity_score,
-        COALESCE(updated_at, NOW()) AS updated_at,
-        COALESCE((
-          SELECT SUM(
-            CASE WHEN title ILIKE '%' || term || '%' THEN 6 ELSE 0 END
-            + CASE WHEN category ILIKE '%' || term || '%' THEN 5 ELSE 0 END
-            + CASE WHEN author ILIKE '%' || term || '%' THEN 1 ELSE 0 END
-          )
-          FROM unnest(COALESCE($1::text[], ARRAY[]::text[])) AS term
-          WHERE term <> ''
-        ), 0) AS search_rank
-      FROM books
-      WHERE
-        (
-          $1::text[] IS NULL
-          OR cardinality($1::text[]) = 0
-          OR EXISTS (
-            SELECT 1
-            FROM unnest($1::text[]) AS term
-            WHERE term <> ''
-              AND (
-                title ILIKE '%' || term || '%'
-                OR author ILIKE '%' || term || '%'
-                OR category ILIKE '%' || term || '%'
-              )
-          )
-        )
-        AND ($2::text IS NULL OR author ILIKE '%' || $2 || '%')
-        AND ($3::numeric IS NULL OR price >= $3)
-        AND ($4::numeric IS NULL OR price <= $4)
-        AND (
-          $5::text[] IS NULL OR cardinality($5::text[]) = 0 OR category = ANY($5::text[])
-        )
-    )
     SELECT
-      book_id,
+      id AS book_id,
       title,
       author,
-      publisher,
-      price,
-      stock,
-      category,
-      description,
+      COALESCE(publisher, 'Unknown Publisher') AS publisher,
+      COALESCE(price, 0) AS price,
+      COALESCE(stock, 0) AS stock,
+      COALESCE(category, 'general') AS category,
+      COALESCE(description, '') AS description,
       cover_url,
-      CASE
-        WHEN COALESCE(cardinality($1::text[]), 0) > 0 THEN search_rank
-        ELSE popularity_score
-      END AS relevance_score
-    FROM ranked_books
-    ORDER BY
-      CASE
-        WHEN COALESCE(cardinality($1::text[]), 0) > 0 THEN search_rank
-        ELSE popularity_score
-      END DESC,
-      popularity_score DESC,
-      updated_at DESC
-    LIMIT 50
+      COALESCE(popularity_score, 0) AS relevance_score
+    FROM books
+    ${whereClause}
+    ORDER BY COALESCE(popularity_score, 0) DESC, COALESCE(updated_at, NOW()) DESC
+    LIMIT ${MAX_RESULTS}
   `;
 
-  const result = await sql.query<CatalogApiBook>(query, [
-    searchTerms.length > 0 ? searchTerms : null,
-    filters.author ?? null,
-    filters.price_min ?? null,
-    filters.price_max ?? null,
-    filters.categories && filters.categories.length > 0 ? filters.categories : null,
-  ]);
+  const result = await sql.query<CatalogApiBook>(query, params);
+  return normalizeBooks(result.rows);
+}
 
-  const sqlBooks = normalizeBooks(result.rows);
-
+/**
+ * 搜索目录：有 query 时走 pgvector 语义搜索，无 query 时走简单筛选 SQL。
+ */
+export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): Promise<Book[]> {
+  // ── 无文本查询 → 浏览/筛选模式 ──
   if (!filters.query) {
-    return sqlBooks;
+    return searchCatalogByFilters(filters);
   }
 
-  // Always rerank SQL results for better precision, even on Vercel.
-  // The reranker is a pure JS function — no external deps, no network calls.
-  const rerankedSql = rerankCatalogBooks(sqlBooks, searchQuery || filters.query);
+  // ── 有文本查询 → pgvector 语义搜索管线 ──
+  const searchQuery = buildCatalogSearchQuery(filters.query);
+  const queryText = searchQuery || filters.query;
+  const { vector } = buildEmbeddingPair(queryText);
 
-  // Vector enrichment is optional; keep it off on Vercel catalog routes so smoke/API calls
-  // stay inside the serverless request budget. Dedicated RAG paths still use vector search.
-  if (filters.query && hasVectorConfig() && !config.vercel.enabled) {
-    try {
-      const { vector, sparseVector } = buildEmbeddingPair(searchQuery || filters.query);
-      const vectorResults = await withTimeout(
-        vectorSearch(vector, 50, sparseVector),
-        VECTOR_SEARCH_TIMEOUT_MS,
-        'catalog vector search',
-      );
-      const ids = vectorResults.map((entry) => String(entry.metadata?.bookId ?? entry.id));
-      const books = await fetchBooksByIds(ids);
-      const bookById = new Map(books.map((book) => [book.book_id, book]));
+  let books: Book[];
+  try {
+    // Step 1: 向量相似度搜索（HNSW 索引，亚毫秒级）
+    const vectorResults = await withTimeout(
+      vectorSearch(vector, MAX_RESULTS),
+      VECTOR_SEARCH_TIMEOUT_MS,
+      'catalog vector search',
+    );
 
-      const vectorBooks = ids
-      .map((id) => bookById.get(id))
-      .filter((book): book is Book => Boolean(book))
-      .map((book) => ({
-        ...book,
-        relevance_score:
-          Number(vectorResults.find((entry) => String(entry.metadata?.bookId ?? entry.id) === book.book_id)?.score ?? book.relevance_score ?? 0),
-      }));
+    // Step 2: 按 ID 获取完整书籍记录
+    const ids = vectorResults.map((entry) => String(entry.metadata?.bookId ?? entry.id));
+    books = await fetchBooksByIds(ids);
 
-      return rerankCatalogBooks(mergeBooksById(rerankedSql, vectorBooks), searchQuery || filters.query || '');
-    } catch (error) {
-      if (error instanceof AsyncTimeoutError) {
-        console.warn('[catalog/search] Vector enrichment timed out; returning cleaned SQL results only');
-        return rerankedSql;
-      }
-
-      throw error;
+    // Step 3: 注入向量搜索的 relevance_score
+    const scoreMap = new Map(
+      vectorResults.map((entry) => [String(entry.metadata?.bookId ?? entry.id), entry.score]),
+    );
+    books = books.map((b) => ({
+      ...b,
+      relevance_score: Math.max(scoreMap.get(b.book_id) ?? b.relevance_score, b.relevance_score),
+    }));
+  } catch (error) {
+    if (error instanceof AsyncTimeoutError) {
+      console.warn('[catalog/search] Vector search timed out; returning filter-only results');
+      return searchCatalogByFilters(filters);
     }
+    throw error;
   }
 
-  return rerankedSql;
+  // Step 4: JS 端应用非语义过滤器（author、price 范围、categories）
+  books = applyFilters(books, filters);
+
+  // Step 5: rerank 提升精度（纯 JS，无外部依赖）
+  return rerankCatalogBooks(books, queryText);
 }
 
 export async function getBookDetailsFromDatabase(bookId: string): Promise<Book | null> {

@@ -34,11 +34,7 @@ export async function POST(req: NextRequest) {
 
     const books = await searchCatalog(parseResult.data);
 
-    return NextResponse.json({
-      books,
-      count: books.length,
-      filtered: true,
-    });
+    return await handleSearch(filters);
   } catch (error) {
     logServerError('[catalog/search]', error);
 

@@ -1,5 +1,4 @@
 // lib/upstash.ts
-import { Index } from '@upstash/vector';
 import { Redis } from '@upstash/redis';
 import { config, hasRedisConfig, hasVectorConfig } from '@/lib/config/environment';
 import { buildBookDocument, buildSparseVector } from './local-vector';
@@ -189,32 +188,11 @@ export async function getVectorStoreInfo(): Promise<{
 } | null> {
   if (!vectorIndex) return null;
   try {
-    const info = await vectorIndex.info();
-    return {
-      // Handle both camelCase and snake_case response keys
-      vectorCount: (info as any).vectorCount ?? (info as any).vector_count ?? 0,
-      pendingVectorCount: (info as any).pendingVectorCount ?? (info as any).pending_vector_count ?? 0,
-      indexSize: (info as any).indexSize ?? (info as any).index_size ?? 0,
-      dimension: (info as any).dimension ?? 0,
-    };
+    return new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL || '',
+      token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+    });
   } catch {
     return null;
   }
-}
-
-export async function deleteAllBookChunks(bookId: string): Promise<void> {
-  if (!vectorIndex) {
-    throw new Error('Vector search is not available');
-  }
-
-  // Delete all chunks belonging to this book using prefix-based deletion
-  const CHUNK_NAMESPACE = `chunk:${bookId}`;
-
-  try {
-    const result = await vectorIndex.delete({ prefix: CHUNK_NAMESPACE });
-    console.log(`[upstash] Deleted ${result.deleted} chunks for book ${bookId}`);
-  } catch (error) {
-    console.error(`[upstash] Failed to delete chunks for book ${bookId}:`, error);
-    throw error;
-  }
-}
+})();

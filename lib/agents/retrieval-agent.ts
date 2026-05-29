@@ -195,8 +195,8 @@ export function enforceHardConstraints(books: Book[], requirement: RequirementAn
 
 async function retrieveSemantic(requirement: RequirementAnalysis, topK: number): Promise<Book[]> {
   try {
-    const { vector, sparseVector } = generateEmbeddingPair(requirement.original_query);
-    const vectorResults = await vectorSearch(vector, topK, sparseVector);
+    const { vector } = generateEmbeddingPair(requirement.original_query);
+    const vectorResults = await vectorSearch(vector, topK);
     const ids = vectorResults.map((result) => result.id);
 
     if (ids.length === 0) {

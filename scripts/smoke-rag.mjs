@@ -2,6 +2,32 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
+// Proxy support for environments behind firewall (e.g. mainland China)
+const PROXY_URL = process.env.http_proxy || process.env.https_proxy || process.env.HTTP_PROXY || process.env.HTTPS_PROXY || '';
+let customFetch = globalThis.fetch;
+if (PROXY_URL) {
+  const { request, ProxyAgent } = await import('undici');
+  const proxyAgent = new ProxyAgent(PROXY_URL);
+  customFetch = async (url, opts = {}) => {
+    const headers = opts.headers || {};
+    const method = opts.method || 'GET';
+    const body = opts.body;
+    const undiciOpts = { method, headers, dispatcher: proxyAgent };
+    if (body) undiciOpts.body = body;
+    const res = await request(url, undiciOpts);
+    // Wrap undici response into fetch-like interface
+    const text = await res.body.text();
+    return {
+      ok: res.statusCode >= 200 && res.statusCode < 300,
+      status: res.statusCode,
+      headers: { get: (name) => res.headers[name.toLowerCase()] },
+      text: () => text,
+      json: () => JSON.parse(text),
+      get contentType() { return (res.headers['content-type'] || ''); },
+    };
+  };
+}
+
 function resolveBaseUrl() {
   return (process.env.RAG_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
 }
@@ -43,7 +69,7 @@ async function readQueries() {
 }
 
 async function callHealth(baseUrl) {
-  const response = await fetch(`${baseUrl}/api/health`);
+  const response = await customFetch(`${baseUrl}/api/health`);
   const body = await readJsonResponse(response, 'health');
   return {
     ok: response.ok,
@@ -53,7 +79,7 @@ async function callHealth(baseUrl) {
 }
 
 async function callCatalogSearch(baseUrl, query) {
-  const response = await fetch(`${baseUrl}/api/catalog/search`, {
+  const response = await customFetch(`${baseUrl}/api/catalog/search`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

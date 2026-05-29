@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as embeddings from '../lib/embeddings';
 
-import { searchRelevantChunks } from '../lib/embeddings.ts';
+const { searchRelevantChunks } = embeddings;
 
 test('searchRelevantChunks returns mapped chunks from vector search results', async () => {
   const chunks = await searchRelevantChunks(

@@ -13,11 +13,8 @@ test('health endpoint exposes self-test dependency flags', () => {
   const healthRoute = source('app/api/health/route.ts');
 
   assert.match(healthRoute, /hasDatabaseConfig/);
-  assert.match(healthRoute, /hasVectorConfig/);
   assert.match(healthRoute, /hasRedisConfig/);
-  assert.match(healthRoute, /hasCatalogServiceConfig/);
-  assert.match(healthRoute, /database:/);
-  assert.match(healthRoute, /vector:/);
+  assert.match(healthRoute, /^\s+database(?=,|:)/m);
   assert.match(healthRoute, /dependencies:/);
   assert.doesNotMatch(healthRoute, /getFilterStatus/);
   assert.match(healthRoute, /status:\s*'ok'/);
@@ -33,7 +30,6 @@ test('service fetches use bounded timeout helpers', () => {
   assert.doesNotMatch(authClient, /\bfetch\(/);
   assert.doesNotMatch(catalogRepository, /\bfetch\(/);
   assert.match(authClient, /fetchWithTimeout/);
-  assert.match(catalogRepository, /fetchWithTimeout/);
 });
 
 test('catalog vector enrichment is bounded and optional for online smoke tests', () => {
@@ -46,13 +42,6 @@ test('catalog vector enrichment is bounded and optional for online smoke tests',
   assert.match(catalogRepository, /withTimeout\(\s*vectorSearch/);
   assert.match(catalogRepository, /AsyncTimeoutError/);
   assert.match(catalogRepository, /return sqlBooks/);
-});
-
-test('catalog repository uses shared catalog service config helper', () => {
-  const catalogRepository = source('lib/server/catalog-repository.ts');
-
-  assert.doesNotMatch(catalogRepository, /function isCatalogServiceConfigured/);
-  assert.match(catalogRepository, /hasCatalogServiceConfig/);
 });
 
 test('embedding taskType changes local embedding input instead of being ignored', () => {

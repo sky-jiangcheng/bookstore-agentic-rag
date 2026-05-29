@@ -1,6 +1,6 @@
 import { createChunker } from './chunking';
 import type { TextChunk } from './types/rag';
-import { upsertChunkVector, vectorSearchChunks } from './upstash';
+import { upsertChunkVector, vectorSearchChunks } from './vector-service';
 import { buildBookDocument, buildEmbeddingPair } from './local-vector';
 
 type EmbeddingTaskType = 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' | 'SEMANTIC_SIMILARITY';
@@ -92,7 +92,7 @@ export async function generateBookChunkEmbeddings(
     textChunks.push(textChunk);
 
     // Store chunk embedding in vector database
-    await upsertChunkVector(chunk.id, embedding, {
+    await upsertChunkVector(bookId, chunk.index, embedding, {
       bookId,
       chunkIndex: chunk.index,
       text: chunk.text,

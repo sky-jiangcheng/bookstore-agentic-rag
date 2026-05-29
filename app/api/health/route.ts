@@ -1,18 +1,14 @@
 import { NextResponse } from 'next/server';
 
 import {
-  hasCatalogServiceConfig,
   hasDatabaseConfig,
   hasRedisConfig,
-  hasVectorConfig,
 } from '@/lib/config/environment';
 import { checkVectorStoreStatus } from '@/lib/vector-initializer';
 
 export async function GET() {
   const database = hasDatabaseConfig();
-  const vector = hasVectorConfig();
   const redis = hasRedisConfig();
-  const catalogService = hasCatalogServiceConfig();
 
   const vectorStoreStatus = await checkVectorStoreStatus();
 
@@ -27,12 +23,11 @@ export async function GET() {
     service: 'bookstore-agentic-rag',
     dependencies: {
       database,
-      vector,
+      vector: true,
       redis,
-      catalogService,
     },
     vectorStore: {
-      configured: vector,
+      configured: true,
       status: vectorStoreStatus,
       autoPrecompute: vector && vectorStoreStatus === 'empty',
     },

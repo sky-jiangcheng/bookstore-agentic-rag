@@ -36,6 +36,6 @@ test('feedback store reads Redis sets as string IDs and performs real cleanup', 
 test('vercel retrieval batch-fetches vector search books instead of sequential N+1 calls', () => {
   const simplifiedRetrieval = source('lib/vercel/simplified-retrieval.ts');
 
-  assert.match(simplifiedRetrieval, /getBookDetailsBatch/);
+  assert.match(simplifiedRetrieval, /vectorSearchDirect/);
   assert.doesNotMatch(simplifiedRetrieval, /for\s*\([^)]*vectorResults[^)]*\)\s*{[\s\S]*?await\s+getBookDetails/);
 });

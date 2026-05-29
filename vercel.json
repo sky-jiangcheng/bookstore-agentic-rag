@@ -7,8 +7,14 @@
   "framework": "nextjs",
   "regions": ["iad1"],
   "functions": {
-    "app/api/**/*.ts": {
+    "app/api/health/**/*.ts": {
       "maxDuration": 10
+    },
+    "app/api/v1/book-list/generate/**/*.ts": {
+      "maxDuration": 60
+    },
+    "app/api/v1/book-list/export-excel/**/*.ts": {
+      "maxDuration": 60
     }
   },
   "env": {

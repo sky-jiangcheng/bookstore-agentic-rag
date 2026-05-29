@@ -8,14 +8,11 @@ export const config = {
     url: process.env.POSTGRES_URL || process.env.DATABASE_URL || '',
   },
   upstash: {
-    vectorUrl: process.env.UPSTASH_VECTOR_REST_URL || '',
-    vectorToken: process.env.UPSTASH_VECTOR_REST_TOKEN || '',
     redisUrl: process.env.UPSTASH_REDIS_REST_URL || '',
     redisToken: process.env.UPSTASH_REDIS_REST_TOKEN || '',
   },
   services: {
     authUrl: process.env.AUTH_SERVICE_URL || '',
-    catalogUrl: process.env.CATALOG_SERVICE_URL || '',
   },
   app: {
     url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
@@ -69,16 +66,8 @@ export function hasDatabaseConfig(): boolean {
   return Boolean(config.database.url);
 }
 
-export function hasVectorConfig(): boolean {
-  return Boolean(config.upstash.vectorUrl && config.upstash.vectorToken);
-}
-
 export function hasRedisConfig(): boolean {
   return Boolean(config.upstash.redisUrl && config.upstash.redisToken);
-}
-
-export function hasCatalogServiceConfig(): boolean {
-  return Boolean(config.services.catalogUrl);
 }
 
 export default config;
