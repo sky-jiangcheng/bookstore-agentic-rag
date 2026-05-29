@@ -3,7 +3,7 @@ export const REDIS_KEYS = {
   sessionList: 'rag:sessions:',
   feedback: (id: string) => `rag:feedback:${id}`,
   stats: (bookId: string) => `rag:stats:book:${bookId}`,
-  sessionFeedback: (sessionId: string) => `rag:session:${sessionId}`,
+  sessionFeedback: (sessionId: string) => `rag:sessionfb:${sessionId}`,
   booklistSession: (requestId: string) => `booklist:session:${requestId}`,
 } as const;
 

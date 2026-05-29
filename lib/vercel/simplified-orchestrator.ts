@@ -216,14 +216,15 @@ export async function runFastRAGPipeline(
 ): Promise<VercelRAGPipelineResult> {
   try {
     const requirement = await analyzeRequirement(query, {});
-    const candidateTopK = Math.max((requirement.constraints.target_count ?? 10000) * 3, 30);
+    const targetCount = Math.min(requirement.constraints.target_count ?? 30, 100);
+    const candidateTopK = Math.max(targetCount * 3, 30);
     const retrieval = await retrieveCandidatesVercel(requirement, {
       topK: candidateTopK,
       enableKeyword: true,
     });
 
     // Simple recommendation (no LLM)
-    const recommendedBooks = retrieval.books;
+    const recommendedBooks = retrieval.books.slice(0, targetCount);
     const recommendation = {
       books: recommendedBooks.map(book => ({
         ...book,

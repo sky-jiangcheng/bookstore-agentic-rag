@@ -22,6 +22,8 @@ export async function GET() {
   return NextResponse.json({
     status,
     healthy: requiredDepsMet,
+    database,
+    vector,
     service: 'bookstore-agentic-rag',
     dependencies: {
       database,

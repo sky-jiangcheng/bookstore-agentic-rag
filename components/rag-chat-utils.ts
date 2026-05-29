@@ -99,7 +99,7 @@ export function normalizeBookRecommendations(
       author: typeof item.author === 'string' ? item.author.trim() : '未知作者',
       price: typeof item.price === 'number' ? item.price : Number(item.price) || 0,
       explanation: typeof item.explanation === 'string' ? item.explanation.trim() : '',
-      book_id: String(item.book_id ?? ''),
+      book_id: (item.book_id ?? '') as number | string,
       publisher: typeof item.publisher === 'string' ? item.publisher.trim() || null : null,
       category: typeof item.category === 'string' ? item.category.trim() || null : null,
       stock: typeof item.stock === 'number' ? item.stock : null,

@@ -162,12 +162,12 @@ async function handleFullPipeline(query: string, sessionId: string | undefined, 
 
         setTimeout(() => {
           if (isClosed) return;
-          closeStream();
           controller.enqueue(encodeSseEvent('error', {
             success: false,
             error: 'Request timeout',
             iterations: 0,
           }));
+          closeStream();
         }, STREAM_TIMEOUT_MS);
       },
     });
