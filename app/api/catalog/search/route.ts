@@ -1,53 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
 import { searchCatalog } from '@/lib/clients/catalog-client';
+import type { CatalogSearchFilters } from '@/lib/types/rag';
 import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 
-const catalogSearchSchema = z.object({
-  categories: z.array(z.string().max(50)).max(10).optional(),
-  author: z.string().max(200).optional(),
-  price_min: z.number().min(0).optional(),
-  price_max: z.number().min(0).optional(),
-  query: z.string().max(500).optional(),
-}).refine(
-  (data) => {
-    if (data.price_min !== undefined && data.price_max !== undefined) {
-      return data.price_min <= data.price_max;
-    }
-    return true;
-  },
-  { message: 'price_min must be less than or equal to price_max' }
-);
+async function handleSearch(
+  filters: CatalogSearchFilters,
+): Promise<NextResponse> {
+  const books = await searchCatalog(filters);
+
+  return NextResponse.json({
+    books,
+    count: books.length,
+    filtered: true,
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const rawBody = await req.json();
-    const parseResult = catalogSearchSchema.safeParse(rawBody);
+    const body = (await req.json()) as CatalogSearchFilters;
+    return await handleSearch(body);
+  } catch (error) {
+    logServerError('[catalog/search]', error);
+    return NextResponse.json(
+      buildSafeErrorResponse(error, '搜索目录失败'),
+      { status: 503 },
+    );
+  }
+}
 
-    if (!parseResult.success) {
-      return NextResponse.json(
-        { error: 'Invalid request' },
-        { status: 400 }
-      );
-    }
+/** GET 支持：从 URL 查询参数解析搜索条件 */
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const filters: CatalogSearchFilters = {};
 
-    const books = await searchCatalog(parseResult.data);
+    const query = searchParams.get('q') || searchParams.get('query');
+    if (query) filters.query = query;
+
+    const category = searchParams.get('category');
+    if (category) filters.categories = [category];
+
+    const author = searchParams.get('author');
+    if (author) filters.author = author;
+
+    const priceMin = searchParams.get('price_min') || searchParams.get('priceMin');
+    if (priceMin) filters.price_min = parseFloat(priceMin);
+
+    const priceMax = searchParams.get('price_max') || searchParams.get('priceMax');
+    if (priceMax) filters.price_max = parseFloat(priceMax);
 
     return await handleSearch(filters);
   } catch (error) {
     logServerError('[catalog/search]', error);
-
-    if (error instanceof Error && error.message.includes('not found')) {
-      return NextResponse.json(
-        { error: 'Not found' },
-        { status: 404 }
-      );
-    }
-
     return NextResponse.json(
       buildSafeErrorResponse(error, '搜索目录失败'),
-      { status: 500 }
+      { status: 503 },
     );
   }
 }

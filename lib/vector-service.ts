@@ -13,29 +13,16 @@ import {
   deleteChunkVectorsByBookIds as pgDeleteChunkVectorsByBookIds,
   getBookEmbeddingCount as pgGetBookEmbeddingCount,
   hasPgVectorSupport as pgHasPgVectorSupport,
+  type VectorBookMetadata,
+  type ChunkMetadata,
   type VectorSearchResult,
   type ChunkSearchResult,
 } from './postgres-vector';
-import type { Book, VectorBookMetadata, ChunkMetadata, SparseVector } from '@/lib/types/rag';
+import type { Book } from '@/lib/types/rag';
 
-import { Index } from '@upstash/vector';
-import { config, hasVectorConfig } from '@/lib/config/environment';
-import { buildBookDocument, buildSparseVector } from './local-vector';
+export type { VectorBookMetadata, ChunkMetadata };
 
-export const VECTOR_DIMENSION = 768;
-
-const upstashIndex = hasVectorConfig()
-  ? new Index({
-      url: config.upstash.vectorUrl,
-      token: config.upstash.vectorToken,
-    })
-  : null;
-
-type VectorBackend = 'pgvector' | 'upstash';
-
-function getVectorBackend(): VectorBackend {
-  return upstashIndex ? 'upstash' : 'pgvector';
-}
+const VECTOR_DIMENSION = 768;
 
 export interface VectorStoreInfo {
   backend: 'pgvector';
@@ -93,19 +80,7 @@ export async function deleteBookVector(bookId: string): Promise<void> {
 }
 
 export async function deleteChunkVectors(bookIds: string[]): Promise<void> {
-  const backend = getVectorBackend();
-
-  if (backend === 'upstash') {
-    if (!upstashIndex) {
-      throw new Error('Upstash Vector is not configured');
-    }
-    for (const bookId of bookIds) {
-      const namespace = `chunk:${bookId}`;
-      await upstashIndex.delete({ prefix: namespace });
-    }
-  } else {
-    await pgDeleteChunkVectorsByBookIds(bookIds);
-  }
+  await pgDeleteChunkVectorsByBookIds(bookIds);
 }
 
 export async function deleteAllBookChunks(bookId: string): Promise<void> {
@@ -132,5 +107,5 @@ export async function getVectorStoreInfo(): Promise<VectorStoreInfo | null> {
 }
 
 export function hasVectorSupport(): boolean {
-  return upstashIndex !== null;
+  return true; // pgvector is always available when PostgreSQL is configured
 }

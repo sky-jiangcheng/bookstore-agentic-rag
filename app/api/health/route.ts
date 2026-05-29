@@ -9,10 +9,11 @@ import { checkVectorStoreStatus } from '@/lib/vector-initializer';
 export async function GET() {
   const database = hasDatabaseConfig();
   const redis = hasRedisConfig();
+  const vector = hasDatabaseConfig(); // pgvector is always available when database is configured
 
   const vectorStoreStatus = await checkVectorStoreStatus();
 
-  const requiredDepsMet = database || catalogService;
+  const requiredDepsMet = database;
   const status = requiredDepsMet ? 'ok' : 'degraded';
 
   return NextResponse.json({

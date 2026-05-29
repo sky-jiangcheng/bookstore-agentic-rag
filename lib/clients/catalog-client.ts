@@ -29,15 +29,7 @@ export async function searchCatalog(filters: CatalogSearchFilters): Promise<Book
  * Get details for multiple books by their IDs.
  */
 export async function getBookDetailsBatch(ids: string[]): Promise<Book[]> {
-  let books: Book[];
-
-  if (hasDatabaseConfig()) {
-    books = await fetchBooksByIds(ids);
-    books = (await filterBlockedBooks(books)).books;
-  } else if (hasCatalogServiceConfig()) {
-    books = (await Promise.all(ids.map((id) => getBookDetailsFromService(id)))).filter((b): b is Book => b !== null);
-    books = (await filterBlockedBooks(books)).books;
-  } else {
+  if (!hasDatabaseConfig()) {
     throw unavailableDataSourceError();
   }
 

@@ -1,6 +1,4 @@
-import type { SparseVector } from '@/lib/types/rag';
-
-const DENSE_DIMENSIONS = 1536;
+const DENSE_DIMENSIONS = 768;
 const SPARSE_DIMENSIONS = 1_000_003;
 const MAX_DOCUMENT_CHARS = 6000;
 const MAX_DESCRIPTION_CHARS = 1200;
@@ -8,7 +6,15 @@ const MAX_TOKENS = 512;
 
 const TOKEN_PATTERN = /\p{Script=Han}+|[\p{L}\p{N}]+/gu;
 
-type EmbeddingPair = { vector: number[]; sparseVector: SparseVector };
+export interface SparseVector {
+  indices: number[];
+  values: number[];
+}
+
+export interface EmbeddingPair {
+  vector: number[];
+  sparseVector: SparseVector;
+}
 
 type BookDocumentRecord = object;
 

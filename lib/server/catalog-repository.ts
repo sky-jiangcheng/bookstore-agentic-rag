@@ -254,32 +254,3 @@ export async function getPopularBooksFromDatabase(count: number): Promise<Book[]
   const result = await sql.query<CatalogApiBook>(query, [count]);
   return normalizeBooks(result.rows);
 }
-
-export async function searchCatalogFromService(filters: CatalogSearchFilters): Promise<Book[]> {
-  const payload = await fetchFromCatalogService<{ books?: CatalogApiBook[]; items?: CatalogApiBook[] }>(
-    '/api/rag/books/search',
-    {
-      method: 'POST',
-      body: JSON.stringify(filters),
-    }
-  );
-
-  const searchQuery = filters.query ? buildCatalogSearchQuery(filters.query) : '';
-  return rerankCatalogBooks(
-    normalizeBooks(payload.books ?? payload.items ?? []),
-    searchQuery || (filters.query ?? '')
-  );
-}
-
-export async function getBookDetailsFromService(bookId: string): Promise<Book | null> {
-  const payload = await fetchFromCatalogService<{ book?: CatalogApiBook }>(`/api/rag/books/${encodeURIComponent(bookId)}`);
-  return payload.book ? mapBook(payload.book) : null;
-}
-
-export async function getPopularBooksFromService(count: number): Promise<Book[]> {
-  const payload = await fetchFromCatalogService<{ books?: CatalogApiBook[]; items?: CatalogApiBook[] }>(
-    `/api/rag/books/popular?count=${count}`
-  );
-
-  return normalizeBooks(payload.books ?? payload.items ?? []);
-}
