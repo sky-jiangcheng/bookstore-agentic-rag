@@ -26,7 +26,6 @@ interface RetrievalResultItem {
 }
 
 const DEFAULT_STRATEGIES: RetrievalStrategy[] = [
-  { type: 'semantic', enabled: true, topK: RETRIEVAL_CONSTANTS.SEMANTIC_TOP_K },
   { type: 'keyword', enabled: true, topK: RETRIEVAL_CONSTANTS.KEYWORD_TOP_K },
   { type: 'popular', enabled: true, topK: RETRIEVAL_CONSTANTS.POPULAR_TOP_K },
 ];
