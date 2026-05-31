@@ -3,6 +3,7 @@ import 'server-only';
 export const config = {
   google: {
     apiKey: process.env.GOOGLE_API_KEY || '',
+    model: process.env.GOOGLE_MODEL || 'google/gemini-2.0-flash',
   },
   database: {
     url: process.env.POSTGRES_URL || process.env.DATABASE_URL || '',

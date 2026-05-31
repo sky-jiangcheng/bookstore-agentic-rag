@@ -5,7 +5,6 @@
 
 import {
   vectorSearchBooks as pgVectorSearchBooks,
-  vectorSearchBooksDirect as pgVectorSearchBooksDirect,
   upsertBookVector as pgUpsertBookVector,
   upsertChunkVector as pgUpsertChunkVector,
   vectorSearchChunks as pgVectorSearchChunks,
@@ -17,6 +16,7 @@ import {
   type ChunkMetadata,
   type VectorSearchResult,
   type ChunkSearchResult,
+  type VectorSearchOptions,
 } from './postgres-vector';
 import type { Book } from '@/lib/types/rag';
 
@@ -49,13 +49,9 @@ export async function vectorSearch(
 export async function vectorSearchDirect(
   queryVector: number[],
   topK: number = 10,
-  options?: {
-    categories?: string[];
-    maxPrice?: number;
-    queryText?: string;
-  },
+  options?: VectorSearchOptions,
 ): Promise<Book[]> {
-  return pgVectorSearchBooksDirect(queryVector, topK, options);
+  return pgVectorSearchBooks(queryVector, topK, options ?? {});
 }
 
 export async function upsertChunkVector(

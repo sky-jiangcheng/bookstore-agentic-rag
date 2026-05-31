@@ -297,19 +297,6 @@ function getRerankerInputLimit(totalBooks: number, rerankerConfig: RerankerConfi
   );
 }
 
-async function performReranking(
-  query: string,
-  books: Book[],
-  config: RerankerConfig,
-): Promise<Book[]> {
-  const topN = getRerankerInputLimit(books.length, config);
-  const topCandidates = books.slice(0, topN);
-  const remaining = books.slice(topN);
-
-  const reranked = await rerankBooks(query, topCandidates, config);
-  return [...reranked, ...remaining];
-}
-
 export async function retrieveCandidates(
   requirement: RequirementAnalysis,
   strategies: RetrievalStrategy[] = DEFAULT_STRATEGIES,
@@ -370,11 +357,11 @@ export async function retrieveCandidates(
 
   if (options?.enableReranking && options.rerankerConfig) {
     try {
-      fusedBooks = await performReranking(
-        requirement.original_query,
-        fusedBooks,
-        options.rerankerConfig,
-      );
+      const topN = getRerankerInputLimit(fusedBooks.length, options.rerankerConfig);
+      const topCandidates = fusedBooks.slice(0, topN);
+      const remaining = fusedBooks.slice(topN);
+      const reranked = await rerankBooks(requirement.original_query, topCandidates, options.rerankerConfig);
+      fusedBooks = [...reranked, ...remaining];
       sources.push('reranker');
     } catch (error) {
       console.warn('[retrieval] Reranking failed, using RRF results:', error);

@@ -2,6 +2,7 @@
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
+import config from '@/lib/config/environment';
 import type {
   EvaluationResult,
   RecommendationResult,
@@ -61,7 +62,7 @@ export async function evaluateRecommendation(
 ): Promise<EvaluationResult> {
   try {
     const { output } = await generateText({
-      model: 'google/gemini-2.0-flash',
+      model: config.google.model,
       prompt: EVALUATION_PROMPT(requirement, recommendation),
       output: Output.object({
         schema: EvaluationSchema,

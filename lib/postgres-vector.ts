@@ -5,33 +5,17 @@
  */
 
 import { sql } from '@vercel/postgres';
-import type { Book } from '@/lib/types/rag';
+import type { Book, VectorBookMetadata, ChunkMetadata } from '@/lib/types/rag';
 
 const VECTOR_DIMENSION = 768;
 const DEFAULT_SIMILARITY = 0;
 
-export interface VectorBookMetadata {
-  bookId: string;
-  title: string;
-  author: string;
-  category: string;
-  description?: string;
-  sourceId?: string;
-}
+export type { VectorBookMetadata, ChunkMetadata };
 
 export interface VectorSearchResult {
   id: string;
   score: number;
   metadata: VectorBookMetadata;
-}
-
-export interface ChunkMetadata {
-  bookId: string;
-  chunkIndex: number;
-  text: string;
-  title?: string;
-  author?: string;
-  category?: string;
 }
 
 export interface ChunkSearchResult {
@@ -104,35 +88,134 @@ export async function upsertBookVector(
   `;
 }
 
+export interface VectorSearchOptions {
+  categories?: string[];
+  maxPrice?: number;
+  queryText?: string;
+}
+
+export async function vectorSearchBooks(
+  queryVector: number[],
+  topK?: number,
+): Promise<VectorSearchResult[]>;
+
+export async function vectorSearchBooks(
+  queryVector: number[],
+  topK: number,
+  options: VectorSearchOptions,
+): Promise<Book[]>;
+
 export async function vectorSearchBooks(
   queryVector: number[],
   topK: number = 10,
-): Promise<VectorSearchResult[]> {
+  options?: VectorSearchOptions,
+): Promise<VectorSearchResult[] | Book[]> {
   if (!isValidVector(queryVector)) {
     throw new Error(`Invalid vector dimension: expected ${VECTOR_DIMENSION}, got ${queryVector.length}`);
   }
 
-  const results = await sql`
+  // Simple search — return VectorSearchResult[] (backward compatible)
+  if (!options) {
+    const results = await sql`
+      SELECT
+        be.book_id,
+        b.title,
+        b.author,
+        b.category,
+        b.description,
+        b.publisher,
+        b.price,
+        b.stock,
+        b.cover_url,
+        b.popularity_score,
+        1 - (be.embedding <=> ${formatVector(queryVector)}::vector) AS similarity
+      FROM book_embeddings be
+      JOIN books b ON be.book_id = b.id
+      WHERE be.embedding IS NOT NULL AND be.chunk_index = 0
+      ORDER BY be.embedding <=> ${formatVector(queryVector)}::vector
+      LIMIT ${topK}
+    `;
+    return results.rows.map(mapRowToVectorSearchResult);
+  }
+
+  // Enhanced search with filters — return Book[]
+  const { categories, maxPrice, queryText } = options;
+
+  const conditions: string[] = ['be.embedding IS NOT NULL', 'be.chunk_index = 0'];
+  const params: unknown[] = [];
+
+  if (categories && categories.length > 0) {
+    const placeholders = categories.map((_, i) => `$${params.length + i + 1}`).join(',');
+    conditions.push(`b.category IN (${placeholders})`);
+    params.push(...categories);
+  }
+
+  if (maxPrice !== undefined) {
+    params.push(maxPrice);
+    conditions.push(`b.price <= $${params.length}`);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const queryTopK = Math.max(topK * 3, 50);
+
+  const results = await sql.query(`
     SELECT
-      be.book_id,
+      b.id,
       b.title,
       b.author,
-      b.category,
-      b.description,
       b.publisher,
+      b.description,
+      b.cover_url,
       b.price,
       b.stock,
-      b.cover_url,
+      b.category,
       b.popularity_score,
-      1 - (be.embedding <=> ${formatVector(queryVector)}::vector) AS similarity
+      1 - (be.embedding <=> $1::vector) AS similarity
     FROM book_embeddings be
     JOIN books b ON be.book_id = b.id
-    WHERE be.embedding IS NOT NULL AND be.chunk_index = 0
-    ORDER BY be.embedding <=> ${formatVector(queryVector)}::vector
-    LIMIT ${topK}
-  `;
+    ${whereClause}
+    ORDER BY be.embedding <=> $1::vector
+    LIMIT $2
+  `, [formatVector(queryVector), queryTopK, ...params]);
 
-  return results.rows.map(mapRowToVectorSearchResult);
+  let books = results.rows.map(mapRowToBook);
+
+  // Keyword boosting when queryText is provided
+  if (queryText && queryText.trim()) {
+    const keywords = queryText.toLowerCase().split(/\s+/).filter(Boolean);
+
+    books = books.map(book => {
+      let keywordScore = 0;
+      const searchText = `${book.title} ${book.author} ${book.category} ${book.description}`.toLowerCase();
+
+      keywords.forEach(keyword => {
+        if (searchText.includes(keyword)) {
+          keywordScore += 1;
+        }
+      });
+
+      return {
+        ...book,
+        relevance_score: book.relevance_score + keywordScore * 0.3,
+      };
+    });
+
+    books.sort((a, b) => b.relevance_score - a.relevance_score);
+  }
+
+  // Deduplicate
+  const seen = new Set<string>();
+  const uniqueBooks: Book[] = [];
+
+  for (const book of books) {
+    if (!seen.has(book.book_id)) {
+      seen.add(book.book_id);
+      uniqueBooks.push(book);
+    }
+    if (uniqueBooks.length >= topK) break;
+  }
+
+  return uniqueBooks;
 }
 
 export async function upsertChunkVector(
@@ -232,106 +315,6 @@ export async function vectorSearchChunks(
       text: (row.text_content as string) || '',
     },
   }));
-}
-
-export async function vectorSearchBooksDirect(
-  queryVector: number[],
-  topK: number = 10,
-  options?: {
-    categories?: string[];
-    maxPrice?: number;
-    queryText?: string;
-  },
-): Promise<Book[]> {
-  if (!isValidVector(queryVector)) {
-    throw new Error(`Invalid vector dimension: expected ${VECTOR_DIMENSION}, got ${queryVector.length}`);
-  }
-
-  const { categories, maxPrice, queryText } = options || {};
-
-  // 构建 WHERE 条件
-  const conditions: string[] = ['be.embedding IS NOT NULL', 'be.chunk_index = 0'];
-  const params: unknown[] = [];
-
-  if (categories && categories.length > 0) {
-    const placeholders = categories.map((_, i) => `$${params.length + i + 1}`).join(',');
-    conditions.push(`b.category IN (${placeholders})`);
-    params.push(...categories);
-  }
-
-  if (maxPrice !== undefined) {
-    params.push(maxPrice);
-    conditions.push(`b.price <= $${params.length}`);
-  }
-
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-  // 使用更大的查询范围，然后取 topK，确保有足够的符合条件的结果
-  const queryTopK = Math.max(topK * 3, 50);
-
-  // 构建查询
-  const results = await sql.query(`
-    SELECT
-      b.id,
-      b.title,
-      b.author,
-      b.publisher,
-      b.description,
-      b.cover_url,
-      b.price,
-      b.stock,
-      b.category,
-      b.popularity_score,
-      1 - (be.embedding <=> $1::vector) AS similarity
-    FROM book_embeddings be
-    JOIN books b ON be.book_id = b.id
-    ${whereClause}
-    ORDER BY be.embedding <=> $1::vector
-    LIMIT $2
-  `, [formatVector(queryVector), queryTopK, ...params]);
-
-  let books = results.rows.map(mapRowToBook);
-
-  // 如果有查询文本，尝试做简单的关键词匹配增强排序
-  if (queryText && queryText.trim()) {
-    const keywords = queryText.toLowerCase().split(/\s+/).filter(Boolean);
-    
-    books = books.map(book => {
-      let keywordScore = 0;
-      const searchText = `${book.title} ${book.author} ${book.category} ${book.description}`.toLowerCase();
-      
-      keywords.forEach(keyword => {
-        if (searchText.includes(keyword)) {
-          keywordScore += 1;
-        }
-      });
-      
-      // 将关键词匹配分数和相似度分数结合
-      const combinedScore = book.relevance_score + keywordScore * 0.3;
-      
-      return {
-        ...book,
-        relevance_score: combinedScore
-      };
-    });
-    
-    // 重新排序
-    books.sort((a, b) => b.relevance_score - a.relevance_score);
-  }
-
-  // 去重（同一本书可能有多个 chunk）
-  const seen = new Set();
-  const uniqueBooks: Book[] = [];
-  
-  for (const book of books) {
-    if (!seen.has(book.book_id)) {
-      seen.add(book.book_id);
-      uniqueBooks.push(book);
-    }
-    if (uniqueBooks.length >= topK) break;
-  }
-
-  return uniqueBooks;
 }
 
 export async function deleteBookVector(bookId: string): Promise<void> {
