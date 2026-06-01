@@ -79,106 +79,27 @@ export async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
 }
 
 /**
- * 对 books 按非语义过滤器做 JS 端过滤：author(包含)、price_min、price_max、categories
- */
-function applyFilters(books: Book[], filters: CatalogSearchFilters): Book[] {
-  let filtered = books;
-
-  if (filters.author) {
-    const authorLower = filters.author.toLowerCase();
-    filtered = filtered.filter((b) => b.author.toLowerCase().includes(authorLower));
-  }
-  if (filters.price_min !== undefined) {
-    filtered = filtered.filter((b) => b.price >= filters.price_min!);
-  }
-  if (filters.price_max !== undefined) {
-    filtered = filtered.filter((b) => b.price <= filters.price_max!);
-  }
-  if (filters.categories && filters.categories.length > 0) {
-    const catSet = new Set(filters.categories);
-    filtered = filtered.filter((b) => catSet.has(b.category));
-  }
-
-  return filtered;
-}
-
-/**
- * 无文本查询时的浏览/筛选模式 → 简单 SQL（无 ILIKE 交叉乘积）
- */
-async function searchCatalogByFilters(filters: CatalogSearchFilters): Promise<Book[]> {
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  let paramIdx = 0;
-
-  if (filters.author) {
-    paramIdx++;
-    conditions.push(`author ILIKE '%' || $${paramIdx} || '%'`);
-    params.push(filters.author);
-  }
-  if (filters.price_min !== undefined) {
-    paramIdx++;
-    conditions.push(`price >= $${paramIdx}`);
-    params.push(filters.price_min);
-  }
-  if (filters.price_max !== undefined) {
-    paramIdx++;
-    conditions.push(`price <= $${paramIdx}`);
-    params.push(filters.price_max);
-  }
-  if (filters.categories && filters.categories.length > 0) {
-    const placeholders = filters.categories.map((_, i) => `$${paramIdx + i + 1}`).join(',');
-    conditions.push(`category IN (${placeholders})`);
-    params.push(...filters.categories);
-  }
-
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-  const query = `
-    SELECT
-      id AS book_id,
-      title,
-      author,
-      COALESCE(publisher, 'Unknown Publisher') AS publisher,
-      COALESCE(price, 0) AS price,
-      COALESCE(stock, 0) AS stock,
-      COALESCE(category, 'general') AS category,
-      COALESCE(description, '') AS description,
-      cover_url,
-      COALESCE(popularity_score, 0) AS relevance_score
-    FROM books
-    ${whereClause}
-    ORDER BY COALESCE(popularity_score, 0) DESC, COALESCE(updated_at, NOW()) DESC
-    LIMIT ${MAX_RESULTS}
-  `;
-
-  const result = await sql.query<CatalogApiBook>(query, params);
-  return normalizeBooks(result.rows);
-}
-
-/**
- * 搜索目录：有 query 时优先走关键词 ILIKE 搜索，无 query 时走简单筛选 SQL。
+ * 搜索目录：关键词 ILIKE 搜索 + 筛选。
+ * query 来自用户自由文本，无 query 时仅按筛选条件返回热门图书。
  */
 export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): Promise<Book[]> {
-  if (!filters.query) {
-    return searchCatalogByFilters(filters);
-  }
-
-  // ── 有文本查询 → 关键词 ILIKE 搜索（替代已移除的 pgvector） ──
-  const searchQuery = buildCatalogSearchQuery(filters.query);
-  const queryText = searchQuery || filters.query;
+  const searchQuery = filters.query ? buildCatalogSearchQuery(filters.query) : '';
+  const queryText = searchQuery || filters.query || '';
 
   const conditions: string[] = [];
   const params: unknown[] = [];
 
   // Text search across title, author, category
-  const searchTerms = queryText.split(/\s+/).filter(Boolean);
-  if (searchTerms.length > 0) {
-    const textConditions = searchTerms.map((_, i) => {
-      const p = `$${params.length + 1}`;
-      params.push(`%${searchTerms[i]}%`);
-      return `(title ILIKE ${p} OR author ILIKE ${p} OR category ILIKE ${p})`;
-    });
-    conditions.push(`(${textConditions.join(' AND ')})`);
+  if (queryText) {
+    const searchTerms = queryText.split(/\s+/).filter(Boolean);
+    if (searchTerms.length > 0) {
+      const textConditions = searchTerms.map((_, i) => {
+        const p = `$${params.length + 1}`;
+        params.push(`%${searchTerms[i]}%`);
+        return `(title ILIKE ${p} OR author ILIKE ${p} OR category ILIKE ${p})`;
+      });
+      conditions.push(`(${textConditions.join(' AND ')})`);
+    }
   }
 
   if (filters.author) {
@@ -219,12 +140,7 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
     LIMIT ${MAX_RESULTS}
   `;
 
-  let books = normalizeBooks((await sql.query<CatalogApiBook>(query, params)).rows);
-
-  // JS 端应用非语义过滤器
-  books = applyFilters(books, filters);
-
-  // rerank 提升精度
+  const books = normalizeBooks((await sql.query<CatalogApiBook>(query, params)).rows);
   return rerankCatalogBooks(books, queryText);
 }
 
