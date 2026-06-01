@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { searchCatalog } from '@/lib/clients/catalog-client';
+import { searchCatalog } from '@/lib/clients/catalog-service';
 import type { CatalogSearchFilters } from '@/lib/types/rag';
 import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 

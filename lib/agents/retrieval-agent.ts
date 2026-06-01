@@ -1,7 +1,7 @@
 // lib/agents/retrieval-agent.ts
 import type { Book, RetrievalResult, RequirementAnalysis } from '@/lib/types/rag';
 import { vectorSearch } from '@/lib/vector-service';
-import { searchCatalog, getPopularBooks, getBookDetailsBatch } from '@/lib/clients/catalog-client';
+import { searchCatalog, getPopularBooks, getBookDetailsBatch } from '@/lib/clients/catalog-service';
 import { generateEmbeddingPair } from '@/lib/embeddings';
 import { rerankBooks, type RerankerConfig } from '@/lib/reranking';
 import { RETRIEVAL_CONSTANTS } from '@/lib/constants';

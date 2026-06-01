@@ -3,24 +3,18 @@
  * 使用 pgvector (PostgreSQL) 后端
  */
 
+import type { Book } from '@/lib/types/rag';
 import {
   vectorSearchBooks as pgVectorSearchBooks,
   upsertBookVector as pgUpsertBookVector,
-  upsertChunkVector as pgUpsertChunkVector,
-  vectorSearchChunks as pgVectorSearchChunks,
-  deleteBookVector as pgDeleteBookVector,
-  deleteChunkVectorsByBookIds as pgDeleteChunkVectorsByBookIds,
   getBookEmbeddingCount as pgGetBookEmbeddingCount,
   hasPgVectorSupport as pgHasPgVectorSupport,
   type VectorBookMetadata,
-  type ChunkMetadata,
   type VectorSearchResult,
-  type ChunkSearchResult,
   type VectorSearchOptions,
 } from './postgres-vector';
-import type { Book } from '@/lib/types/rag';
 
-export type { VectorBookMetadata, ChunkMetadata };
+export type { VectorBookMetadata };
 
 const VECTOR_DIMENSION = 768;
 
@@ -54,36 +48,6 @@ export async function vectorSearchDirect(
   return pgVectorSearchBooks(queryVector, topK, options ?? {});
 }
 
-export async function upsertChunkVector(
-  bookId: string,
-  chunkIndex: number,
-  vector: number[],
-  metadata: ChunkMetadata,
-): Promise<void> {
-  await pgUpsertChunkVector(bookId, chunkIndex, vector, metadata);
-}
-
-export async function vectorSearchChunks(
-  queryVector: number[],
-  topK: number = 10,
-  filter?: { bookId?: string; category?: string },
-): Promise<ChunkSearchResult[]> {
-  return pgVectorSearchChunks(queryVector, topK, filter);
-}
-
-export async function deleteBookVector(bookId: string): Promise<void> {
-  await pgDeleteBookVector(bookId);
-}
-
-export async function deleteChunkVectors(bookIds: string[]): Promise<void> {
-  await pgDeleteChunkVectorsByBookIds(bookIds);
-}
-
-export async function deleteAllBookChunks(bookId: string): Promise<void> {
-  // pgvector stores all chunks in the same table — delete all for this book
-  await pgDeleteChunkVectorsByBookIds([bookId]);
-}
-
 export async function getVectorStoreInfo(): Promise<VectorStoreInfo | null> {
   try {
     const supported = await pgHasPgVectorSupport();
@@ -103,5 +67,5 @@ export async function getVectorStoreInfo(): Promise<VectorStoreInfo | null> {
 }
 
 export function hasVectorSupport(): boolean {
-  return true; // pgvector is always available when PostgreSQL is configured
+  return true;
 }

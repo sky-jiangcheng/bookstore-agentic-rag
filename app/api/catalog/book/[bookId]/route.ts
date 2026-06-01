@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getBookDetails } from '@/lib/clients/catalog-client';
+import { getBookDetails } from '@/lib/clients/catalog-service';
 import { corsHeaders } from '@/lib/utils/cors';
 import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 

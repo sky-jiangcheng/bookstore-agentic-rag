@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getPopularBooks } from '@/lib/clients/catalog-client';
+import { getPopularBooks } from '@/lib/clients/catalog-service';
 import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 
 export async function GET(req: NextRequest) {

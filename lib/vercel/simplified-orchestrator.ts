@@ -207,10 +207,10 @@ export async function runVercelRAGPipeline(
 }
 
 /**
- * Even faster pipeline for edge cases
- * Skips some processing for sub-3 second execution
+ * Basic single-pass pipeline
+ * Skips retrieval and recommendation for sub-3 second execution
  */
-export async function runFastRAGPipeline(
+export async function runBasicRAGPipeline(
   query: string,
   sessionId?: string
 ): Promise<VercelRAGPipelineResult> {

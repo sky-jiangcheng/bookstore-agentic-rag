@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runRAGPipeline } from '@/lib/agents/orchestrator';
 import type { RAGPipelineResult } from '@/lib/agents/orchestrator';
 import { validateConfig, config } from '@/lib/config/environment';
-import { runVercelRAGPipeline, runFastRAGPipeline } from '@/lib/vercel/simplified-orchestrator';
+import { runVercelRAGPipeline, runBasicRAGPipeline } from '@/lib/vercel/simplified-orchestrator';
 import type { AgentProgress } from '@/lib/types/rag';
 import { corsHeaders, handleCorsPreflightRequest } from '@/lib/utils/cors';
 import { getSafeErrorMessage, buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 async function handleRequest(query: string, sessionId: string | undefined, fast: boolean, req: NextRequest) {
   try {
     if (fast) {
-      const result = await runFastRAGPipeline(query, sessionId);
+      const result = await runBasicRAGPipeline(query, sessionId);
       return NextResponse.json(
         { ...result, summary: buildRecommendationSummary(result) },
         { headers: corsHeaders(req) }

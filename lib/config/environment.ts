@@ -29,12 +29,6 @@ export const config = {
     timeout: Number(process.env.VERCEL_TIMEOUT) || 7000, // 7 seconds (under 10s limit with cold start headroom)
     useSimplifiedPipeline: process.env.VERCEL_USE_SIMPLIFIED !== 'false',
   },
-  // Classic RAG Components
-  chunking: {
-    strategy: (process.env.CHUNKING_STRATEGY as 'fixed' | 'semantic' | 'book-specific') || 'book-specific',
-    chunkSize: Number(process.env.CHUNK_SIZE) || 512,
-    chunkOverlap: Number(process.env.CHUNK_OVERLAP) || 64,
-  },
   reranker: {
     enabled: process.env.RERANKER_ENABLED === 'true',
     type: (process.env.RERANKER_TYPE as 'local' | 'api' | 'cohere') || 'local',

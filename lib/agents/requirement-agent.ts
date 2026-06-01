@@ -113,12 +113,8 @@ export function sanitizePromptInput(input: string): string {
   return sanitized;
 }
 
-function sanitizeUserInput(input: string): string {
-  return sanitizePromptInput(input);
-}
-
 export function extractQueryKeywords(query: string): string[] {
-  const sanitized = sanitizeUserInput(query);
+  const sanitized = sanitizePromptInput(query);
   const tokens = sanitized
     .toLowerCase()
     .match(/[\p{Script=Han}]{2,12}|[a-z0-9][a-z0-9\-_]{2,}/gu) ?? [];

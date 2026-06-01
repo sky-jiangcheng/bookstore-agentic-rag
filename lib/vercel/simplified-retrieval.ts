@@ -6,7 +6,7 @@
  */
 
 import { generateEmbeddingPair } from '@/lib/embeddings';
-import { searchCatalog } from '@/lib/clients/catalog-client';
+import { searchCatalog } from '@/lib/clients/catalog-service';
 import { vectorSearchDirect, upsertBookVector } from '@/lib/vector-service';
 import type { Book, RequirementAnalysis, RetrievalResult } from '@/lib/types/rag';
 import { filterBlockedBooks } from '@/lib/server/book-filters';
@@ -164,7 +164,7 @@ async function performKeywordSearch(
 }
 
 async function getPopularFallback(topK: number): Promise<Book[]> {
-  const { getPopularBooks } = await import('@/lib/clients/catalog-client');
+  const { getPopularBooks } = await import('@/lib/clients/catalog-service');
   return getPopularBooks(Math.min(5, topK));
 }
 
