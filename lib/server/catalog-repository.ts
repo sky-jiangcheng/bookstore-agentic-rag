@@ -4,11 +4,7 @@ import { sql } from '@vercel/postgres';
 
 import { buildCatalogSearchQuery, rerankCatalogBooks } from '@/lib/search/query-rerank';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
-import { buildEmbeddingPair } from '@/lib/local-vector';
-import { vectorSearch } from '@/lib/vector-service';
-import { AsyncTimeoutError, withTimeout } from '@/lib/utils/async-timeout';
 
-const VECTOR_SEARCH_TIMEOUT_MS = 2500;
 const MAX_RESULTS = 50;
 
 interface CatalogApiBook {
@@ -160,52 +156,75 @@ async function searchCatalogByFilters(filters: CatalogSearchFilters): Promise<Bo
 }
 
 /**
- * 搜索目录：有 query 时走 pgvector 语义搜索，无 query 时走简单筛选 SQL。
+ * 搜索目录：有 query 时优先走关键词 ILIKE 搜索，无 query 时走简单筛选 SQL。
  */
 export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): Promise<Book[]> {
-  // ── 无文本查询 → 浏览/筛选模式 ──
   if (!filters.query) {
     return searchCatalogByFilters(filters);
   }
 
-  // ── 有文本查询 → pgvector 语义搜索管线 ──
+  // ── 有文本查询 → 关键词 ILIKE 搜索（替代已移除的 pgvector） ──
   const searchQuery = buildCatalogSearchQuery(filters.query);
   const queryText = searchQuery || filters.query;
-  const { vector } = buildEmbeddingPair(queryText);
 
-  let books: Book[];
-  try {
-    // Step 1: 向量相似度搜索（HNSW 索引，亚毫秒级）
-    const vectorResults = await withTimeout(
-      vectorSearch(vector, MAX_RESULTS),
-      VECTOR_SEARCH_TIMEOUT_MS,
-      'catalog vector search',
-    );
+  const conditions: string[] = [];
+  const params: unknown[] = [];
 
-    // Step 2: 按 ID 获取完整书籍记录
-    const ids = vectorResults.map((entry) => String(entry.metadata?.bookId ?? entry.id));
-    books = await fetchBooksByIds(ids);
-
-    // Step 3: 注入向量搜索的 relevance_score
-    const scoreMap = new Map(
-      vectorResults.map((entry) => [String(entry.metadata?.bookId ?? entry.id), entry.score]),
-    );
-    books = books.map((b) => ({
-      ...b,
-      relevance_score: Math.max(scoreMap.get(b.book_id) ?? b.relevance_score, b.relevance_score),
-    }));
-  } catch (error) {
-    if (error instanceof AsyncTimeoutError) {
-      console.warn('[catalog/search] Vector search timed out; returning filter-only results');
-      return searchCatalogByFilters(filters);
-    }
-    throw error;
+  // Text search across title, author, category
+  const searchTerms = queryText.split(/\s+/).filter(Boolean);
+  if (searchTerms.length > 0) {
+    const textConditions = searchTerms.map((_, i) => {
+      const p = `$${params.length + 1}`;
+      params.push(`%${searchTerms[i]}%`);
+      return `(title ILIKE ${p} OR author ILIKE ${p} OR category ILIKE ${p})`;
+    });
+    conditions.push(`(${textConditions.join(' AND ')})`);
   }
 
-  // Step 4: JS 端应用非语义过滤器（author、price 范围、categories）
+  if (filters.author) {
+    params.push(`%${filters.author}%`);
+    conditions.push(`author ILIKE $${params.length}`);
+  }
+  if (filters.price_min !== undefined) {
+    params.push(filters.price_min);
+    conditions.push(`price >= $${params.length}`);
+  }
+  if (filters.price_max !== undefined) {
+    params.push(filters.price_max);
+    conditions.push(`price <= $${params.length}`);
+  }
+  if (filters.categories && filters.categories.length > 0) {
+    const placeholders = filters.categories.map((_, i) => `$${params.length + i + 1}`).join(',');
+    conditions.push(`category IN (${placeholders})`);
+    params.push(...filters.categories);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const query = `
+    SELECT
+      id AS book_id,
+      title,
+      author,
+      COALESCE(publisher, 'Unknown Publisher') AS publisher,
+      COALESCE(price, 0) AS price,
+      COALESCE(stock, 0) AS stock,
+      COALESCE(category, 'general') AS category,
+      COALESCE(description, '') AS description,
+      cover_url,
+      COALESCE(popularity_score, 0) AS relevance_score
+    FROM books
+    ${whereClause}
+    ORDER BY COALESCE(popularity_score, 0) DESC, COALESCE(updated_at, NOW()) DESC
+    LIMIT ${MAX_RESULTS}
+  `;
+
+  let books = normalizeBooks((await sql.query<CatalogApiBook>(query, params)).rows);
+
+  // JS 端应用非语义过滤器
   books = applyFilters(books, filters);
 
-  // Step 5: rerank 提升精度（纯 JS，无外部依赖）
+  // rerank 提升精度
   return rerankCatalogBooks(books, queryText);
 }
 
