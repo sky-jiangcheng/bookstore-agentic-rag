@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 test('generateRecommendation returns empty result for no candidates', async () => {
   const { generateRecommendation } = await import('../lib/agents/recommendation-agent');
   const requirement = {
-    original_query: 'test', categories: [], keywords: [],
+    original_query: 'test', categories: [], keywords: [], expanded_search_terms: [],
     constraints: {}, preferences: [],
     needs_clarification: false, clarification_questions: [],
   };

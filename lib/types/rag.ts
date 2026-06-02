@@ -16,6 +16,7 @@ export interface RequirementAnalysis {
   original_query: string;
   categories: string[];
   keywords: string[];
+  expanded_search_terms: string[];
   constraints: {
     budget?: number;
     target_count?: number;

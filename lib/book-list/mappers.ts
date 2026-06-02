@@ -110,10 +110,12 @@ export function parsedRequirementsToRequirementAnalysis(
     parsed.keywords.join(' ') ||
     (categories[0] ? `${categories[0]} 相关读物` : '');
 
+  const baseKeywords = parsed.keywords.length > 0 ? [...parsed.keywords] : [...categories];
   return {
     original_query: baseQuery || '图书推荐',
     categories: categories.length > 0 ? categories : ['综合'],
-    keywords: parsed.keywords.length > 0 ? [...parsed.keywords] : [...categories],
+    keywords: baseKeywords,
+    expanded_search_terms: baseKeywords,
     constraints,
     preferences,
     needs_clarification: false,

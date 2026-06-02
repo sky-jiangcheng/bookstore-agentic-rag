@@ -15,6 +15,7 @@ const RequirementAnalysisSchema = z.object({
   original_query: z.string(),
   categories: z.array(z.string()),
   keywords: z.array(z.string()),
+  expanded_search_terms: z.array(z.string()),
   constraints: z.object({
     budget: z.number().optional(),
     target_count: z.number().optional(),
@@ -198,8 +199,9 @@ ${JSON.stringify(sanitizePromptInput(userQuery))}
 请提取：
 1. categories: 用户提到的书籍分类（如"小说"，"历史"，"围棋"，"计算机"等）
 2. keywords: 关键词（书名、主题、作者等关键词）
-3. constraints: 约束条件 - 预算（总价上限），目标书籍数量，特定作者，价格区间，排除关键词(exclude_keywords)
-4. preferences: 用户偏好描述（如"深入浅出"，"经典"，"新书"）
+3. expanded_search_terms: 搜索扩展词——根据用户的意图，生成 5-15 个同义/近义/相关的搜索词，用于覆盖用户可能不知道但内容相关的表达。例如用户说"围棋入门"，扩展词可以是["围棋", "围棋入门", "围棋教程", "围棋基础", "围棋技巧", "学围棋", "围棋初级", "围棋"]；用户说"Python编程"，扩展词可以是["Python", "Python编程", "Python开发", "Python入门", "编程", "Python语言"]。**要求：必须包含用户的原始关键词。**
+4. constraints: 约束条件 - 预算（总价上限），目标书籍数量，特定作者，价格区间，排除关键词(exclude_keywords)
+5. preferences: 用户偏好描述（如"深入浅出"，"经典"，"新书"）
 
 **关于 needs_clarification 的判断规则**：
 设置为 true 的情况（信息严重不足）：
@@ -214,8 +216,8 @@ ${JSON.stringify(sanitizePromptInput(userQuery))}
 
 **重要原则**：宁可不完美地推荐，也不要过度要求澄清。只要用户提供了任何有意义的线索，就应该设置为 false 并尝试推荐。
 
-5. needs_clarification: 根据以上规则判断
-6. clarification_questions: 仅当 needs_clarification 为 true 时，列出1个简洁的澄清问题
+6. needs_clarification: 根据以上规则判断
+7. clarification_questions: 仅当 needs_clarification 为 true 时，列出1个简洁的澄清问题
 
 ${conversationContext ? `注意：结合历史对话上下文来理解用户需求。如果用户提到"同样的类型"或"再来几本"，请参考历史对话中的分类和关键词。` : ''}`;
 
@@ -267,10 +269,12 @@ export async function analyzeRequirement(
     // If we found any meaningful information, don't require clarification
     const hasMeaningfulInfo = extractedCategories.length > 0 || extractedKeywords.length > 0;
 
+    const fallbackTerms = [...new Set([...extractedCategories, ...extractedKeywords])];
     return normalizeRequirement(userQuery, {
       original_query: userQuery,
       categories: extractedCategories,
-      keywords: [...new Set(extractedKeywords)],
+      keywords: fallbackTerms,
+      expanded_search_terms: fallbackTerms,
       constraints: {},
       preferences: [],
       needs_clarification: !hasMeaningfulInfo,

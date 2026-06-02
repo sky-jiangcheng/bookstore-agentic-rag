@@ -224,7 +224,11 @@ async function retrieveSemantic(requirement: RequirementAnalysis, topK: number):
 
 async function retrieveKeyword(requirement: RequirementAnalysis, topK: number): Promise<Book[]> {
   try {
-    const searchTerms = expandSearchTerms(requirement);
+    const searchTerms =
+      requirement.expanded_search_terms?.length > 0
+        ? requirement.expanded_search_terms
+        : expandSearchTerms(requirement);
+
     const mergedBooks = new Map<string, Book>();
 
     const books = await searchCatalog({
@@ -241,7 +245,7 @@ async function retrieveKeyword(requirement: RequirementAnalysis, topK: number): 
     }
 
     const limitedBooks = Array.from(mergedBooks.values()).slice(0, topK * 2);
-    console.log(`[keyword] Retrieved ${limitedBooks.length} books from catalog search`);
+    console.log(`[keyword] Retrieved ${limitedBooks.length} books from catalog search (terms: ${searchTerms.length})`);
     return limitedBooks;
   } catch (error) {
     console.error('[keyword] retrieval failed:', error);

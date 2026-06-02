@@ -12,6 +12,7 @@ const BASE_REQ: RequirementAnalysis = {
   original_query: '',
   categories: [],
   keywords: [],
+  expanded_search_terms: [],
   constraints: {},
   preferences: [],
   needs_clarification: false,
