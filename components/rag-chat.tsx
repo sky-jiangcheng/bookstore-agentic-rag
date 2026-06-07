@@ -20,6 +20,8 @@ import { Sparkles, Menu, Plus, MessageSquare, Trash2, X, Sliders, Bookmark, File
 
 import 'tdesign-react/es/style/index.css';
 
+const CHAT_REQUEST_TIMEOUT_MS = 30_000;
+
 interface SessionItem {
   id: string;
   title: string;
@@ -594,10 +596,12 @@ export function RAGChat() {
     setIsLoading(true);
     setCurrentPhase('requirement_analysis');
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
       abortControllerRef.current?.abort();
       const controller = new AbortController();
       abortControllerRef.current = controller;
+      timeoutId = setTimeout(() => controller.abort(), CHAT_REQUEST_TIMEOUT_MS);
 
       const response = await fetch('/api/rag/chat', {
         method: 'POST',
@@ -815,11 +819,17 @@ export function RAGChat() {
       console.error('Error:', error);
       setIsLoading(false);
       setCurrentPhase(null);
+      const isTimeout = error instanceof DOMException && error.name === 'AbortError';
       upsertAssistantMessage(assistantMessageId, () => ({
         id: assistantMessageId, role: 'assistant',
-        content: '抱歉，处理你的请求时出错了。你可以稍后重试，或者换个更具体的需求。',
+        content: isTimeout
+          ? '查询等待超时，已自动停止。请重试，系统会创建新的会话继续处理。'
+          : '抱歉，处理你的请求时出错了。你可以稍后重试，或者换个更具体的需求。',
         status: 'error',
       }));
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      abortControllerRef.current = null;
     }
   }, [isLoading, activeSessionId, sessionId, targetCount, selectedExclusions, categoryWeight, keywordWeight, upsertAssistantMessage, updateActiveSession, messages.length]);
 

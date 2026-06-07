@@ -61,3 +61,17 @@ test('rag parse endpoint and chat endpoint support precomputed requirements', ()
   assert.match(chatRoute, /confirmedRequirement/);
   assert.match(chatRoute, /requirement:\s*confirmedRequirement/);
 });
+
+test('conversation memory accepts Upstash object responses and chat requests are bounded', () => {
+  const conversationMemory = source('lib/conversation/conversation-memory.ts');
+  const ragChat = source('components/rag-chat.tsx');
+  const requirementAgent = source('lib/agents/requirement-agent.ts');
+
+  assert.match(conversationMemory, /parseStoredSession/);
+  assert.match(conversationMemory, /typeof raw === ['"]string['"]/);
+  assert.match(conversationMemory, /typeof parsed !== ['"]object['"]/);
+  assert.match(ragChat, /CHAT_REQUEST_TIMEOUT_MS/);
+  assert.match(ragChat, /controller\.abort\(\)/);
+  assert.match(ragChat, /clearTimeout\(timeoutId\)/);
+  assert.match(requirementAgent, /maxRetries:\s*0/);
+});

@@ -232,6 +232,7 @@ export async function analyzeRequirement(
     const { output } = await generateText({
       model: getGoogleModel(),
       prompt: ANALYSIS_PROMPT(userQuery, options?.conversationContext),
+      maxRetries: 0,
       output: Output.object({
         schema: RequirementAnalysisSchema,
       }),

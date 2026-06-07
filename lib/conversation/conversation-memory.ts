@@ -58,18 +58,30 @@ export async function getSession(sessionId: string): Promise<ConversationSession
     return null;
   }
 
-        const raw = await redis.get<string>(REDIS_KEYS.session(sessionId));
+  const raw = await redis.get<unknown>(REDIS_KEYS.session(sessionId));
+  return parseStoredSession(raw);
+}
 
-  if (!raw || typeof raw !== 'string') {
-    return null;
-  }
+export function parseStoredSession(raw: unknown): ConversationSession | null {
+  if (!raw) return null;
 
   try {
-    const parsed = JSON.parse(raw) as ConversationSession;
-    if (!parsed.id || !Array.isArray(parsed.turns)) {
+    const parsed = typeof raw === 'string'
+      ? JSON.parse(raw) as unknown
+      : raw;
+
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      !('id' in parsed) ||
+      typeof parsed.id !== 'string' ||
+      !('turns' in parsed) ||
+      !Array.isArray(parsed.turns)
+    ) {
       return null;
     }
-    return parsed;
+
+    return parsed as ConversationSession;
   } catch {
     return null;
   }
@@ -231,22 +243,17 @@ export async function cleanupOldSessions(maxAgeMs: number = DEFAULT_TTL * 1000):
 
     for (const sessionId of sessionIds) {
       try {
-  const raw = await redis.get<string>(REDIS_KEYS.session(sessionId));
+        const raw = await redis.get<unknown>(REDIS_KEYS.session(sessionId));
+        const session = parseStoredSession(raw);
 
-        if (!raw || typeof raw !== 'string') {
+        if (!session) {
           // Session data is gone, remove from list
           await redis.srem(REDIS_KEYS.sessionList, sessionId);
           deletedCount++;
           continue;
         }
 
-        let updatedAt = 0;
-        try {
-          const parsed = JSON.parse(raw);
-          updatedAt = Number(parsed.updatedAt || parsed.createdAt || 0);
-        } catch {
-          updatedAt = 0;
-        }
+        const updatedAt = Number(session.updatedAt || session.createdAt || 0);
 
         if (updatedAt > 0 && updatedAt < cutoffTime) {
           await redis.del(REDIS_KEYS.session(sessionId));
