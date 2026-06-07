@@ -21,8 +21,6 @@ import { LLMSettingsDialog } from '@/components/RAGChat/LLMSettingsDialog';
 import type { LLMProviderConfig } from '@/lib/config/provider-config';
 import { loadProviderConfig, saveProviderConfig } from '@/lib/config/provider-config';
 
-import 'tdesign-react/es/style/index.css';
-
 const CHAT_REQUEST_TIMEOUT_MS = 30_000;
 
 interface SessionItem {
@@ -68,7 +66,6 @@ export function RAGChat() {
   const [targetCount, setTargetCount] = useState(15);
   const [categoryWeight, setCategoryWeight] = useState(1.2);
   const [keywordWeight, setKeywordWeight] = useState(0.6);
-  const [, setDbExclusions] = useState<string[]>([]);
   const [selectedExclusions, setSelectedExclusions] = useState<string[]>([]);
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
   const [lastSql, setLastSql] = useState<string | undefined>(undefined);
@@ -108,24 +105,6 @@ export function RAGChat() {
     } catch {
       setTemplates([]);
     }
-  }, []);
-
-  // Fetch db exclusions on mount
-  useEffect(() => {
-    const fetchExclusions = async () => {
-      try {
-        const res = await fetch('/api/rag/exclusions');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.keywords) {
-            setDbExclusions(data.keywords);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load exclusions:', err);
-      }
-    };
-    fetchExclusions();
   }, []);
 
   // Load sessions from localStorage on mount
@@ -657,6 +636,7 @@ export function RAGChat() {
           categoryWeight: categoryWeight,
           keywordWeight: keywordWeight,
           confirmedRequirement: prepared,
+          llmProvider: llmProvider.apiKey ? llmProvider : undefined,
         }),
         signal: controller.signal,
       });
@@ -899,8 +879,8 @@ export function RAGChat() {
     <div className="flex flex-col justify-between h-full">
       <div className="flex flex-col h-full min-h-0">
         <div className="flex items-center gap-2 px-1 py-3 mb-4 select-none">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-550 flex items-center justify-center text-white border border-white/10 shadow-md">
-            <Sparkles className="w-4.5 h-4.5" />
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white border border-white/10 shadow-md">
+            <Sparkles className="w-4 h-4" />
           </div>
           <div>
             <h1 className="text-sm font-bold text-slate-200 tracking-tight leading-none">BookStore RAG</h1>
@@ -941,19 +921,19 @@ export function RAGChat() {
                 title="右键保存为需求模板并修改模板名称"
                 className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-300 border text-xs font-semibold select-none ${
                   isActive
-                    ? 'bg-blue-600/15 text-blue-450 text-blue-400 border-blue-500/25 shadow-sm shadow-blue-500/5'
+                    ? 'bg-blue-600/15 text-blue-400 border-blue-500/25 shadow-sm shadow-blue-500/5'
                     : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-900/45 hover:text-slate-200'
                 }`}
               >
                 <div className="flex items-center gap-2 truncate flex-1 min-w-0 pr-1">
-                  <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-blue-400' : 'text-slate-550'}`} />
+                  <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-blue-400' : 'text-slate-500'}`} />
                   <span className="truncate">{sess.title || '新推荐会话'}</span>
                 </div>
 
                 <button
                   type="button"
                   onClick={(e) => handleDeleteSession(sess.id, e)}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-rose-455 hover:text-rose-400 transition-all active:scale-90"
+                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-rose-400 transition-all active:scale-90"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -1027,7 +1007,7 @@ export function RAGChat() {
               </h2>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] text-slate-505 text-slate-500 font-mono">Gemini RAG Engine v1.2</span>
+                <span className="text-[10px] text-slate-500 font-mono">Gemini RAG Engine v1.2</span>
               </div>
             </div>
           </div>
@@ -1037,13 +1017,13 @@ export function RAGChat() {
               onClick={() => setShowLeftDrawer(true)}
               className="md:hidden p-2 rounded-xl bg-slate-900 border border-slate-800/80 text-slate-400 hover:text-slate-200 transition-all active:scale-95"
             >
-              <Menu className="w-4.5 h-4.5" />
+              <Menu className="w-4 h-4" />
             </button>
             <button
               onClick={() => setShowRightDrawer(true)}
               className="lg:hidden p-2 rounded-xl bg-slate-900 border border-slate-800/80 text-slate-400 hover:text-slate-200 transition-all active:scale-95"
             >
-              <Sliders className="w-4.5 h-4.5" />
+              <Sliders className="w-4 h-4" />
             </button>
           </div>
         </header>

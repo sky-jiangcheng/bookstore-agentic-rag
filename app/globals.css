@@ -17,6 +17,17 @@
   --foreground-rgb: 241, 245, 249;        /* Slate 100 */
   --background-rgb: 7, 10, 19;            /* Deep Obsidian Space: #070a13 */
 
+  /* shadcn/ui compatibility variables */
+  --background: 7 10 19;
+  --foreground: 241 245 249;
+  --muted: 30 33 40;
+  --muted-foreground: 148 163 184;
+  --accent: 30 41 59;
+  --accent-foreground: 226 232 240;
+  --border: 40 43 49;
+  --ring: 59 130 246;
+  --radius: 0.5rem;
+
   --td-brand-color: #3b82f6;
   --td-brand-color-hover: #60a5fa;
   --td-brand-color-active: #93c5fd;

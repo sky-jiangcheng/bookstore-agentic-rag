@@ -22,17 +22,6 @@ const exportSchema = z.object({
       }),
     )
     .optional(),
-  filters: z
-    .object({
-      categories: z.array(z.string()).optional(),
-      author: z.string().optional(),
-      price_min: z.number().optional(),
-      price_max: z.number().optional(),
-      query: z.string().optional(),
-      search_terms: z.array(z.string()).optional(),
-      limit: z.number().optional(),
-    })
-    .optional(),
   budget: z.number().nonnegative().optional().nullable().default(null),
   total_price: z.number().nonnegative().optional().nullable().default(null),
 });

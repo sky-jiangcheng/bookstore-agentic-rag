@@ -21,7 +21,7 @@ const getCoverGradient = (category: string | null, title: string) => {
 
 export function BookCard({ book }: { book: BookRecommendation }) {
   const coverGradient = getCoverGradient(book.category || null, book.title);
-  const matchPct = book.match_score ? Math.round(book.match_score * 100) : 90;
+  const matchPct = book.match_score != null ? Math.round(book.match_score * 100) : 90;
 
   return (
     <div className="glass-panel glass-panel-interactive rounded-2xl overflow-hidden border border-slate-800/50 p-4 flex flex-col sm:flex-row gap-4 animate-fade-in-up">
@@ -80,19 +80,19 @@ export function BookCard({ book }: { book: BookRecommendation }) {
         </div>
 
         {/* Card Footer tags */}
-        {(book.publisher || book.category) && (
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/60 text-[11px] text-slate-450 text-slate-400">
+          {(book.publisher || book.category) && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/60 text-[11px] text-slate-400">
             {book.publisher && (
               <span className="inline-flex items-center gap-1">
                 <Building className="w-3 h-3 text-slate-500" />
                 <span>{book.publisher}</span>
               </span>
             )}
-            {book.publisher && book.category && <span className="text-slate-800">|</span>}
+            {book.publisher && book.category && <span className="text-slate-700">|</span>}
             {book.category && (
               <span className="inline-flex items-center gap-1">
                 <Tag className="w-3 h-3 text-slate-500" />
-                <span className="font-semibold text-slate-350">{book.category}</span>
+                <span className="font-semibold text-slate-400">{book.category}</span>
               </span>
             )}
           </div>
