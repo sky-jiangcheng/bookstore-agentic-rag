@@ -3,6 +3,7 @@ import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
 import { getGoogleModel } from '@/lib/ai/google-model';
+import { buildCatalogSearchTerms } from '@/lib/search/query-rerank';
 import {
   AUDIENCE_PATTERNS,
   CATEGORY_PATTERNS,
@@ -271,7 +272,13 @@ export async function analyzeRequirement(
     // If we found any meaningful information, don't require clarification
     const hasMeaningfulInfo = extractedCategories.length > 0 || extractedKeywords.length > 0;
 
-    const fallbackTerms = [...new Set([...extractedCategories, ...extractedKeywords])];
+    const fallbackTerms = [
+      ...new Set([
+        ...extractedCategories,
+        ...extractedKeywords,
+        ...buildCatalogSearchTerms(userQuery),
+      ]),
+    ];
     return normalizeRequirement(userQuery, {
       analysis_strategy: 'local-fallback',
       original_query: userQuery,

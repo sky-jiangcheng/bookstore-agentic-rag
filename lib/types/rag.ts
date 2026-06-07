@@ -33,7 +33,7 @@ export interface RequirementAnalysis {
 
 export interface RetrievalResult {
   books: Book[];
-  sources: ('keyword' | 'popular')[];
+  sources: ('keyword' | 'popular' | 'popular-fallback')[];
   total_candidates: number;
   sql?: string;
 }

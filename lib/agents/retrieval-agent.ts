@@ -269,16 +269,23 @@ export async function retrieveCandidates(
       ? requirement.expanded_search_terms
       : expandSearchTerms(requirement);
 
-  const books = hasSpecificIntent
+  let books = hasSpecificIntent
     ? await retrieveKeyword(requirement, topK)
     : await retrievePopular(topK);
+  let source: RetrievalResult['sources'][number] = hasSpecificIntent ? 'keyword' : 'popular';
+
+  if (hasSpecificIntent && books.length === 0) {
+    books = await retrievePopular(topK);
+    source = 'popular-fallback';
+    console.warn('[retrieval] Keyword search returned no books; using popular fallback');
+  }
 
   const finalBooks = enforceHardConstraints(books, requirement);
   const sqlString = generatePseudoSql(requirement, searchTerms, hasSpecificIntent, topK * 2);
 
   return {
     books: finalBooks,
-    sources: [hasSpecificIntent ? 'keyword' : 'popular'],
+    sources: [source],
     total_candidates: finalBooks.length,
     sql: sqlString,
   };

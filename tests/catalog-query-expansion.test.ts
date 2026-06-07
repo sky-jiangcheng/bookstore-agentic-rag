@@ -30,3 +30,12 @@ test('keeps history biography queries focused on biography terms', () => {
   assert.ok(terms.includes('鲁迅'));
   assert.ok(!terms.includes('围棋'));
 });
+
+test('expands operations learning queries into business terms', () => {
+  const terms = buildCatalogSearchTerms('预算 200 元，推荐适合运营学习的书籍');
+
+  assert.ok(terms.includes('运营'));
+  assert.ok(terms.includes('营销'));
+  assert.ok(terms.includes('管理'));
+  assert.ok(terms.includes('新媒体'));
+});

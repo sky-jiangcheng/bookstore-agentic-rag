@@ -84,3 +84,11 @@ test('persisted streaming messages are recovered after page refresh', () => {
   assert.match(ragChat, /recoverInterruptedMessages\(session\.messages/);
   assert.match(ragChat, /localStorage\.setItem\(['"]rag-chat-sessions['"]/);
 });
+
+test('keyword retrieval falls back when an exact search returns no books', () => {
+  const retrievalAgent = source('lib/agents/retrieval-agent.ts');
+
+  assert.match(retrievalAgent, /popular-fallback/);
+  assert.match(retrievalAgent, /books\.length === 0/);
+  assert.match(retrievalAgent, /retrievePopular/);
+});

@@ -7,6 +7,7 @@ import { sanitizePromptInput, extractQueryKeywords, parseBudget, parseTargetCoun
 import { computeRelevanceScore, enforceHardConstraints, hasExcludedKeywords, matchesCategories, getStrongKeywords } from '../lib/agents/retrieval-agent';
 import { enforceBudget, buildHeuristicExplanation, containsExcludedKeyword } from '../lib/agents/recommendation-agent';
 import { extractKnownBookKeywords } from '../lib/agents/book-taxonomy';
+import { CATEGORY_PATTERNS } from '../lib/agents/book-taxonomy';
 
 const BASE_REQ: RequirementAnalysis = {
   original_query: '',
@@ -176,4 +177,13 @@ test('extractKnownBookKeywords finds book-related terms', () => {
   const result = extractKnownBookKeywords('我想看科幻和推理小说');
   assert.ok(result.includes('科幻'));
   assert.ok(!result.includes('推理'));
+});
+
+test('generic learning intent is not misclassified as education', () => {
+  const categories = CATEGORY_PATTERNS
+    .filter(({ pattern }) => pattern.test('推荐适合运营学习的书籍'))
+    .map(({ category }) => category);
+
+  assert.ok(!categories.includes('教育'));
+  assert.ok(categories.includes('经济'));
 });
