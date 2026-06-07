@@ -32,6 +32,10 @@ const MODEL_EXAMPLES: Record<LLMProviderType, string[]> = {
   'openai-compatible': ['gpt-4o', 'gpt-4o-mini', 'deepseek-chat', 'claude-sonnet-4-20250514'],
 };
 
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '');
+}
+
 export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<LLMProviderType>(config.type);
@@ -48,7 +52,7 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
       type,
       apiKey: apiKey.trim(),
       model: model.trim() || (type === 'google' ? 'gemini-2.0-flash' : 'gpt-4o'),
-      baseUrl: type === 'openai-compatible' ? (baseUrl.trim() || undefined) : undefined,
+      baseUrl: type === 'openai-compatible' ? (normalizeBaseUrl(baseUrl.trim()) || undefined) : undefined,
     };
     onSave(newConfig);
     setOpen(false);
@@ -72,7 +76,7 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
       type,
       apiKey: apiKey.trim(),
       model: model.trim() || (type === 'google' ? 'gemini-2.0-flash' : 'gpt-4o'),
-      baseUrl: type === 'openai-compatible' ? (baseUrl.trim() || undefined) : undefined,
+      baseUrl: type === 'openai-compatible' ? (normalizeBaseUrl(baseUrl.trim()) || undefined) : undefined,
     };
 
     try {
@@ -204,6 +208,7 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
               />
               <p className="mt-1 text-[10px] text-slate-500">
                 例如: https://api.openai.com/v1, https://api.deepseek.com/v1
+                不需要包含 /chat/completions，SDK 会自动追加
               </p>
             </div>
           )}
