@@ -2,6 +2,7 @@
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
+import type { LanguageModel } from 'ai';
 import { getGoogleModel } from '@/lib/ai/google-model';
 import { buildCatalogSearchTerms } from '@/lib/search/query-rerank';
 import {
@@ -31,6 +32,7 @@ const RequirementAnalysisSchema = z.object({
 });
 
 export interface RequirementAgentOptions {
+  model?: LanguageModel;
   conversationContext?: string;
   previousRequirements?: RequirementAnalysis[];
 }
@@ -231,7 +233,7 @@ export async function analyzeRequirement(
     console.log('[RequirementAgent] Conversation context:', options?.conversationContext ? 'present' : 'none');
 
     const { output } = await generateText({
-      model: getGoogleModel(),
+      model: options?.model ?? getGoogleModel(),
       prompt: ANALYSIS_PROMPT(userQuery, options?.conversationContext),
       maxRetries: 0,
       output: Output.object({

@@ -4,9 +4,19 @@ import { z } from 'zod';
 import { analyzeRequirement, parseExcludedKeywords } from '@/lib/agents/requirement-agent';
 import { suggestExclusionCollisions } from '@/components/query-preparation';
 import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
+import { createModel } from '@/lib/ai/model-factory';
+import type { LLMProviderConfig } from '@/lib/config/provider-config';
+
+const providerSchema = z.object({
+  type: z.enum(['google', 'openai-compatible']),
+  apiKey: z.string(),
+  model: z.string(),
+  baseUrl: z.string().optional(),
+});
 
 const requestSchema = z.object({
   query: z.string().trim().min(1).max(2000),
+  llmProvider: providerSchema.optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -16,8 +26,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
 
+    const { query, llmProvider } = parsed.data;
+
+    const model = llmProvider
+      ? createModel(llmProvider as LLMProviderConfig)
+      : undefined;
+
     const [requirement, vocabularyResult] = await Promise.all([
-      analyzeRequirement(parsed.data.query),
+      analyzeRequirement(query, { model }),
       sql<{ keyword: string }>`
         SELECT keyword FROM filter_keywords
         WHERE is_active = TRUE

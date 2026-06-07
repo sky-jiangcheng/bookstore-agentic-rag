@@ -17,6 +17,9 @@ import {
 } from '@/components/query-preparation';
 import type { RequirementAnalysis } from '@/lib/types/rag';
 import { Sparkles, Menu, Plus, MessageSquare, Trash2, X, Sliders, Bookmark, FileSearch } from 'lucide-react';
+import { LLMSettingsDialog } from '@/components/RAGChat/LLMSettingsDialog';
+import type { LLMProviderConfig } from '@/lib/config/provider-config';
+import { loadProviderConfig, saveProviderConfig } from '@/lib/config/provider-config';
 
 import 'tdesign-react/es/style/index.css';
 
@@ -77,6 +80,15 @@ export function RAGChat() {
   const [suggestedExclusions, setSuggestedExclusions] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<{ type: 'ai' | 'template'; label: string; detail: string } | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [llmProvider, setLlmProvider] = useState<LLMProviderConfig>(() => {
+    if (typeof window !== 'undefined') return loadProviderConfig();
+    return { type: 'google' as const, apiKey: '', model: 'gemini-2.0-flash' };
+  });
+
+  const handleProviderSave = useCallback((config: LLMProviderConfig) => {
+    setLlmProvider(config);
+    saveProviderConfig(config);
+  }, []);
 
   // Mobile UI drawers state:
   const [showLeftDrawer, setShowLeftDrawer] = useState(false);
@@ -404,7 +416,10 @@ export function RAGChat() {
       const response = await fetch('/api/rag/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({
+          query,
+          llmProvider: llmProvider.apiKey ? llmProvider : undefined,
+        }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
@@ -424,7 +439,7 @@ export function RAGChat() {
     } finally {
       setIsPreparing(false);
     }
-  }, [applyPreparedRequirement, isLoading, isPreparing, templates]);
+  }, [applyPreparedRequirement, isLoading, isPreparing, templates, llmProvider]);
 
   const confirmAdjustments = useCallback(() => {
     if (!draftRequirement) return;
@@ -984,9 +999,12 @@ export function RAGChat() {
         </div>
       </div>
 
-      <div className="border-t border-white/5 pt-4 text-[10px] text-slate-600 text-center select-none shrink-0 font-mono">
-        <div>Gemini RAG Engine</div>
-        <div className="mt-0.5 opacity-60">© 2026 Antigravity</div>
+      <div className="border-t border-white/5 pt-4 space-y-2 select-none shrink-0">
+        <LLMSettingsDialog config={llmProvider} onSave={handleProviderSave} />
+        <div className="text-[10px] text-slate-600 text-center font-mono">
+          <div>{llmProvider.type === 'google' ? 'Gemini' : llmProvider.model || 'LLM'} RAG Engine</div>
+          <div className="mt-0.5 opacity-60">© 2026 Antigravity</div>
+        </div>
       </div>
     </div>
   );
