@@ -11,12 +11,16 @@ interface TuningPanelProps {
   dbExclusions: string[];
   selectedExclusions: string[];
   onChangeExclusions: (exclusions: string[]) => void;
+  onAddCustomExclusion?: (word: string) => void;
+  onToggleExclusion?: (word: string, isSelected: boolean) => void;
   suggestedKeywords?: string[];
   selectedKeywords?: string[];
   onChangeKeywords?: (keywords: string[]) => void;
   lastSql?: string;
   onClearSession: () => void;
   suggestionCount?: number;
+  libraryCategory: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none';
+  onChangeLibraryCategory: (category: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none') => void;
 }
 
 export function TuningPanel({
@@ -29,27 +33,41 @@ export function TuningPanel({
   dbExclusions,
   selectedExclusions,
   onChangeExclusions,
+  onAddCustomExclusion,
+  onToggleExclusion,
   suggestedKeywords,
   selectedKeywords = [],
   onChangeKeywords,
   onClearSession,
   suggestionCount = 0,
+  libraryCategory,
+  onChangeLibraryCategory,
 }: TuningPanelProps) {
   const [customExclusion, setCustomExclusion] = useState('');
   const [customKeyword, setCustomKeyword] = useState('');
 
   const toggleExclusion = (keyword: string) => {
-    onChangeExclusions(
-      selectedExclusions.includes(keyword)
-        ? selectedExclusions.filter((item) => item !== keyword)
-        : [...selectedExclusions, keyword],
-    );
+    const isSelected = selectedExclusions.includes(keyword);
+    if (onToggleExclusion) {
+      onToggleExclusion(keyword, isSelected);
+    } else {
+      onChangeExclusions(
+        isSelected
+          ? selectedExclusions.filter((item) => item !== keyword)
+          : [...selectedExclusions, keyword],
+      );
+    }
   };
 
   const addCustomExclusion = () => {
     const keyword = customExclusion.trim();
-    if (!keyword || selectedExclusions.includes(keyword)) return;
-    onChangeExclusions([...selectedExclusions, keyword]);
+    if (!keyword) return;
+    if (onAddCustomExclusion) {
+      onAddCustomExclusion(keyword);
+    } else {
+      if (selectedExclusions.includes(keyword)) return;
+      onChangeExclusions([...selectedExclusions, keyword]);
+    }
     setCustomExclusion('');
   };
 
@@ -78,6 +96,23 @@ export function TuningPanel({
           <h3 className="text-sm font-semibold text-slate-200">查询参数草稿</h3>
         </div>
         <div className="space-y-5">
+          <label className="block">
+            <span className="mb-2 flex justify-between text-xs text-slate-400">
+              <span>目标图书馆馆别 (切换后自动载入屏蔽规则)</span>
+            </span>
+            <select
+              value={libraryCategory}
+              onChange={(event) => onChangeLibraryCategory(event.target.value as any)}
+              className="w-full rounded-md border border-slate-700 bg-[#101216] px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-amber-500/60"
+            >
+              <option value="none">不限馆别 (无过滤)</option>
+              <option value="公共馆">公共馆 (排除少儿/教辅/教材)</option>
+              <option value="成人目录">成人目录 (排除少儿/拼音/低幼)</option>
+              <option value="初高中">初高中 (排除小学/低幼/拼音)</option>
+              <option value="小学">小学 (排除大学/中学/理财/成人内容)</option>
+              <option value="大学">大学 (排除低幼/拼音/绘本内容)</option>
+            </select>
+          </label>
           <RangeField label="推荐数量" value={`${targetCount} 本`}>
             <input type="range" min="5" max="30" value={targetCount} onChange={(event) => onChangeTargetCount(Number(event.target.value))} />
           </RangeField>

@@ -7,7 +7,8 @@ export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const count = Number.parseInt(url.searchParams.get('count') ?? '10', 10);
-    const books = await getPopularBooks(Number.isNaN(count) ? 10 : count);
+    const category = url.searchParams.get('category') ?? undefined;
+    const books = await getPopularBooks(Number.isNaN(count) ? 10 : count, category);
 
     return NextResponse.json({
       books,

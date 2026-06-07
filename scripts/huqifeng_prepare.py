@@ -143,8 +143,8 @@ def split_keywords(text: str) -> List[str]:
     return [part for part in parts if part]
 
 
-def parse_filter_paragraphs(paragraphs: Iterable[str]) -> Dict[str, str]:
-    keyword_to_category: Dict[str, str] = {}
+def parse_filter_paragraphs(paragraphs: Iterable[str]) -> List[tuple[str, str]]:
+    keyword_and_categories: set[tuple[str, str]] = set()
     current_category: Optional[str] = None
 
     for paragraph in paragraphs:
@@ -160,9 +160,9 @@ def parse_filter_paragraphs(paragraphs: Iterable[str]) -> Dict[str, str]:
             continue
 
         for keyword in split_keywords(text):
-            keyword_to_category.setdefault(keyword[:128], current_category[:128])
+            keyword_and_categories.add((keyword[:128], current_category[:128]))
 
-    return keyword_to_category
+    return sorted(list(keyword_and_categories))
 
 
 def load_books_from_excel(path: Path, priority: int) -> List[dict]:
@@ -189,10 +189,65 @@ def prepare_books(main_path: Path, supplement_paths: List[Path]) -> List[dict]:
     return merged
 
 
+def is_chinese_char(c: str) -> bool:
+    return "\u4e00" <= c <= "\u9fff"
+
+
+def should_merge_paragraphs(p1_raw: str, p2_raw: str) -> bool:
+    p1 = p1_raw.strip()
+    p2 = p2_raw.strip()
+    if not p1 or not p2:
+        return False
+
+    tokens1 = p1.split()
+    tokens2 = p2.split()
+    if not tokens1 or not tokens2:
+        return False
+
+    last_token = tokens1[-1]
+    first_token = tokens2[0]
+
+    is_last_single_cn = len(last_token) == 1 and is_chinese_char(last_token)
+    is_first_single_cn = len(first_token) == 1 and is_chinese_char(first_token)
+
+    if (is_last_single_cn or is_first_single_cn) and is_chinese_char(last_token[-1]) and is_chinese_char(first_token[0]):
+        if not p1_raw.endswith(" ") and not p2_raw.startswith(" "):
+            return True
+
+    return False
+
+
 def prepare_filter_keywords(doc_path: Path) -> List[dict]:
     document = Document(doc_path)
-    paragraphs = [paragraph.text for paragraph in document.paragraphs]
-    keyword_map = parse_filter_paragraphs(paragraphs)
+    raw_paragraphs = [paragraph.text for paragraph in document.paragraphs]
+
+    processed_paragraphs = []
+    i = 0
+    while i < len(raw_paragraphs):
+        p_text = raw_paragraphs[i].strip()
+        if not p_text:
+            i += 1
+            continue
+
+        while i + 1 < len(raw_paragraphs):
+            next_text = raw_paragraphs[i+1].strip()
+            if not next_text:
+                break
+
+            if _is_heading(p_text) or _is_heading(next_text):
+                break
+
+            if should_merge_paragraphs(raw_paragraphs[i], raw_paragraphs[i+1]):
+                p_text = p_text + next_text
+                raw_paragraphs[i] = raw_paragraphs[i] + raw_paragraphs[i+1]
+                i += 1
+            else:
+                break
+
+        processed_paragraphs.append(p_text)
+        i += 1
+
+    keyword_pairs = parse_filter_paragraphs(processed_paragraphs)
 
     rows = [
         {
@@ -200,7 +255,7 @@ def prepare_filter_keywords(doc_path: Path) -> List[dict]:
             "category": category,
             "is_active": True,
         }
-        for keyword, category in sorted(keyword_map.items())
+        for keyword, category in keyword_pairs
     ]
     return rows
 

@@ -33,6 +33,7 @@ interface SessionItem {
   keywordWeight: number;
   selectedExclusions: string[];
   selectedKeywords?: string[];
+  libraryCategory?: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none';
 }
 
 function generateBooklistName(userInput: string, requirement?: { categories?: string[]; constraints?: { target_count?: number } }): string {
@@ -74,6 +75,7 @@ export function RAGChat() {
   const [suggestedExclusions, setSuggestedExclusions] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<{ type: 'ai' | 'template'; label: string; detail: string } | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [libraryCategory, setLibraryCategory] = useState<'公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none'>('none');
   const [llmProvider, setLlmProvider] = useState<LLMProviderConfig>(() => {
     if (typeof window !== 'undefined') return loadProviderConfig();
     return { type: 'google' as const, apiKey: '', model: 'gemini-2.0-flash' };
@@ -134,6 +136,7 @@ export function RAGChat() {
         categoryWeight: 1.2,
         keywordWeight: 0.6,
         selectedExclusions: [],
+        libraryCategory: 'none',
       };
       parsedSessions = [defaultSession];
       localStorage.setItem('rag-chat-sessions', JSON.stringify(parsedSessions));
@@ -164,7 +167,22 @@ export function RAGChat() {
       setKeywordWeight(activeSession.keywordWeight ?? 0.6);
       setSelectedExclusions(activeSession.selectedExclusions ?? []);
       setSelectedKeywords(activeSession.selectedKeywords ?? []);
+      const cat = activeSession.libraryCategory ?? 'none';
+      setLibraryCategory(cat);
       setSessionId(activeSession.id);
+
+      if (cat !== 'none') {
+        fetch(`/api/rag/exclusions?category=${encodeURIComponent(cat)}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && data.keywords) {
+              setSuggestedExclusions(data.keywords);
+            }
+          })
+          .catch((err) => console.error('Failed to load exclusions on session switch:', err));
+      } else {
+        setSuggestedExclusions([]);
+      }
     }
   }, [activeSessionId, sessions]);
 
@@ -197,6 +215,7 @@ export function RAGChat() {
       categoryWeight: 1.2,
       keywordWeight: 0.6,
       selectedExclusions: [],
+      libraryCategory: 'none',
     };
 
     setSessions((prev) => {
@@ -212,6 +231,8 @@ export function RAGChat() {
     setCategoryWeight(1.2);
     setKeywordWeight(0.6);
     setSelectedExclusions([]);
+    setSuggestedExclusions([]);
+    setLibraryCategory('none');
     setSessionId(newSessId);
   }, []);
 
@@ -236,6 +257,7 @@ export function RAGChat() {
             categoryWeight: 1.2,
             keywordWeight: 0.6,
             selectedExclusions: [],
+            libraryCategory: 'none',
           }];
         }
         localStorage.setItem('rag-chat-sessions', JSON.stringify(updated));
@@ -297,6 +319,114 @@ export function RAGChat() {
     updateActiveSession({ selectedKeywords: val });
   };
 
+  const handleLibraryCategoryChange = useCallback(async (val: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none') => {
+    setLibraryCategory(val);
+    updateActiveSession({ libraryCategory: val });
+
+    if (val === 'none') {
+      setSuggestedExclusions([]);
+      setSelectedExclusions([]);
+      setDraftRequirement((current) => current ? {
+        ...current,
+        constraints: { ...current.constraints, exclude_keywords: [] },
+      } : current);
+      updateActiveSession({ selectedExclusions: [] });
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/rag/exclusions?category=${encodeURIComponent(val)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const keywords = data.keywords || [];
+        setSuggestedExclusions(keywords);
+        setSelectedExclusions(keywords);
+        setDraftRequirement((current) => current ? {
+          ...current,
+          constraints: { ...current.constraints, exclude_keywords: keywords },
+        } : current);
+        updateActiveSession({ selectedExclusions: keywords });
+      }
+    } catch (err) {
+      console.error('Failed to load exclusions for category:', err);
+    }
+  }, [updateActiveSession]);
+
+  const handleAddCustomExclusion = useCallback(async (word: string) => {
+    const trimmedWord = word.trim();
+    if (!trimmedWord) return;
+
+    if (!selectedExclusions.includes(trimmedWord)) {
+      const newExclusions = [...selectedExclusions, trimmedWord];
+      setSelectedExclusions(newExclusions);
+      setSuggestedExclusions(prev => prev.includes(trimmedWord) ? prev : [...prev, trimmedWord]);
+      setConfirmedRequirement(null);
+      setIsDraftConfirmed(false);
+      setDraftRequirement((current) => current ? {
+        ...current,
+        constraints: { ...current.constraints, exclude_keywords: newExclusions },
+      } : current);
+      updateActiveSession({ selectedExclusions: newExclusions });
+    }
+
+    if (libraryCategory && libraryCategory !== 'none') {
+      try {
+        const res = await fetch('/api/rag/exclusions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            keyword: trimmedWord,
+            category: libraryCategory,
+            action: 'add',
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to persist: ${res.statusText}`);
+        }
+      } catch (err) {
+        console.error('Failed to save exclusion to database:', err);
+        setToastMessage('保存屏蔽词到数据库失败');
+        setTimeout(() => setToastMessage(null), 3000);
+      }
+    }
+  }, [selectedExclusions, libraryCategory, updateActiveSession]);
+
+  const handleToggleExclusion = useCallback(async (word: string, isSelected: boolean) => {
+    const newExclusions = isSelected
+      ? selectedExclusions.filter((item) => item !== word)
+      : [...selectedExclusions, word];
+
+    setSelectedExclusions(newExclusions);
+    setConfirmedRequirement(null);
+    setIsDraftConfirmed(false);
+    setDraftRequirement((current) => current ? {
+      ...current,
+      constraints: { ...current.constraints, exclude_keywords: newExclusions },
+    } : current);
+    updateActiveSession({ selectedExclusions: newExclusions });
+
+    if (libraryCategory && libraryCategory !== 'none') {
+      try {
+        const res = await fetch('/api/rag/exclusions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            keyword: word,
+            category: libraryCategory,
+            action: isSelected ? 'remove' : 'add',
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to persist: ${res.statusText}`);
+        }
+      } catch (err) {
+        console.error('Failed to update exclusion in database:', err);
+        setToastMessage('更新数据库屏蔽词失败');
+        setTimeout(() => setToastMessage(null), 3000);
+      }
+    }
+  }, [selectedExclusions, libraryCategory, updateActiveSession]);
+
   const handleResetSession = useCallback(() => {
     if (confirm('确认清空当前对话上下文并重新开始？')) {
       setMessages([]);
@@ -306,6 +436,7 @@ export function RAGChat() {
       setKeywordWeight(0.6);
       setSelectedExclusions([]);
       setSelectedKeywords([]);
+      setLibraryCategory('none');
       setPreparedQuery('');
       setDraftRequirement(null);
       setConfirmedRequirement(null);
@@ -320,6 +451,7 @@ export function RAGChat() {
         keywordWeight: 0.6,
         selectedExclusions: [],
         selectedKeywords: [],
+        libraryCategory: 'none',
         title: '新推荐会话',
       });
     }
@@ -331,6 +463,7 @@ export function RAGChat() {
     exclusions: string[],
     nextStrategy: { type: 'ai' | 'template'; label: string; detail: string },
   ) => {
+    const inferredCat = requirement.inferred_library_type || 'none';
     const nextRequirement = {
       ...requirement,
       original_query: query,
@@ -351,9 +484,20 @@ export function RAGChat() {
     ])]);
     setTargetCount(nextRequirement.constraints.target_count ?? targetCount);
     setSuggestedExclusions(exclusions);
+    setLibraryCategory(inferredCat);
     setStrategy(nextStrategy);
     setInput('');
-  }, [targetCount]);
+
+    updateActiveSession({
+      selectedExclusions: exclusions,
+      selectedKeywords: [...new Set([
+        ...(requirement.keywords || []),
+        ...(requirement.expanded_search_terms || []),
+      ])],
+      targetCount: nextRequirement.constraints.target_count ?? targetCount,
+      libraryCategory: inferredCat,
+    });
+  }, [targetCount, updateActiveSession]);
 
   const prepareRequirement = useCallback(async (rawQuery: string, forceAi = false) => {
     const query = rawQuery.trim();
@@ -1089,12 +1233,16 @@ export function RAGChat() {
           dbExclusions={suggestedExclusions}
           selectedExclusions={selectedExclusions}
           onChangeExclusions={handleExclusionsChange}
+          onAddCustomExclusion={handleAddCustomExclusion}
+          onToggleExclusion={handleToggleExclusion}
           suggestedKeywords={draftRequirement?.expanded_search_terms ?? draftRequirement?.keywords}
           selectedKeywords={selectedKeywords}
           onChangeKeywords={handleKeywordsChange}
           lastSql={lastSql}
           onClearSession={handleResetSession}
           suggestionCount={suggestedExclusions.length}
+          libraryCategory={libraryCategory}
+          onChangeLibraryCategory={handleLibraryCategoryChange}
         />
       </aside>
 
@@ -1137,12 +1285,16 @@ export function RAGChat() {
                 dbExclusions={suggestedExclusions}
                 selectedExclusions={selectedExclusions}
                 onChangeExclusions={handleExclusionsChange}
+                onAddCustomExclusion={handleAddCustomExclusion}
+                onToggleExclusion={handleToggleExclusion}
                 suggestedKeywords={draftRequirement?.expanded_search_terms ?? draftRequirement?.keywords}
                 selectedKeywords={selectedKeywords}
                 onChangeKeywords={handleKeywordsChange}
                 lastSql={lastSql}
                 onClearSession={handleResetSession}
                 suggestionCount={suggestedExclusions.length}
+                libraryCategory={libraryCategory}
+                onChangeLibraryCategory={handleLibraryCategoryChange}
               />
             </div>
           </div>

@@ -95,9 +95,10 @@ class FilterParsingTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(entries["学生"], "公共馆")
-        self.assertEqual(entries["绘本"], "成人目录")
-        self.assertEqual(len(entries), 6)
+        self.assertIn(("学生", "公共馆"), entries)
+        self.assertIn(("绘本", "成人目录"), entries)
+        self.assertIn(("学生", "成人目录"), entries)
+        self.assertEqual(len(entries), 9)
 
 
 if __name__ == "__main__":

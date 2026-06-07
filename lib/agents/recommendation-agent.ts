@@ -139,7 +139,7 @@ export async function generateRecommendation(
   candidates: Book[],
   weights?: { categoryWeight?: number; keywordWeight?: number }
 ): Promise<RecommendationResult> {
-  const { books: visibleCandidates } = await filterBlockedBooks(candidates);
+  const { books: visibleCandidates } = await filterBlockedBooks(candidates, requirement.inferred_library_type);
 
   const targetCount = Math.min(requirement.constraints.target_count ?? Math.min(5, visibleCandidates.length), visibleCandidates.length);
 

@@ -15,12 +15,13 @@ type FilterStatus = {
   };
 };
 
-let filterCache:
-  | {
-      expiresAt: number;
-      status: FilterStatus;
-    }
-  | undefined;
+let filterCache: Record<
+  string,
+  {
+    expiresAt: number;
+    status: FilterStatus;
+  }
+> = {};
 
 function parseKeywordList(raw: string | undefined): string[] {
   if (!raw) {
@@ -38,12 +39,16 @@ function deduplicateKeywords(keywords: string[]): string[] {
     .sort((a, b) => b.length - a.length);
 }
 
-async function loadDatabaseKeywords(): Promise<string[]> {
+async function loadDatabaseKeywords(category?: string): Promise<string[]> {
+  if (!category || category === 'none') {
+    return [];
+  }
+
   try {
     const result = await sql<{ keyword: string }>`
       SELECT keyword
       FROM filter_keywords
-      WHERE is_active = TRUE
+      WHERE category = ${category} AND is_active = TRUE
       ORDER BY char_length(keyword) DESC, keyword ASC
     `;
 
@@ -120,14 +125,18 @@ function findBlockedKeyword(book: Book, keywords: string[]): string | null {
   return getMatcher(keywords).test(haystack);
 }
 
-export async function getFilterStatus(forceRefresh: boolean = false): Promise<FilterStatus> {
+export async function getFilterStatus(
+  category?: string,
+  forceRefresh: boolean = false
+): Promise<FilterStatus> {
+  const cacheKey = category || 'none';
   const now = Date.now();
-  if (!forceRefresh && filterCache && filterCache.expiresAt > now) {
-    return filterCache.status;
+  if (!forceRefresh && filterCache[cacheKey] && filterCache[cacheKey].expiresAt > now) {
+    return filterCache[cacheKey].status;
   }
 
   const envKeywords = parseKeywordList(process.env.BLOCKED_KEYWORDS || process.env.RAG_BLOCKED_KEYWORDS);
-  const databaseKeywords = await loadDatabaseKeywords();
+  const databaseKeywords = await loadDatabaseKeywords(category);
   const keywords = deduplicateKeywords([...databaseKeywords, ...envKeywords]);
 
   const status: FilterStatus = {
@@ -139,7 +148,7 @@ export async function getFilterStatus(forceRefresh: boolean = false): Promise<Fi
     },
   };
 
-  filterCache = {
+  filterCache[cacheKey] = {
     expiresAt: now + FILTER_CACHE_TTL_MS,
     status,
   };
@@ -147,7 +156,10 @@ export async function getFilterStatus(forceRefresh: boolean = false): Promise<Fi
   return status;
 }
 
-export async function filterBlockedBooks<T extends Book>(books: T[]): Promise<{
+export async function filterBlockedBooks<T extends Book>(
+  books: T[],
+  category?: string
+): Promise<{
   books: T[];
   blocked: Array<{ book: T; keyword: string }>;
 }> {
@@ -155,7 +167,7 @@ export async function filterBlockedBooks<T extends Book>(books: T[]): Promise<{
     return { books: [], blocked: [] };
   }
 
-  const status = await getFilterStatus();
+  const status = await getFilterStatus(category);
   if (!status.enabled) {
     return { books, blocked: [] };
   }
@@ -175,8 +187,11 @@ export async function filterBlockedBooks<T extends Book>(books: T[]): Promise<{
   return { books: visibleBooks, blocked };
 }
 
-export async function assertBookVisible<T extends Book>(book: T): Promise<T> {
-  const result = await filterBlockedBooks([book]);
+export async function assertBookVisible<T extends Book>(
+  book: T,
+  category?: string
+): Promise<T> {
+  const result = await filterBlockedBooks([book], category);
   if (result.books.length === 0) {
     const keyword = result.blocked[0]?.keyword ?? 'content_filter';
     throw new Error(`Book hidden by content filter: ${keyword}`);

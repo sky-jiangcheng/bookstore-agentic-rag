@@ -30,6 +30,7 @@ export interface RequirementAnalysis {
   preferences: string[];
   needs_clarification: boolean;
   clarification_questions: string[];
+  inferred_library_type?: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none';
 }
 
 export interface RetrievalResult {

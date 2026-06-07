@@ -21,13 +21,14 @@ export async function searchCatalog(filters: CatalogSearchFilters): Promise<Book
     throw unavailableDataSourceError();
   }
 
-  return (await filterBlockedBooks(await searchCatalogFromDatabase(filters))).books;
+  const category = filters.requirement?.inferred_library_type;
+  return (await filterBlockedBooks(await searchCatalogFromDatabase(filters), category)).books;
 }
 
 /**
  * Get details for a specific book.
  */
-export async function getBookDetails(bookId: string): Promise<Book> {
+export async function getBookDetails(bookId: string, category?: string): Promise<Book> {
   if (!hasDatabaseConfig()) {
     throw unavailableDataSourceError();
   }
@@ -38,16 +39,16 @@ export async function getBookDetails(bookId: string): Promise<Book> {
     throw new Error(`Book not found: ${bookId}`);
   }
 
-  return assertBookVisible(book);
+  return assertBookVisible(book, category);
 }
 
 /**
  * Get popular books.
  */
-export async function getPopularBooks(count: number): Promise<Book[]> {
+export async function getPopularBooks(count: number, category?: string): Promise<Book[]> {
   if (!hasDatabaseConfig()) {
     throw unavailableDataSourceError();
   }
 
-  return (await filterBlockedBooks(await getPopularBooksFromDatabase(count))).books;
+  return (await filterBlockedBooks(await getPopularBooksFromDatabase(count), category)).books;
 }

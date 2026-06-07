@@ -32,15 +32,18 @@ export async function POST(req: NextRequest) {
       ? createModel(llmProvider as LLMProviderConfig)
       : undefined;
 
-    const [requirement, vocabularyResult] = await Promise.all([
-      analyzeRequirement(query, { model }),
-      sql<{ keyword: string }>`
+    const requirement = await analyzeRequirement(query, { model });
+    const inferredType = requirement.inferred_library_type || 'none';
+
+    let vocabulary: string[] = [];
+    if (inferredType !== 'none') {
+      const vocabularyResult = await sql<{ keyword: string }>`
         SELECT keyword FROM filter_keywords
-        WHERE is_active = TRUE
+        WHERE category = ${inferredType} AND is_active = TRUE
         ORDER BY id ASC
-      `.catch(() => ({ rows: [] as Array<{ keyword: string }> })),
-    ]);
-    const vocabulary = vocabularyResult.rows.map((row) => row.keyword).filter(Boolean);
+      `.catch(() => ({ rows: [] as Array<{ keyword: string }> }));
+      vocabulary = vocabularyResult.rows.map((row) => row.keyword).filter(Boolean);
+    }
     const suggestions = Array.from(new Set([
       ...parseExcludedKeywords(query),
       ...suggestExclusionCollisions(query, vocabulary),

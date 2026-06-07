@@ -19,7 +19,9 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Invalid book id' }, { status: 400 });
     }
 
-    const book = await getBookDetails(normalizedBookId);
+    const url = new URL(_req.url);
+    const category = url.searchParams.get('category') ?? undefined;
+    const book = await getBookDetails(normalizedBookId, category);
     return NextResponse.json({ book }, { headers: corsHeaders(_req) });
   } catch (error) {
     logServerError('[catalog/book]', error);
