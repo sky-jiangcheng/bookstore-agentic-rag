@@ -20,16 +20,4 @@ CREATE INDEX IF NOT EXISTS idx_books_popular_high
 CREATE INDEX IF NOT EXISTS idx_books_category_price
   ON books(category, price, popularity_score DESC);
 
--- 唯一搜索文档表达式索引：配合 pg_trgm 加速（替代原有 GIN 索引的表达式重复计算）
--- 这个索引让 WHERE 子句中的 `(coalesce(title,'')||' '||...) ILIKE '%x%'` 
--- 能利用到 pg_trgm 的相似度搜索
--- （原有 GIN 索引已覆盖此场景，此处仅作补充说明）
--- 
--- 注意：GIN 索引在 10K+ 匹配行时 bitmap scan 开销大，建议结合 LIMIT 使用
-
--- 添加 search_doc 生成列（可选，简化查询表达式）
-ALTER TABLE books ADD COLUMN IF NOT EXISTS search_doc TEXT
-  GENERATED ALWAYS AS (
-    coalesce(title, '') || ' ' || coalesce(author, '') || ' ' ||
-    coalesce(category, '') || ' ' || coalesce(description, '')
-  ) STORED;
+-- 注意：GIN trigram 索引已覆盖 ILIKE '%term%' 搜索，无需额外生成列。

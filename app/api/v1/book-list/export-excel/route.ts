@@ -65,13 +65,14 @@ const NORMAL_FONT: Partial<ExcelJS.Font> = {
 const CENTER_ALIGN: Partial<ExcelJS.Alignment> = {
   horizontal: 'center', vertical: 'middle',
 };
-const COL_WIDTHS = [6, 30, 15, 20, 12, 10, 8, 10, 10, 20];
+const COL_WIDTHS = [6, 18, 30, 15, 20, 12, 10, 8, 10, 10, 20];
 
 function mapDbBookToExportRow(book: any, index: number): any[] {
   const score = book.relevance_score ?? 0;
   const scoreDisplay = score <= 1 ? `${Math.round(score * 100)}%` : `${Math.round(score)}%`;
   return [
     index,
+    book.book_id ?? '',
     book.title,
     book.author ?? '',
     book.publisher ?? '',
@@ -131,7 +132,7 @@ async function writeExcelStream(
   worksheet.addRow([]).commit();
 
   // Header
-  const headers = ['序号', '书名', '作者', '出版社', '分类', '价格', '库存', '相关度', '来源', '备注'];
+  const headers = ['序号', '书号', '书名', '作者', '出版社', '分类', '价格', '库存', '相关度', '来源', '备注'];
   const headerRow = worksheet.addRow(headers);
   for (let col = 0; col < headers.length; col++) {
     const cell = headerRow.getCell(col + 1);
@@ -142,13 +143,14 @@ async function writeExcelStream(
   }
   headerRow.commit();
 
-  const centerCols = new Set([1, 6, 7, 8]);
+  const centerCols = new Set([1, 7, 8, 9]);
   let rowIndex = 1;
 
   if (staticBooks) {
     for (const book of staticBooks) {
       const rowData = [
         rowIndex++,
+        book.book_id ?? '',
         book.title,
         book.author ?? '',
         book.publisher ?? '',
@@ -167,7 +169,7 @@ async function writeExcelStream(
         cell.font = NORMAL_FONT;
         cell.border = THIN_BORDER;
         if (centerCols.has(col + 1)) cell.alignment = CENTER_ALIGN;
-        if (col + 1 === 6) cell.numFmt = '¥#,##0.00';
+        if (col + 1 === 7) cell.numFmt = '¥#,##0.00';
       }
       row.commit();
     }
@@ -181,7 +183,7 @@ async function writeExcelStream(
           cell.font = NORMAL_FONT;
           cell.border = THIN_BORDER;
           if (centerCols.has(col + 1)) cell.alignment = CENTER_ALIGN;
-          if (col + 1 === 6) cell.numFmt = '¥#,##0.00';
+          if (col + 1 === 7) cell.numFmt = '¥#,##0.00';
         }
         row.commit();
       }
