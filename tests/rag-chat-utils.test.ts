@@ -75,3 +75,22 @@ test('normalizeRequirementSnapshot returns normalized snapshot values', () => {
     },
   });
 });
+
+test('recoverInterruptedMessages clears persisted streaming state after refresh', () => {
+  const messages = ragChatUtils.recoverInterruptedMessages([
+    { id: 'user-1', role: 'user', content: '推荐历史书', status: 'done' },
+    { id: 'assistant-1', role: 'assistant', content: '正在处理', status: 'streaming' },
+  ]);
+
+  assert.equal(messages[0].status, 'done');
+  assert.equal(messages[1].status, 'error');
+  assert.match(messages[1].content, /页面刷新|中断/);
+});
+
+test('recoverInterruptedMessages preserves completed messages', () => {
+  const original = [
+    { id: 'assistant-1', role: 'assistant' as const, content: '推荐完成', status: 'done' as const },
+  ];
+
+  assert.deepEqual(ragChatUtils.recoverInterruptedMessages(original), original);
+});

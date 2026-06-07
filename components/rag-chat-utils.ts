@@ -39,6 +39,18 @@ export interface AssistantMessageType {
   totalPrice?: number;
 }
 
+export function recoverInterruptedMessages(messages: MessageType[]): MessageType[] {
+  return messages.map((message) => {
+    if (message.status !== 'streaming') return message;
+
+    return {
+      ...message,
+      content: '上次查询因页面刷新或标签页关闭而中断，请重新查询。',
+      status: 'error',
+    };
+  });
+}
+
 export function buildFollowUpPrompts(lastUserQuery: string, assistantMessage?: AssistantMessageType) {
   if (!lastUserQuery) {
     return [];

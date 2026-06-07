@@ -75,3 +75,12 @@ test('conversation memory accepts Upstash object responses and chat requests are
   assert.match(ragChat, /clearTimeout\(timeoutId\)/);
   assert.match(requirementAgent, /maxRetries:\s*0/);
 });
+
+test('persisted streaming messages are recovered after page refresh', () => {
+  const ragChat = source('components/rag-chat.tsx');
+  const ragChatUtils = source('components/rag-chat-utils.ts');
+
+  assert.match(ragChatUtils, /recoverInterruptedMessages/);
+  assert.match(ragChat, /recoverInterruptedMessages\(session\.messages/);
+  assert.match(ragChat, /localStorage\.setItem\(['"]rag-chat-sessions['"]/);
+});

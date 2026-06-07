@@ -8,7 +8,7 @@ import { MessageList } from '@/components/RAGChat/MessageList';
 import { ChatInput } from '@/components/RAGChat/ChatInput';
 import { Toast } from '@/components/RAGChat/Toast';
 import { TuningPanel } from '@/components/RAGChat/TuningPanel';
-import { buildFollowUpPrompts } from '@/components/rag-chat-utils';
+import { buildFollowUpPrompts, recoverInterruptedMessages } from '@/components/rag-chat-utils';
 import {
   buildPseudoSql,
   findExactTemplate,
@@ -122,7 +122,12 @@ export function RAGChat() {
     let parsedSessions: SessionItem[] = [];
     if (stored) {
       try {
-        parsedSessions = JSON.parse(stored);
+        const storedSessions = JSON.parse(stored) as SessionItem[];
+        parsedSessions = storedSessions.map((session) => ({
+          ...session,
+          messages: recoverInterruptedMessages(session.messages || []),
+        }));
+        localStorage.setItem('rag-chat-sessions', JSON.stringify(parsedSessions));
       } catch (e) {
         console.error('Failed to parse sessions from local storage', e);
       }
