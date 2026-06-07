@@ -66,6 +66,8 @@ export function BookCard({ book }: { book: BookRecommendation }) {
           <div className="flex flex-wrap items-center gap-2 mb-2.5">
             <span className="text-xs text-slate-400 font-medium">作者：{book.author}</span>
             <span className="w-1 h-1 rounded-full bg-slate-700" />
+            <span className="text-xs text-slate-500 font-mono">{book.book_id}</span>
+            <span className="w-1 h-1 rounded-full bg-slate-700" />
             <span className="inline-flex items-center gap-0.5 text-xs text-blue-400 font-bold">
               <Sparkles className="w-3 h-3 animate-pulse" />
               <span>{matchPct}% 匹配度</span>

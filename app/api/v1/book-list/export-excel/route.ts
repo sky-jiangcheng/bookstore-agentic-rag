@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PassThrough } from 'stream';
 
-import { nodeStreamToWeb } from '@/lib/book-list';
 import { logServerError, buildSafeErrorResponse } from '@/lib/utils/safe-error';
 import { hasDatabaseConfig } from '@/lib/config/environment';
 import { streamBooksForExport } from '@/lib/server/catalog-repository';
@@ -90,26 +88,22 @@ function mapDbBookToExportRow(book: any, index: number): any[] {
   ];
 }
 
-async function writeExcelStream(
-  passThrough: PassThrough,
+async function buildExcelBuffer(
   booklistName: string,
   filters: (z.infer<typeof exportSchema>['filters'] & { limit?: number }) | undefined,
   staticBooks: any[] | undefined,
   budget: number | null | undefined,
   total_price: number | null | undefined,
-): Promise<void> {
-  const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
-    stream: passThrough,
-    useStyles: true,
-    useSharedStrings: true,
-  });
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'BookStore RAG';
+  workbook.created = new Date();
   const worksheet = workbook.addWorksheet(booklistName.slice(0, 31));
 
   for (let i = 0; i < COL_WIDTHS.length; i++) {
     worksheet.getColumn(i + 1).width = COL_WIDTHS[i];
   }
 
-  // Meta rows
   const metaRows: [string, string][] = [
     ['书单名称', booklistName],
   ];
@@ -131,12 +125,10 @@ async function writeExcelStream(
     valueCell.font = NORMAL_FONT;
     valueCell.fill = META_FILL;
     valueCell.border = THIN_BORDER;
-    row.commit();
   }
 
-  worksheet.addRow([]).commit();
+  worksheet.addRow([]);
 
-  // Header
   const headers = ['序号', '书号', '书名', '作者', '出版社', '分类', '价格', '库存', '相关度', '来源', '备注'];
   const headerRow = worksheet.addRow(headers);
   for (let col = 0; col < headers.length; col++) {
@@ -146,7 +138,6 @@ async function writeExcelStream(
     cell.alignment = CENTER_ALIGN;
     cell.border = THIN_BORDER;
   }
-  headerRow.commit();
 
   const centerCols = new Set([1, 7, 8, 9]);
   let rowIndex = 1;
@@ -177,7 +168,6 @@ async function writeExcelStream(
         if (centerCols.has(col + 1)) cell.alignment = CENTER_ALIGN;
         if (col + 1 === 7) cell.numFmt = '¥#,##0.00';
       }
-      row.commit();
     }
   } else if (filters && hasDatabaseConfig()) {
     for await (const batch of streamBooksForExport(filters)) {
@@ -191,16 +181,14 @@ async function writeExcelStream(
           if (centerCols.has(col + 1)) cell.alignment = CENTER_ALIGN;
           if (col + 1 === 7) cell.numFmt = '¥#,##0.00';
         }
-        row.commit();
       }
     }
   }
 
-  // Update book count in meta
   worksheet.getCell('A2').value = String(rowIndex - 1);
 
-  worksheet.commit();
-  await workbook.commit();
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
 
 export async function POST(req: NextRequest) {
@@ -212,32 +200,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Must provide either books or filters' }, { status: 400 });
     }
 
-    const passThrough = new PassThrough();
     const safeName = body.booklist_name.replace(/[^\w\s\-]/g, '_');
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const filename = `${safeName}_${dateStr}.xlsx`;
     const encodedFilename = encodeURIComponent(filename);
 
     const exportFilters = body.filters ? { ...body.filters, limit: body.filters.limit ?? 10000 } : undefined;
-    writeExcelStream(
-      passThrough,
+
+    const buffer = await buildExcelBuffer(
       body.booklist_name,
       exportFilters,
       body.books,
       body.budget,
       body.total_price,
-    ).catch((err) => {
-      passThrough.destroy(err);
-    });
+    );
 
-    const webStream = nodeStreamToWeb(passThrough);
-
-    return new Response(webStream, {
+    return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}`,
-        'Access-Control-Expose-Headers': 'Content-Disposition',
+        'Content-Length': String(buffer.length),
       },
     });
   } catch (err) {
