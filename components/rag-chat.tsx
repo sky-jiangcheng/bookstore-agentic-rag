@@ -381,10 +381,13 @@ export function RAGChat() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+      const usedFallback = data.strategy === 'local-fallback';
       applyPreparedRequirement(query, data.requirement, suggestions, {
         type: 'ai',
-        label: 'AI 需求解析',
-        detail: '本轮已调用需求分析模型。请检查右侧草稿与中间查询预览。',
+        label: usedFallback ? '本地规则降级解析' : 'AI 需求解析',
+        detail: usedFallback
+          ? 'LLM 当前不可用，本轮使用本地规则提取需求；请重点检查查询草稿。'
+          : '本轮已调用需求分析模型。请检查右侧草稿与中间查询预览。',
       });
     } catch (error) {
       console.error('Failed to prepare requirement:', error);

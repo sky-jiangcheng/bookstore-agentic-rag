@@ -245,6 +245,7 @@ export async function analyzeRequirement(
     // Ensure original_query is set correctly to the input:
     return normalizeRequirement(userQuery, {
       ...output,
+      analysis_strategy: 'llm',
       original_query: userQuery,
     });
   } catch (error) {
@@ -271,6 +272,7 @@ export async function analyzeRequirement(
 
     const fallbackTerms = [...new Set([...extractedCategories, ...extractedKeywords])];
     return normalizeRequirement(userQuery, {
+      analysis_strategy: 'local-fallback',
       original_query: userQuery,
       categories: extractedCategories,
       keywords: fallbackTerms,

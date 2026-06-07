@@ -31,7 +31,11 @@ export async function POST(req: NextRequest) {
     ])).filter((word) => word && !/预算|元以内|数量|本书/u.test(word));
     requirement.constraints.exclude_keywords = suggestions;
 
-    return NextResponse.json({ requirement, suggestions });
+    return NextResponse.json({
+      requirement,
+      suggestions,
+      strategy: requirement.analysis_strategy ?? 'llm',
+    });
   } catch (error) {
     logServerError('[RAG Parse]', error);
     return NextResponse.json(buildSafeErrorResponse(error, '需求解析失败'), { status: 500 });

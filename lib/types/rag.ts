@@ -13,6 +13,7 @@ export interface Book {
 }
 
 export interface RequirementAnalysis {
+  analysis_strategy?: 'llm' | 'local-fallback';
   original_query: string;
   categories: string[];
   keywords: string[];

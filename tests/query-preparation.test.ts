@@ -14,6 +14,7 @@ const template: RequirementTemplate = {
   sourceText: '推荐 10 本适合高中生的人工智能入门书',
   normalizedText: '推荐10本适合高中生的人工智能入门书',
   requirement: {
+    analysis_strategy: 'llm',
     original_query: '推荐 10 本适合高中生的人工智能入门书',
     categories: ['人工智能'],
     keywords: ['入门', '高中生'],
