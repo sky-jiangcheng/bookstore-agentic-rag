@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     });
 
     const start = Date.now();
-    const { text, usage } = await generateText({
+    const { text } = await generateText({
       model,
       prompt: 'Hi',
       maxOutputTokens: 2,
@@ -39,14 +39,16 @@ export async function POST(req: NextRequest) {
       ok: true,
       latency,
       response: text.slice(0, 50),
-      usage,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     logServerError('[TestLLM]', error);
+    const isApiError = error != null && typeof error === 'object' && 'statusCode' in error;
+    const statusCode = isApiError ? String((error as { statusCode: unknown }).statusCode) : '';
     const message = error instanceof Error ? error.message : 'Unknown error';
+    const detail = statusCode ? `[HTTP ${statusCode}] ${message}` : message;
     return NextResponse.json({
       ok: false,
-      error: message,
+      error: detail,
     });
   }
 }

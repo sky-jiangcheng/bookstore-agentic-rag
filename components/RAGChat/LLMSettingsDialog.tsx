@@ -81,7 +81,14 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(providerConfig),
       });
-      const data = await res.json();
+      let data: { ok?: boolean; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        setTestStatus('fail');
+        setTestError(`服务器返回了非 JSON 响应 (HTTP ${res.status})`);
+        return;
+      }
       if (data.ok) {
         setTestStatus('success');
       } else {
