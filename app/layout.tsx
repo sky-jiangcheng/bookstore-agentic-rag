@@ -24,9 +24,31 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const themeScript = `
+    try {
+      var mode = localStorage.getItem('bookstore-theme');
+      if (mode !== 'light' && mode !== 'dark' && mode !== 'system') mode = 'dark';
+      var resolved = mode === 'system'
+        ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : mode;
+      document.documentElement.classList.add(resolved);
+      document.documentElement.style.colorScheme = resolved;
+    } catch (_) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.style.colorScheme = 'dark';
+    }
+  `;
+
   return (
-    <html lang="zh-CN" className={`${inter.variable} ${outfit.variable} scroll-smooth`}>
-      <body className="antialiased min-h-screen text-slate-100 bg-[#070a13]">{children}</body>
+    <html
+      lang="zh-CN"
+      className={`${inter.variable} ${outfit.variable} scroll-smooth`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
+      <body className="antialiased min-h-screen">{children}</body>
     </html>
   );
 }

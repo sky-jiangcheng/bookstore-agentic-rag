@@ -12,27 +12,14 @@ export function buildRecommendationSummary(result: HasRecommendation): string {
 
   const budget = result.requirement?.constraints?.budget;
   const totalPrice = Number(result.recommendation?.total_price ?? 0);
-  const excludedKeywords = result.requirement?.constraints?.exclude_keywords ?? [];
-  const hardConstraintNotes: string[] = [];
+  const notes: string[] = [];
 
   if (typeof budget === 'number') {
-    hardConstraintNotes.push(`预算约束：¥${totalPrice.toFixed(2)} / ¥${budget.toFixed(2)}（${totalPrice <= budget ? '已满足' : '未满足'}）`);
+    notes.push(`总价 ¥${totalPrice.toFixed(2)}，${totalPrice <= budget ? '符合' : '超出'} ¥${budget.toFixed(2)} 预算`);
   }
   if (Array.isArray(result.requirement?.categories) && result.requirement.categories.length > 0) {
-    hardConstraintNotes.push(`分类约束：${result.requirement.categories.join('、')}`);
-  }
-  if (Array.isArray(excludedKeywords) && excludedKeywords.length > 0) {
-    hardConstraintNotes.push(`排除词约束：${excludedKeywords.join('、')}`);
+    notes.push(`主题：${result.requirement.categories.join('、')}`);
   }
 
-  const bookLines = result.recommendation.books.map(
-    (book, index) =>
-      `${index + 1}. ${book.title} - ${book.author}\n${book.explanation}`
-  );
-
-  return [
-    `为你推荐 ${result.recommendation.books.length} 本书:`,
-    ...(hardConstraintNotes.length > 0 ? [`硬约束执行结果：${hardConstraintNotes.join('；')}`] : []),
-    ...bookLines,
-  ].join('\n\n');
+  return `已为你推荐 ${result.recommendation.books.length} 本书${notes.length > 0 ? `，${notes.join('；')}` : ''}。`;
 }

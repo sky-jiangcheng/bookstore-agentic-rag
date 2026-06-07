@@ -92,3 +92,16 @@ test('keyword retrieval falls back when an exact search returns no books', () =>
   assert.match(retrievalAgent, /books\.length === 0/);
   assert.match(retrievalAgent, /retrievePopular/);
 });
+
+test('settings separate model and appearance controls and cards never invent a match score', () => {
+  const settings = source('components/RAGChat/LLMSettingsDialog.tsx');
+  const bookCard = source('components/RAGChat/BookCard.tsx');
+  const layout = source('app/layout.tsx');
+
+  assert.match(settings, /模型配置/);
+  assert.match(settings, /外观/);
+  assert.match(settings, /跟随系统/);
+  assert.match(settings, />设置</);
+  assert.doesNotMatch(bookCard, /:\s*90/);
+  assert.match(layout, /suppressHydrationWarning/);
+});

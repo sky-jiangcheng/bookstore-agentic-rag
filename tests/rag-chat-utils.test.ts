@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as ragChatUtils from '../components/rag-chat-utils';
+import { buildRecommendationSummary } from '../lib/utils/recommendation-summary';
 
 test('buildFollowUpPrompts keeps the most useful follow-ups and respects assistant context', () => {
   const { buildFollowUpPrompts } = ragChatUtils;
@@ -93,4 +94,37 @@ test('recoverInterruptedMessages preserves completed messages', () => {
   ];
 
   assert.deepEqual(ragChatUtils.recoverInterruptedMessages(original), original);
+});
+
+test('recommendation summary stays concise and does not repeat book details', () => {
+  const summary = buildRecommendationSummary({
+    requirement: {
+      categories: ['历史'],
+      constraints: {
+        budget: 100,
+        exclude_keywords: [],
+      },
+    },
+    recommendation: {
+      books: [
+        {
+          book_id: '1',
+          title: '夹缝中的历史',
+          author: '朱鸿',
+          publisher: '东方出版中心',
+          category: '历史',
+          price: 22,
+          stock: 10,
+          description: '',
+          explanation: '主题命中「历史」。',
+          relevance_score: 0.92,
+        },
+      ],
+      total_price: 22,
+    },
+  });
+
+  assert.match(summary, /推荐 1 本书/);
+  assert.doesNotMatch(summary, /夹缝中的历史/);
+  assert.doesNotMatch(summary, /主题命中/);
 });

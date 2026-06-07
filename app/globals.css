@@ -35,12 +35,100 @@
   --td-radius-large: 24px;
 }
 
+.light {
+  --foreground-rgb: 15, 23, 42;
+  --background-rgb: 241, 245, 249;
+  --background: 248 250 252;
+  --foreground: 15 23 42;
+  --muted: 226 232 240;
+  --muted-foreground: 71 85 105;
+  --accent: 219 234 254;
+  --accent-foreground: 30 64 175;
+  --border: 203 213 225;
+  --ring: 37 99 235;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background-color: rgb(var(--background-rgb));
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Compatibility layer for the existing dark-first utility palette. */
+.light [class*="bg-[#0d0f12]"],
+.light [class*="bg-[#101216]"],
+.light [class*="bg-[#111318]"],
+.light [class*="bg-[#121419]"],
+.light [class*="bg-[#15171b]"],
+.light [class*="bg-[#15181f]"] {
+  background-color: #f8fafc !important;
+}
+
+.light [class*="bg-slate-950"],
+.light [class*="bg-slate-900"] {
+  background-color: rgba(241, 245, 249, 0.94) !important;
+}
+
+.light [class*="bg-slate-800"] {
+  background-color: rgba(226, 232, 240, 0.9) !important;
+}
+
+.light [class*="text-slate-100"],
+.light [class*="text-slate-200"],
+.light [class*="text-slate-300"] {
+  color: #0f172a !important;
+}
+
+.light [class*="text-slate-400"] {
+  color: #475569 !important;
+}
+
+.light [class*="text-slate-500"],
+.light [class*="text-slate-600"] {
+  color: #64748b !important;
+}
+
+.light [class*="text-amber-200"],
+.light [class*="text-amber-300"] {
+  color: #92400e !important;
+}
+
+.light [class*="text-emerald-400"],
+.light [class*="text-emerald-500"] {
+  color: #047857 !important;
+}
+
+.light [class*="border-[#282b31]"],
+.light [class*="border-slate-800"],
+.light [class*="border-slate-700"] {
+  border-color: #cbd5e1 !important;
+}
+
+.light .workspace-panel,
+.light .query-composer,
+.light .sql-preview {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.light .strategy-banner {
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
+
+.light .glass-panel {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(148, 163, 184, 0.35);
+  box-shadow: 0 4px 18px -4px rgba(15, 23, 42, 0.14);
+}
+
+.light .glass-panel-interactive:hover {
+  background: #ffffff;
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 12px 28px -8px rgba(37, 99, 235, 0.18);
 }
 
 .workspace-panel {

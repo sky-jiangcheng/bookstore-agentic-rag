@@ -93,6 +93,12 @@ function MessageItem({
 }) {
   const stats = getAggregatedStats(messages);
   const isUser = message.role === 'user';
+  const hasRecommendations = !isUser && Boolean(message.recommendations?.length);
+  const showContentBubble =
+    isUser ||
+    !hasRecommendations ||
+    message.status === 'streaming' ||
+    message.status === 'error';
 
   return (
     <div className={`flex items-start gap-3 w-full ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
@@ -123,6 +129,7 @@ function MessageItem({
         </div>
 
         {/* Content Bubble */}
+        {showContentBubble && (
         <div className={`p-4 rounded-2xl text-sm md:text-base leading-relaxed border ${
           isUser
             ? 'bg-gradient-to-r from-blue-600 to-indigo-600 border-blue-500/20 text-white rounded-tr-none shadow-lg shadow-blue-950/20'
@@ -130,10 +137,11 @@ function MessageItem({
         }`}>
           <div className="whitespace-pre-wrap font-sans">{message.content}</div>
         </div>
+        )}
 
         {/* Recommendations list */}
         {!isUser && message.recommendations && message.recommendations.length > 0 && (
-          <div className="w-full mt-4 space-y-4">
+          <div className="w-full mt-1 space-y-3">
             {/* Stats Overview Panel */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 bg-slate-950/45 border border-slate-800/70 rounded-xl">
               <div className="text-xs text-slate-400 font-medium">
@@ -163,7 +171,7 @@ function MessageItem({
             </div>
 
             {/* Book Cards Grid */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
               {message.recommendations.map((book) => (
                 <BookCard key={book.book_id} book={book} />
               ))}
