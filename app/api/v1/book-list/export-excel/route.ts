@@ -67,12 +67,17 @@ const CENTER_ALIGN: Partial<ExcelJS.Alignment> = {
 };
 const COL_WIDTHS = [6, 18, 30, 15, 20, 12, 10, 8, 10, 10, 20];
 
+function isAbnormalId(id: string): boolean {
+  return !/^97[89]\d{10}$/.test(id) && !/^\d{10}$/.test(id);
+}
+
 function mapDbBookToExportRow(book: any, index: number): any[] {
+  const bookId = book.book_id ?? '';
   const score = book.relevance_score ?? 0;
   const scoreDisplay = score <= 1 ? `${Math.round(score * 100)}%` : `${Math.round(score)}%`;
   return [
     index,
-    book.book_id ?? '',
+    isAbnormalId(String(bookId)) ? `${bookId} ⚠` : String(bookId),
     book.title,
     book.author ?? '',
     book.publisher ?? '',
@@ -148,9 +153,10 @@ async function writeExcelStream(
 
   if (staticBooks) {
     for (const book of staticBooks) {
+      const bookId = String(book.book_id ?? '');
       const rowData = [
         rowIndex++,
-        book.book_id ?? '',
+        isAbnormalId(bookId) ? `${bookId} ⚠` : bookId,
         book.title,
         book.author ?? '',
         book.publisher ?? '',

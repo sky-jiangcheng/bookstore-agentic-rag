@@ -22,14 +22,20 @@ interface CatalogApiBook {
   relevance_score?: number | null;
 }
 
+/** Check if a book ID matches standard ISBN-13 format (978/979 + 10 digits) */
+function isAbnormalId(id: string): boolean {
+  return !/^97[89]\d{10}$/.test(id) && !/^\d{10}$/.test(id);
+}
+
 function mapBook(record: CatalogApiBook): Book {
   const bookId = record.book_id ?? record.id;
   if (!bookId) {
     throw new Error('Catalog record is missing book_id');
   }
 
+  const idStr = String(bookId);
   return {
-    book_id: String(bookId),
+    book_id: idStr,
     title: record.title,
     author: record.author ?? 'Unknown Author',
     publisher: record.publisher ?? 'Unknown Publisher',
@@ -39,6 +45,7 @@ function mapBook(record: CatalogApiBook): Book {
     description: record.description ?? '',
     cover_url: record.cover_url ?? undefined,
     relevance_score: Number(record.relevance_score ?? 0),
+    is_abnormal_id: isAbnormalId(idStr),
   };
 }
 

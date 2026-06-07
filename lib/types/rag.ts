@@ -10,6 +10,7 @@ export interface Book {
   cover_url?: string;
   relevance_score: number;
   popularity_score?: number;
+  is_abnormal_id?: boolean;
 }
 
 export interface RequirementAnalysis {
