@@ -35,7 +35,7 @@ export interface RAGPipelineResult {
 
 function getCandidateLimit(requirement: RequirementAnalysis): number {
   const targetCount = requirement.constraints.target_count ?? config.rag.defaultTargetCount;
-  return Math.min(50, Math.max(30, targetCount * 4));
+  return Math.max(30, targetCount * 4);
 }
 
 export async function runRAGPipeline(

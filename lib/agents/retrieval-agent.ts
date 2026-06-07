@@ -180,6 +180,7 @@ async function retrieveKeyword(requirement: RequirementAnalysis, topK: number): 
       price_max: requirement.constraints.price_max,
       query: requirement.original_query,
       search_terms: searchTerms,
+      limit: topK * 2,
     });
 
     for (const book of books) {

@@ -6,7 +6,7 @@ import { buildCatalogTextSearch } from '@/lib/search/catalog-query';
 import { buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 
-const MAX_RESULTS = 50;
+
 
 interface CatalogApiBook {
   book_id?: string | number;
@@ -82,6 +82,8 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const limit = filters.limit !== undefined ? filters.limit : 10000;
+  const limitClause = limit > 0 ? `LIMIT ${limit}` : '';
 
   const query = `
     SELECT
@@ -98,7 +100,7 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
     FROM books
     ${whereClause}
     ORDER BY COALESCE(popularity_score, 0) DESC, COALESCE(updated_at, NOW()) DESC
-    LIMIT ${MAX_RESULTS}
+    ${limitClause}
   `;
 
   const books = normalizeBooks((await sql.query<CatalogApiBook>(query, params)).rows);

@@ -20,6 +20,7 @@ import type {
   ParseRequirementsResponse,
   ParsedRequirements,
 } from '@/lib/book-list/types';
+import { BOOK_LIST_CONSTANTS } from '@/lib/constants';
 import type { RecommendedBook } from '@/lib/types/rag';
 import { logServerError } from '@/lib/utils/safe-error';
 
@@ -121,7 +122,10 @@ export async function parseBookListRequirements(
 export async function generateBookList(
   body: GenerateBookListRequest,
 ): Promise<GenerateBookListResponse> {
-  const limit = Math.min(100, Math.max(5, body.limit ?? 20));
+  const limit = Math.min(
+    BOOK_LIST_CONSTANTS.MAX_LIMIT,
+    Math.max(BOOK_LIST_CONSTANTS.MIN_LIMIT, body.limit ?? BOOK_LIST_CONSTANTS.DEFAULT_LIMIT),
+  );
 
   let requirements: ParsedRequirements;
   let requestId: string | null = body.request_id?.trim() || null;

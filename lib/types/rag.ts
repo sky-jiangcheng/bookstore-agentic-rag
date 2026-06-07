@@ -68,6 +68,7 @@ export interface CatalogSearchFilters {
   price_max?: number;
   query?: string;
   search_terms?: string[];
+  limit?: number;
 }
 
 export interface UserInfo {
