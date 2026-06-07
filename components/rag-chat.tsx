@@ -8,7 +8,7 @@ import { MessageList } from '@/components/RAGChat/MessageList';
 import { ChatInput } from '@/components/RAGChat/ChatInput';
 import { Toast } from '@/components/RAGChat/Toast';
 import { TuningPanel } from '@/components/RAGChat/TuningPanel';
-import { buildFollowUpPrompts, recoverInterruptedMessages } from '@/components/rag-chat-utils';
+import { recoverInterruptedMessages } from '@/components/rag-chat-utils';
 import {
   buildPseudoSql,
   findExactTemplate,
@@ -56,7 +56,6 @@ export function RAGChat() {
   const [isLoading, setIsLoading] = useState(false);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [lastUserQuery, setLastUserQuery] = useState('');
   const [exporting, setExporting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -166,15 +165,6 @@ export function RAGChat() {
       setSelectedExclusions(activeSession.selectedExclusions ?? []);
       setSelectedKeywords(activeSession.selectedKeywords ?? []);
       setSessionId(activeSession.id);
-
-      const lastUser = [...(activeSession.messages || [])]
-        .reverse()
-        .find(m => m.role === 'user');
-      if (lastUser) {
-        setLastUserQuery(lastUser.content);
-      } else {
-        setLastUserQuery('');
-      }
     }
   }, [activeSessionId, sessions]);
 
@@ -223,7 +213,6 @@ export function RAGChat() {
     setKeywordWeight(0.6);
     setSelectedExclusions([]);
     setSessionId(newSessId);
-    setLastUserQuery('');
   }, []);
 
   const handleSwitchSession = useCallback((id: string) => {
@@ -317,7 +306,6 @@ export function RAGChat() {
       setKeywordWeight(0.6);
       setSelectedExclusions([]);
       setSelectedKeywords([]);
-      setLastUserQuery('');
       setPreparedQuery('');
       setDraftRequirement(null);
       setConfirmedRequirement(null);
@@ -467,14 +455,7 @@ export function RAGChat() {
     });
   }, [categoryWeight, confirmedRequirement, draftRequirement, keywordWeight, preparedQuery, selectedExclusions, targetCount]);
 
-  const lastAssistantMessage = useMemo(() => {
-    const reversed = [...messages].reverse();
-    return reversed.find((message) => message.role === 'assistant');
-  }, [messages]);
 
-  const followUpPrompts = useMemo(() => {
-    return buildFollowUpPrompts(lastUserQuery, lastAssistantMessage);
-  }, [lastAssistantMessage, lastUserQuery]);
 
   const upsertAssistantMessage = useCallback(
     (assistantMessageId: string, updater: (current?: MessageType) => MessageType) => {
@@ -610,7 +591,6 @@ export function RAGChat() {
       return updated;
     });
 
-    setLastUserQuery(trimmed);
     setInput('');
     setDraftRequirement(null);
     setIsLoading(true);
@@ -857,9 +837,7 @@ export function RAGChat() {
     setTimeout(() => prepareRequirement(prompt), 0);
   }, [prepareRequirement]);
 
-  const handleFollowUp = useCallback((query: string) => {
-    prepareRequirement(query);
-  }, [prepareRequirement]);
+
 
   const pseudoSql = useMemo(
     () => draftRequirement ? buildPseudoSql(draftRequirement, categoryWeight, keywordWeight) : '',
@@ -1088,21 +1066,6 @@ export function RAGChat() {
           )}
         </div>
 
-        {/* Suggestion pills floating right above input capsule */}
-        {messages.length > 0 && followUpPrompts.length > 0 && (
-          <div className="absolute bottom-[96px] left-0 right-0 flex flex-wrap items-center justify-center gap-2 px-6 z-30 pointer-events-auto">
-            {followUpPrompts.map((prompt, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleFollowUp(prompt)}
-                disabled={isLoading}
-                className="px-3 py-1.5 rounded-full bg-slate-950/85 backdrop-blur border border-slate-800/80 text-xs font-semibold text-slate-300 hover:text-blue-400 hover:border-blue-500/40 hover:bg-blue-500/10 transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Chat Input docked inside Middle Column */}
         <ChatInput
