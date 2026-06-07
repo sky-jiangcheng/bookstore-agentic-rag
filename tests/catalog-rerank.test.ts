@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { rerankCatalogBooks } from '../lib/search/query-rerank';
 
-test('reranks health books above unrelated popular books', () => {
+test('reranks health books above unrelated popular books', async () => {
   const books = [
     {
       book_id: '1',
@@ -20,6 +20,7 @@ test('reranks health books above unrelated popular books', () => {
     {
       book_id: '2',
       title: '中老年健康养生指南',
+      李四: '李四',
       author: '李四',
       publisher: '健康出版社',
       price: 60,
@@ -31,12 +32,12 @@ test('reranks health books above unrelated popular books', () => {
     },
   ];
 
-  const ranked = rerankCatalogBooks(books, '推荐一些适合家里长辈看的健康养生和免疫力科普书。');
+  const ranked = await rerankCatalogBooks(books, '推荐一些适合家里长辈看的健康养生和免疫力科普书。');
 
   assert.equal(ranked[0].book_id, '2');
 });
 
-test('prioritizes explicitly named people in history queries', () => {
+test('prioritizes explicitly named people in history queries', async () => {
   const books = [
     {
       book_id: '1',
@@ -64,12 +65,12 @@ test('prioritizes explicitly named people in history queries', () => {
     },
   ];
 
-  const ranked = rerankCatalogBooks(books, '有没有适合普通读者看的历史人物传记，最好是鲁迅相关的。');
+  const ranked = await rerankCatalogBooks(books, '有没有适合普通读者看的历史人物传记，最好是鲁迅相关的。');
 
   assert.equal(ranked[0].book_id, '2');
 });
 
-test('prioritizes explicit AI topics above broad computer-category matches', () => {
+test('prioritizes explicit AI topics above broad computer-category matches', async () => {
   const books = [
     {
       book_id: '1',
@@ -97,7 +98,7 @@ test('prioritizes explicit AI topics above broad computer-category matches', () 
     },
   ];
 
-  const ranked = rerankCatalogBooks(
+  const ranked = await rerankCatalogBooks(
     books,
     '推荐5本人工智能入门书，预算200元',
   );

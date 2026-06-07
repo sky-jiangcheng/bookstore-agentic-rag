@@ -118,9 +118,34 @@ function extractTerms(query: unknown): string[] {
   }
 
   const rawTerms = normalized.match(/[\p{Script=Han}]{2,}|[\p{L}\p{N}]{2,}/gu) ?? [];
-  const terms = rawTerms
-    .map((term) => term.trim())
-    .filter((term) => term && !GENERIC_STOPWORDS.has(term));
+  const terms: string[] = [];
+
+  for (const term of rawTerms) {
+    const trimmed = term.trim();
+    if (!trimmed || GENERIC_STOPWORDS.has(trimmed)) {
+      continue;
+    }
+
+    if (/[\p{Script=Han}]/u.test(trimmed)) {
+      if (trimmed.length <= 4) {
+        terms.push(trimmed);
+      }
+      for (let i = 0; i <= trimmed.length - 2; i++) {
+        const bigram = trimmed.slice(i, i + 2);
+        if (!GENERIC_STOPWORDS.has(bigram)) {
+          terms.push(bigram);
+        }
+      }
+      for (let i = 0; i <= trimmed.length - 3; i++) {
+        const trigram = trimmed.slice(i, i + 3);
+        if (!GENERIC_STOPWORDS.has(trigram)) {
+          terms.push(trigram);
+        }
+      }
+    } else {
+      terms.push(trimmed);
+    }
+  }
 
   terms.push(...collectIntentTerms(normalized));
 
@@ -139,12 +164,36 @@ function buildCatalogSearchTerms(query: unknown): string[] {
   }
 
   const fallbackTerms = normalized.match(/[\p{Script=Han}]{2,}|[\p{L}\p{N}]{2,}/gu) ?? [];
-  return unique(
-    fallbackTerms
-      .map((term) => term.trim())
-      .filter((term) => term && !GENERIC_STOPWORDS.has(term))
-      .slice(0, 8)
-  );
+  const extracted: string[] = [];
+
+  for (const term of fallbackTerms) {
+    const trimmed = term.trim();
+    if (!trimmed || GENERIC_STOPWORDS.has(trimmed)) {
+      continue;
+    }
+
+    if (/[\p{Script=Han}]/u.test(trimmed)) {
+      if (trimmed.length <= 4) {
+        extracted.push(trimmed);
+      }
+      for (let i = 0; i <= trimmed.length - 2; i++) {
+        const bigram = trimmed.slice(i, i + 2);
+        if (!GENERIC_STOPWORDS.has(bigram)) {
+          extracted.push(bigram);
+        }
+      }
+      for (let i = 0; i <= trimmed.length - 3; i++) {
+        const trigram = trimmed.slice(i, i + 3);
+        if (!GENERIC_STOPWORDS.has(trigram)) {
+          extracted.push(trigram);
+        }
+      }
+    } else {
+      extracted.push(trimmed);
+    }
+  }
+
+  return unique(extracted).slice(0, 12);
 }
 
 function matchCount(haystack: string, terms: string[]): number {
@@ -181,9 +230,22 @@ function matchCategories(book: CatalogRerankBook, normalizedQuery: string): stri
   return unique(queryCategoryHits);
 }
 
-function computeBookScore(book: CatalogRerankBook, query: unknown, index: number): { score: number; index: number } {
-  const normalizedQuery = normalizeText(query);
-  const queryTerms = extractTerms(query);
+interface RerankOptions {
+  query?: unknown;
+  requirement?: any;
+  feedbackStats?: Record<string, any>;
+}
+
+function computeBookScore(
+  book: CatalogRerankBook,
+  index: number,
+  options: RerankOptions,
+): { score: number; index: number } {
+  const { query, requirement, feedbackStats } = options;
+  const normalizedQuery = normalizeText(requirement?.original_query || query);
+  const queryTerms = requirement?.keywords?.length > 0
+    ? unique(requirement.keywords.map((k: string) => k.toLowerCase()))
+    : extractTerms(requirement?.original_query || query);
   const title = normalizeText(book.title);
   const author = normalizeText(book.author);
   const publisher = normalizeText(book.publisher);
@@ -192,7 +254,7 @@ function computeBookScore(book: CatalogRerankBook, query: unknown, index: number
   const haystack = `${title} ${author} ${publisher} ${category} ${description}`.trim();
   const relevance = Number(book.relevance_score ?? 0);
 
-  if (!normalizedQuery || queryTerms.length === 0) {
+  if (!normalizedQuery && queryTerms.length === 0) {
     return {
       score: relevance,
       index,
@@ -206,13 +268,14 @@ function computeBookScore(book: CatalogRerankBook, query: unknown, index: number
   const publisherHits = matchCount(publisher, queryTerms);
   const categoryHits = matchCount(category, queryTerms);
   const descriptionHits = matchCount(description, queryTerms);
-  const queryCategoryHits = matchCategories(book, normalizedQuery);
-  const hasQigongTopic = /象棋/.test(normalizedQuery);
-  const hasWeiqiTopic = /围棋/.test(normalizedQuery);
-  const hasGuojiXiangqiTopic = /国际象棋/.test(normalizedQuery);
-  const hasWuziqiTopic = /五子棋/.test(normalizedQuery);
-  const hasHistoryBioTopic = /历史/.test(normalizedQuery) || /传记/.test(normalizedQuery) || /人物/.test(normalizedQuery) || /鲁迅/.test(normalizedQuery);
-  const hasLuXunTopic = /鲁迅/.test(normalizedQuery);
+  
+  const categoriesToMatch = requirement?.categories?.length > 0
+    ? requirement.categories
+    : matchCategories(book, normalizedQuery);
+
+  const categoryMatch = categoriesToMatch.some((cat: string) =>
+    category.includes(cat.toLowerCase()) || title.includes(cat.toLowerCase())
+  );
 
   score += titleHits * 3.5;
   score += categoryHits * 2.6;
@@ -220,7 +283,7 @@ function computeBookScore(book: CatalogRerankBook, query: unknown, index: number
   score += publisherHits * 0.8;
   score += descriptionHits * 0.6;
 
-  if (queryCategoryHits.length > 0) {
+  if (categoryMatch) {
     score += 4.5;
   }
 
@@ -237,6 +300,14 @@ function computeBookScore(book: CatalogRerankBook, query: unknown, index: number
     score -= 2.75;
   }
 
+  const excludedKeywords = requirement?.constraints?.exclude_keywords || [];
+  const hasExclusions = excludedKeywords.some((keyword: string) =>
+    haystack.includes(keyword.toLowerCase())
+  );
+  if (hasExclusions) {
+    score -= 10;
+  }
+
   if (/健康|养生|医疗|免疫力|长辈|老人|中老年/.test(normalizedQuery) && /健康|养生|医疗|免疫力|长辈|老人|中老年/.test(haystack)) {
     score += 2.2;
   }
@@ -244,6 +315,13 @@ function computeBookScore(book: CatalogRerankBook, query: unknown, index: number
   if (/科普|科学|知识/.test(normalizedQuery) && /科普|科学|知识/.test(haystack)) {
     score += 1.8;
   }
+
+  const hasQigongTopic = /象棋/.test(normalizedQuery);
+  const hasWeiqiTopic = /围棋/.test(normalizedQuery);
+  const hasGuojiXiangqiTopic = /国际象棋/.test(normalizedQuery);
+  const hasWuziqiTopic = /五子棋/.test(normalizedQuery);
+  const hasHistoryBioTopic = /历史/.test(normalizedQuery) || /传记/.test(normalizedQuery) || /人物/.test(normalizedQuery) || /鲁迅/.test(normalizedQuery);
+  const hasLuXunTopic = /鲁迅/.test(normalizedQuery);
 
   if (hasQigongTopic) {
     if (containsAny(haystack, ['象棋'])) {
@@ -298,20 +376,34 @@ function computeBookScore(book: CatalogRerankBook, query: unknown, index: number
     }
   }
 
+  const bookId = String((book as any).book_id ?? (book as any).id ?? '');
+  if (feedbackStats && bookId && feedbackStats[bookId]) {
+    const stats = feedbackStats[bookId];
+    const pos = Number(stats.positiveCount || 0);
+    const neg = Number(stats.negativeCount || 0);
+    const boost = Math.log1p(pos) * 1.5 - neg * 0.8;
+    score += boost;
+  }
+
   return {
     score,
     index,
   };
 }
 
-function rerankCatalogBooks<T extends CatalogRerankBook>(books: T[], query: unknown): Array<T & { relevance_score: number }> {
+async function rerankCatalogBooks<T extends CatalogRerankBook>(
+  books: T[],
+  query: unknown,
+  requirement?: any,
+  feedbackStats?: Record<string, any>,
+): Promise<Array<T & { relevance_score: number }>> {
   if (!Array.isArray(books) || books.length === 0) {
     return [];
   }
 
   const scored: Array<ScoredBook<T>> = books.map((book, index) => ({
     book,
-    ...computeBookScore(book, query, index),
+    ...computeBookScore(book, index, { query, requirement, feedbackStats }),
   }));
 
   const sorted = [...scored].sort((a, b) => {

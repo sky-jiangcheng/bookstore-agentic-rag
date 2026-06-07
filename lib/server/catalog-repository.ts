@@ -106,9 +106,29 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
   `;
 
   const books = normalizeBooks((await sql.query<CatalogApiBook>(query, params)).rows);
-  return rerankCatalogBooks(
+
+  const feedbackStats: Record<string, any> = {};
+  try {
+    const { getFeedbackStats } = await import('@/lib/feedback/feedback-store');
+    const { hasRedisConfig } = await import('@/lib/config/environment');
+    if (hasRedisConfig()) {
+      const statsPromises = books.map(async (book) => {
+        const stats = await getFeedbackStats(book.book_id);
+        if (stats) {
+          feedbackStats[book.book_id] = stats;
+        }
+      });
+      await Promise.all(statsPromises);
+    }
+  } catch (error) {
+    console.warn('[catalog-repository] Failed to load feedback stats:', error);
+  }
+
+  return await rerankCatalogBooks(
     books,
     [filters.query, ...searchTerms].filter(Boolean).join(' '),
+    filters.requirement,
+    feedbackStats,
   );
 }
 

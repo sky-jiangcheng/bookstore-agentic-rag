@@ -1,10 +1,10 @@
 // lib/agents/recommendation-agent.ts
-import type { Book, RecommendedBook, RecommendationResult, RequirementAnalysis } from '@/lib/types/rag';
+import type { Book, RecommendationResult, RequirementAnalysis } from '@/lib/types/rag';
 import { filterBlockedBooks } from '@/lib/server/book-filters';
 
-function rankForBudget(book: RecommendedBook, requirement: RequirementAnalysis): number {
+function rankForBudget(book: Book, requirement: RequirementAnalysis): number {
   let score = book.relevance_score ?? 0;
-  const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
+  const haystack = `${book.title} ${book.author} ${book.category} ${book.description}`.toLowerCase();
 
   for (const category of requirement.categories) {
     if (haystack.includes(category.toLowerCase())) {
@@ -21,19 +21,19 @@ function rankForBudget(book: RecommendedBook, requirement: RequirementAnalysis):
   return score;
 }
 
-export function containsExcludedKeyword(book: RecommendedBook, excludedKeywords: string[]): boolean {
+export function containsExcludedKeyword(book: Book, excludedKeywords: string[]): boolean {
   if (excludedKeywords.length === 0) {
     return false;
   }
 
-  const haystack = `${book.title} ${book.author} ${book.category}`.toLowerCase();
+  const haystack = `${book.title} ${book.author} ${book.category} ${book.description}`.toLowerCase();
   return excludedKeywords.some((keyword) => haystack.includes(keyword.toLowerCase()));
 }
 
 export function enforceBudget(
-  books: RecommendedBook[],
+  books: Book[],
   requirement: RequirementAnalysis
-): RecommendedBook[] {
+): Book[] {
   const budget = requirement.constraints.budget;
   if (!budget || books.length === 0) {
     return books;
@@ -41,9 +41,15 @@ export function enforceBudget(
 
   const affordable = books
     .filter((book) => book.price <= budget)
-    .sort((a, b) => rankForBudget(b, requirement) - rankForBudget(a, requirement));
+    .sort((a, b) => {
+      const scoreA = rankForBudget(a, requirement);
+      const scoreB = rankForBudget(b, requirement);
+      const densityA = Math.max(0.1, scoreA) / Math.max(1, a.price);
+      const densityB = Math.max(0.1, scoreB) / Math.max(1, b.price);
+      return densityB - densityA;
+    });
 
-  const selected: RecommendedBook[] = [];
+  const selected: Book[] = [];
   let total = 0;
   for (const book of affordable) {
     if (total + book.price > budget) {
@@ -62,18 +68,22 @@ export function enforceBudget(
 }
 
 function enforceRecommendationConstraints(
-  books: RecommendedBook[],
+  books: Book[],
   requirement: RequirementAnalysis,
   targetCount: number
-): RecommendedBook[] {
+): Book[] {
   const excludedKeywords = requirement.constraints.exclude_keywords ?? [];
   const withoutExcluded = books.filter((book) => !containsExcludedKeyword(book, excludedKeywords));
   const budgetSafe = enforceBudget(withoutExcluded, requirement);
   return budgetSafe.slice(0, Math.max(1, targetCount));
 }
 
-export function buildHeuristicExplanation(book: Book, requirement: RequirementAnalysis): string {
-  const haystack = `${book.title} ${book.category}`.toLowerCase();
+export function buildHeuristicExplanation(
+  book: Book,
+  requirement: RequirementAnalysis,
+  feedbackStats?: any
+): string {
+  const haystack = `${book.title} ${book.category} ${book.description}`.toLowerCase();
   const matchedCategories = requirement.categories.filter((category) => haystack.includes(category.toLowerCase()));
   const matchedKeywords = requirement.keywords.filter((keyword) => keyword.length >= 2 && haystack.includes(keyword.toLowerCase())).slice(0, 3);
   const explanationParts: string[] = [];
@@ -82,11 +92,24 @@ export function buildHeuristicExplanation(book: Book, requirement: RequirementAn
     explanationParts.push(`主题命中「${matchedCategories.join('、')}」`);
   }
   if (matchedKeywords.length > 0) {
-    explanationParts.push(`关键词覆盖「${matchedKeywords.join('、')}」`);
+    explanationParts.push(`关键词匹配「${matchedKeywords.join('、')}」`);
   }
+  
+  if (feedbackStats && feedbackStats.positiveCount > 0) {
+    const total = feedbackStats.totalFeedback || (feedbackStats.positiveCount + feedbackStats.negativeCount);
+    if (total > 0) {
+      const approvalRate = Math.round((feedbackStats.positiveCount / total) * 100);
+      explanationParts.push(`读者推荐度 ${approvalRate}%（${feedbackStats.positiveCount}位读者推荐）`);
+    }
+  }
+
   if (requirement.constraints.budget !== undefined) {
+    const percent = Math.round((book.price / requirement.constraints.budget) * 100);
+    explanationParts.push(`单本价格 ¥${book.price.toFixed(2)}（预算占比 ${percent}%）`);
+  } else {
     explanationParts.push(`单本价格 ¥${book.price.toFixed(2)}`);
   }
+
   if (book.description) {
     const cleanDesc = book.description.replace(/\s+/g, ' ').trim();
     explanationParts.push(`简介: ${cleanDesc.length > 60 ? cleanDesc.slice(0, 60) + '...' : cleanDesc}`);
@@ -105,10 +128,8 @@ export async function generateRecommendation(
 ): Promise<RecommendationResult> {
   const { books: visibleCandidates } = await filterBlockedBooks(candidates);
 
-  // Determine target count based on requirement or default to 5
   const targetCount = Math.min(requirement.constraints.target_count ?? Math.min(5, visibleCandidates.length), visibleCandidates.length);
 
-  // If no candidates available, return empty result
   if (visibleCandidates.length === 0) {
     return {
       books: [],
@@ -119,35 +140,47 @@ export async function generateRecommendation(
     };
   }
 
-  const mappedBooks: RecommendedBook[] = visibleCandidates.map(book => ({
-    ...book,
-    explanation: buildHeuristicExplanation(book, requirement),
-  }));
+  const finalBooks = enforceRecommendationConstraints(visibleCandidates, requirement, targetCount);
 
-  const finalBooks = enforceRecommendationConstraints(mappedBooks, requirement, targetCount);
+  // Fetch feedback stats asynchronously for final selected books
+  const { getFeedbackStats } = await import('@/lib/feedback/feedback-store');
+  const { hasRedisConfig } = await import('@/lib/config/environment');
+  const redisEnabled = hasRedisConfig();
 
-  // Calculate category distribution:
+  const mappedBooksPromise = finalBooks.map(async (book) => {
+    let stats = null;
+    if (redisEnabled) {
+      try {
+        stats = await getFeedbackStats(book.book_id);
+      } catch (e) {
+        console.warn(`[recommendation-agent] Failed to fetch feedback stats for ${book.book_id}:`, e);
+      }
+    }
+    return {
+      ...book,
+      explanation: buildHeuristicExplanation(book, requirement, stats),
+    };
+  });
+
+  const recommendedBooks = await Promise.all(mappedBooksPromise);
+
   const category_distribution: Record<string, number> = {};
-  for (const book of finalBooks) {
+  for (const book of recommendedBooks) {
     category_distribution[book.category] = (category_distribution[book.category] || 0) + 1;
   }
 
-  // Calculate total price:
-  const total_price = finalBooks.reduce((sum, book) => sum + book.price, 0);
+  const total_price = recommendedBooks.reduce((sum, book) => sum + book.price, 0);
+  const coverage_score = recommendedBooks.length / visibleCandidates.length;
 
-  // Coverage ratio: proportion of visible candidates that made it into the final selection
-  const coverage_score = finalBooks.length / visibleCandidates.length;
-
-  // Calculate confidence: based on how clear the requirement is
   const clarityScore = Math.min(1, (
     (requirement.categories.length + requirement.keywords.length + requirement.preferences.length) / 6
   ));
   const confidence = requirement.needs_clarification
-    ? 0.3 + clarityScore * 0.2  // Lower base confidence when clarification needed
+    ? 0.3 + clarityScore * 0.2
     : 0.5 + clarityScore * 0.5;
 
   return {
-    books: finalBooks,
+    books: recommendedBooks,
     total_price,
     quality_score: coverage_score,
     confidence,

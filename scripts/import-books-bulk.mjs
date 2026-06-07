@@ -109,6 +109,8 @@ async function flushBatch(pool, batch) {
     'price',
     'stock',
     'category',
+    'description',
+    'cover_url',
     'popularity_score',
   ];
   const valuesSql = batch
@@ -123,6 +125,8 @@ async function flushBatch(pool, batch) {
         item.price,
         item.stock,
         item.category,
+        item.description ?? '',
+        item.cover_url ?? null,
         normalizePopularityScore(item.popularity_score),
       ]
         .map(toSqlLiteral)
@@ -141,6 +145,8 @@ async function flushBatch(pool, batch) {
         price = EXCLUDED.price,
         stock = EXCLUDED.stock,
         category = EXCLUDED.category,
+        description = EXCLUDED.description,
+        cover_url = EXCLUDED.cover_url,
         popularity_score = EXCLUDED.popularity_score,
         updated_at = NOW()
     `,

@@ -22,6 +22,7 @@ function normalizeBook(book) {
     stock: Number(book.stock || 0),
     category: book.category ? String(book.category).trim() : 'general',
     description: book.description ? String(book.description).trim() : '',
+    cover_url: book.cover_url ? String(book.cover_url).trim() : null,
     popularity_score: Number(book.popularity_score || 0),
   };
 }
@@ -56,6 +57,8 @@ async function main() {
         price,
         stock,
         category,
+        description,
+        cover_url,
         popularity_score
       ) VALUES (
         ${book.id},
@@ -65,6 +68,8 @@ async function main() {
         ${book.price},
         ${book.stock},
         ${book.category},
+        ${book.description},
+        ${book.cover_url},
         ${book.popularity_score}
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -74,6 +79,8 @@ async function main() {
         price = EXCLUDED.price,
         stock = EXCLUDED.stock,
         category = EXCLUDED.category,
+        description = EXCLUDED.description,
+        cover_url = EXCLUDED.cover_url,
         popularity_score = EXCLUDED.popularity_score,
         updated_at = NOW()
     `;

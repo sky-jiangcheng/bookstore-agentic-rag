@@ -70,6 +70,7 @@ export interface CatalogSearchFilters {
   search_terms?: string[];
   limit?: number;
   page?: number;
+  requirement?: any;
 }
 
 export interface UserInfo {

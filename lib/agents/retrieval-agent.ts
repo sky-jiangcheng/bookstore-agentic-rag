@@ -181,6 +181,7 @@ async function retrieveKeyword(requirement: RequirementAnalysis, topK: number): 
       query: requirement.original_query,
       search_terms: searchTerms,
       limit: topK * 2,
+      requirement,
     });
 
     for (const book of books) {
