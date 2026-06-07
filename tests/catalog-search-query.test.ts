@@ -16,11 +16,11 @@ test('catalog text search joins expanded terms with OR', () => {
     search.condition,
     [
       '(',
-      "concat_ws(' ', title, author, category, description) ILIKE $3",
+      "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, '')) ILIKE $3",
       'OR',
-      "concat_ws(' ', title, author, category, description) ILIKE $4",
+      "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, '')) ILIKE $4",
       'OR',
-      "concat_ws(' ', title, author, category, description) ILIKE $5",
+      "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, '')) ILIKE $5",
       ')',
     ].join(' '),
   );

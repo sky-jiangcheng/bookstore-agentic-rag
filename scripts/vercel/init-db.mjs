@@ -47,16 +47,16 @@ try {
   console.log('✅ Created table: books (with BIGINT id and source_id)');
 
   // Create indexes
-  await sql`CREATE INDEX idx_books_title ON books(title)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_books_title ON books(title)`;
   console.log('✅ Created index: idx_books_title');
 
-  await sql`CREATE INDEX idx_books_author ON books(author)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_books_author ON books(author)`;
   console.log('✅ Created index: idx_books_author');
 
-  await sql`CREATE INDEX idx_books_category ON books(category)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_books_category ON books(category)`;
   console.log('✅ Created index: idx_books_category');
 
-  await sql`CREATE INDEX idx_books_popularity ON books(popularity_score DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_books_popularity ON books(popularity_score DESC)`;
   console.log('✅ Created index: idx_books_popularity');
 
   // Optional trigram index for fast ILIKE and fuzzy text matching.
@@ -66,12 +66,12 @@ try {
       CREATE INDEX IF NOT EXISTS idx_books_search_trgm
       ON books
       USING gin (
-        (concat_ws(' ', title, author, category, description)) gin_trgm_ops
+        (coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, '')) gin_trgm_ops
       )
     `;
     console.log('✅ Created index: idx_books_search_trgm');
   } catch (e) {
-    console.log('⚠️  Trigram index skipped; keyword search will still work without it');
+    console.log('⚠️  Trigram index skipped; keyword search will still work without it. Error:', e.message || e);
   }
 
   console.log('\n✨ Schema initialization complete!\n');

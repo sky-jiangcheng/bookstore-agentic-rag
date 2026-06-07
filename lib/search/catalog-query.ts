@@ -1,4 +1,4 @@
-const SEARCH_DOCUMENT_SQL = "concat_ws(' ', title, author, category, description)";
+const SEARCH_DOCUMENT_SQL = "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, ''))";
 
 export function normalizeSearchTerms(terms: string[]): string[] {
   return Array.from(

@@ -27,5 +27,5 @@ CREATE INDEX IF NOT EXISTS idx_books_price ON books(price);
 CREATE INDEX IF NOT EXISTS idx_books_search_trgm
   ON books
   USING gin (
-    (concat_ws(' ', title, author, category, description)) gin_trgm_ops
+    (coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, '')) gin_trgm_ops
   );
