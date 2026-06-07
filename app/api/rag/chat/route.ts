@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runRAGPipeline } from '@/lib/agents/orchestrator';
 import type { RAGPipelineResult } from '@/lib/agents/orchestrator';
 import { validateConfig, config } from '@/lib/config/environment';
-import type { AgentProgress } from '@/lib/types/rag';
+import type { AgentProgress, RequirementAnalysis } from '@/lib/types/rag';
 import { corsHeaders, handleCorsPreflightRequest } from '@/lib/utils/cors';
 import { getSafeErrorMessage, buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
 import { buildRecommendationSummary } from '@/lib/utils/recommendation-summary';
@@ -29,6 +29,11 @@ const chatRequestSchema = z.object({
     .optional()
     .transform((s) => s?.trim() || undefined),
   fast: z.boolean().optional().default(false),
+  limit: z.number().int().min(1).max(50).optional(),
+  excludeKeywords: z.array(z.string()).optional(),
+  categoryWeight: z.number().min(0).max(10).optional(),
+  keywordWeight: z.number().min(0).max(10).optional(),
+  confirmedRequirement: z.custom<RequirementAnalysis>().optional(),
 });
 
 export async function OPTIONS(req: NextRequest) {
@@ -60,9 +65,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { query, sessionId, fast } = parseResult.data;
+    const { query, sessionId, fast, limit, excludeKeywords, categoryWeight, keywordWeight, confirmedRequirement } = parseResult.data;
 
-    return await handleRequest(query, sessionId, fast, req);
+    return await handleRequest(query, sessionId, fast, limit, excludeKeywords, categoryWeight, keywordWeight, confirmedRequirement, req);
   } catch (error) {
     logServerError('[RAG Chat]', error);
     return NextResponse.json(
@@ -72,13 +77,28 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function handleRequest(query: string, sessionId: string | undefined, fast: boolean, req: NextRequest) {
+async function handleRequest(
+  query: string,
+  sessionId: string | undefined,
+  fast: boolean,
+  limit: number | undefined,
+  excludeKeywords: string[] | undefined,
+  categoryWeight: number | undefined,
+  keywordWeight: number | undefined,
+  confirmedRequirement: RequirementAnalysis | undefined,
+  req: NextRequest
+) {
   try {
     if (fast) {
       const result = await runRAGPipeline({
         userQuery: query,
         sessionId,
         enableConversationMemory: true,
+        limit,
+        excludeKeywords,
+        categoryWeight,
+        keywordWeight,
+        requirement: confirmedRequirement,
       });
       return NextResponse.json(
         { ...result, summary: buildRecommendationSummary(result) },
@@ -87,13 +107,18 @@ async function handleRequest(query: string, sessionId: string | undefined, fast:
     }
 
     if (!config.vercel.enabled) {
-      return await handleFullPipeline(query, sessionId, req);
+      return await handleFullPipeline(query, sessionId, limit, excludeKeywords, categoryWeight, keywordWeight, confirmedRequirement, req);
     }
 
     const result = await runRAGPipeline({
       userQuery: query,
       sessionId,
       enableConversationMemory: true,
+      limit,
+      excludeKeywords,
+      categoryWeight,
+      keywordWeight,
+      requirement: confirmedRequirement,
     });
     return NextResponse.json(
       { ...result, summary: buildRecommendationSummary(result) },
@@ -108,7 +133,16 @@ async function handleRequest(query: string, sessionId: string | undefined, fast:
   }
 }
 
-async function handleFullPipeline(query: string, sessionId: string | undefined, req: NextRequest) {
+async function handleFullPipeline(
+  query: string,
+  sessionId: string | undefined,
+  limit: number | undefined,
+  excludeKeywords: string[] | undefined,
+  categoryWeight: number | undefined,
+  keywordWeight: number | undefined,
+  confirmedRequirement: RequirementAnalysis | undefined,
+  req: NextRequest
+) {
   try {
     // Set up SSE streaming
     const stream = new ReadableStream({
@@ -138,6 +172,11 @@ async function handleFullPipeline(query: string, sessionId: string | undefined, 
           sessionId,
           enableConversationMemory: true,
           onProgress,
+          limit,
+          excludeKeywords,
+          categoryWeight,
+          keywordWeight,
+          requirement: confirmedRequirement,
         });
 
         pipelinePromise.then((result: RAGPipelineResult) => {

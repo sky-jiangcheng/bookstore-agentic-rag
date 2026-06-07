@@ -2,19 +2,27 @@
 import type { Book, RecommendationResult, RequirementAnalysis } from '@/lib/types/rag';
 import { filterBlockedBooks } from '@/lib/server/book-filters';
 
-function rankForBudget(book: Book, requirement: RequirementAnalysis): number {
+function rankForBudget(
+  book: Book,
+  requirement: RequirementAnalysis,
+  categoryWeight?: number,
+  keywordWeight?: number
+): number {
   let score = book.relevance_score ?? 0;
   const haystack = `${book.title} ${book.author} ${book.category} ${book.description}`.toLowerCase();
 
+  const catW = categoryWeight !== undefined && categoryWeight !== null ? categoryWeight : 1.2;
+  const keyW = keywordWeight !== undefined && keywordWeight !== null ? keywordWeight : 0.6;
+
   for (const category of requirement.categories) {
     if (haystack.includes(category.toLowerCase())) {
-      score += 1.2;
+      score += catW;
     }
   }
 
   for (const keyword of requirement.keywords) {
     if (haystack.includes(keyword.toLowerCase())) {
-      score += 0.6;
+      score += keyW;
     }
   }
 
@@ -32,7 +40,9 @@ export function containsExcludedKeyword(book: Book, excludedKeywords: string[]):
 
 export function enforceBudget(
   books: Book[],
-  requirement: RequirementAnalysis
+  requirement: RequirementAnalysis,
+  categoryWeight?: number,
+  keywordWeight?: number
 ): Book[] {
   const budget = requirement.constraints.budget;
   if (!budget || books.length === 0) {
@@ -42,8 +52,8 @@ export function enforceBudget(
   const affordable = books
     .filter((book) => book.price <= budget)
     .sort((a, b) => {
-      const scoreA = rankForBudget(a, requirement);
-      const scoreB = rankForBudget(b, requirement);
+      const scoreA = rankForBudget(a, requirement, categoryWeight, keywordWeight);
+      const scoreB = rankForBudget(b, requirement, categoryWeight, keywordWeight);
       const densityA = Math.max(0.1, scoreA) / Math.max(1, a.price);
       const densityB = Math.max(0.1, scoreB) / Math.max(1, b.price);
       return densityB - densityA;
@@ -70,11 +80,13 @@ export function enforceBudget(
 function enforceRecommendationConstraints(
   books: Book[],
   requirement: RequirementAnalysis,
-  targetCount: number
+  targetCount: number,
+  categoryWeight?: number,
+  keywordWeight?: number
 ): Book[] {
   const excludedKeywords = requirement.constraints.exclude_keywords ?? [];
   const withoutExcluded = books.filter((book) => !containsExcludedKeyword(book, excludedKeywords));
-  const budgetSafe = enforceBudget(withoutExcluded, requirement);
+  const budgetSafe = enforceBudget(withoutExcluded, requirement, categoryWeight, keywordWeight);
   return budgetSafe.slice(0, Math.max(1, targetCount));
 }
 
@@ -125,6 +137,7 @@ export function buildHeuristicExplanation(
 export async function generateRecommendation(
   requirement: RequirementAnalysis,
   candidates: Book[],
+  weights?: { categoryWeight?: number; keywordWeight?: number }
 ): Promise<RecommendationResult> {
   const { books: visibleCandidates } = await filterBlockedBooks(candidates);
 
@@ -140,7 +153,13 @@ export async function generateRecommendation(
     };
   }
 
-  const finalBooks = enforceRecommendationConstraints(visibleCandidates, requirement, targetCount);
+  const finalBooks = enforceRecommendationConstraints(
+    visibleCandidates,
+    requirement,
+    targetCount,
+    weights?.categoryWeight,
+    weights?.keywordWeight
+  );
 
   // Fetch feedback stats asynchronously for final selected books
   const { getFeedbackStats } = await import('@/lib/feedback/feedback-store');

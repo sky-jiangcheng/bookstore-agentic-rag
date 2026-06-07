@@ -210,19 +210,76 @@ async function retrievePopular(topK: number): Promise<Book[]> {
   }
 }
 
+function generatePseudoSql(
+  requirement: RequirementAnalysis,
+  searchTerms: string[],
+  hasSpecificIntent: boolean,
+  limitNum: number
+): string {
+  if (!hasSpecificIntent) {
+    return `SELECT id, title, author, price, category, description, popularity_score
+FROM books
+ORDER BY popularity_score DESC, updated_at DESC
+LIMIT ${limitNum};`;
+  }
+
+  const termsClause = searchTerms
+    .map((term) => `(title || ' ' || author || ' ' || category || ' ' || description) ILIKE '%${term}%'`)
+    .join('\n     OR ');
+
+  const categoriesClause = requirement.categories.length > 0
+    ? `\n  AND category IN (${requirement.categories.map((c) => `'${c}'`).join(', ')})`
+    : '';
+
+  const priceMaxClause = requirement.constraints.price_max !== undefined
+    ? `\n  AND price <= ${requirement.constraints.price_max}`
+    : '';
+
+  const priceMinClause = requirement.constraints.price_min !== undefined
+    ? `\n  AND price >= ${requirement.constraints.price_min}`
+    : '';
+
+  const authorClause = requirement.constraints.author
+    ? `\n  AND author ILIKE '%${requirement.constraints.author}%'`
+    : '';
+
+  const excludeClause = requirement.constraints.exclude_keywords?.length
+    ? `\n  -- 排除项过滤\n  AND NOT (\n    ${requirement.constraints.exclude_keywords
+        .map((k) => `(title || ' ' || author || ' ' || category || ' ' || description) ILIKE '%${k}%'`)
+        .join('\n     OR ')}\n  )`
+    : '';
+
+  return `SELECT id, title, author, price, category, description, popularity_score
+FROM books
+WHERE (
+     ${termsClause || '1=1'}
+)${categoriesClause}${priceMinClause}${priceMaxClause}${authorClause}${excludeClause}
+ORDER BY popularity_score DESC, updated_at DESC
+LIMIT ${limitNum};`;
+}
+
 export async function retrieveCandidates(
   requirement: RequirementAnalysis,
   topK: number = 30,
 ): Promise<RetrievalResult> {
   const hasSpecificIntent = requirement.categories.length > 0 || requirement.keywords.length > 0;
+
+  const searchTerms =
+    requirement.expanded_search_terms?.length > 0
+      ? requirement.expanded_search_terms
+      : expandSearchTerms(requirement);
+
   const books = hasSpecificIntent
     ? await retrieveKeyword(requirement, topK)
     : await retrievePopular(topK);
+
   const finalBooks = enforceHardConstraints(books, requirement);
+  const sqlString = generatePseudoSql(requirement, searchTerms, hasSpecificIntent, topK * 2);
 
   return {
     books: finalBooks,
     sources: [hasSpecificIntent ? 'keyword' : 'popular'],
     total_candidates: finalBooks.length,
+    sql: sqlString,
   };
 }

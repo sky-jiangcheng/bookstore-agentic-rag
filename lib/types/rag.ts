@@ -34,6 +34,7 @@ export interface RetrievalResult {
   books: Book[];
   sources: ('keyword' | 'popular')[];
   total_candidates: number;
+  sql?: string;
 }
 
 export interface RecommendedBook extends Book {

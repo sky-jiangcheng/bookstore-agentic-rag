@@ -21,6 +21,10 @@ export interface RAGPipelineOptions {
   onProgress?: (progress: AgentProgress) => void;
   enableConversationMemory?: boolean;
   requirement?: RequirementAnalysis;
+  limit?: number;
+  excludeKeywords?: string[];
+  categoryWeight?: number;
+  keywordWeight?: number;
 }
 
 export interface RAGPipelineResult {
@@ -48,6 +52,10 @@ export async function runRAGPipeline(
     onProgress,
     enableConversationMemory = true,
     requirement: precomputedRequirement,
+    limit,
+    excludeKeywords,
+    categoryWeight,
+    keywordWeight,
   } = options;
 
   let requirement: RequirementAnalysis | undefined;
@@ -94,6 +102,14 @@ export async function runRAGPipeline(
         }
       : await analyzeRequirement(userQuery, { conversationContext });
 
+    // Apply front-end overrides
+    if (limit !== undefined) {
+      requirement.constraints.target_count = limit;
+    }
+    if (excludeKeywords !== undefined) {
+      requirement.constraints.exclude_keywords = excludeKeywords;
+    }
+
     onProgress?.({
       type: 'phase_complete',
       phase: 'requirement_analysis',
@@ -135,7 +151,10 @@ export async function runRAGPipeline(
       content: '开始生成推荐书单...',
     });
 
-    recommendation = await generateRecommendation(requirement, retrieval.books);
+    recommendation = await generateRecommendation(requirement, retrieval.books, {
+      categoryWeight,
+      keywordWeight,
+    });
 
     onProgress?.({
       type: 'phase_complete',

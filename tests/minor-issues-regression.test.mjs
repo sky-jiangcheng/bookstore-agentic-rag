@@ -39,3 +39,25 @@ test('catalog search uses the shared OR text-search builder', () => {
   assert.match(catalogRepository, /search_terms/);
   assert.doesNotMatch(catalogRepository, /textConditions\.join\(['"] AND ['"]\)/);
 });
+
+test('query preparation UI exposes confirmation, strategy, templates, and manual exclusions', () => {
+  const ragChat = source('components/rag-chat.tsx');
+  const tuningPanel = source('components/RAGChat/TuningPanel.tsx');
+
+  assert.match(ragChat, /本轮策略/);
+  assert.match(ragChat, /确认调整/);
+  assert.match(ragChat, /保存为需求模板/);
+  assert.match(ragChat, /buildPseudoSql/);
+  assert.match(tuningPanel, /添加排除词/);
+  assert.match(tuningPanel, /碰撞建议/);
+});
+
+test('rag parse endpoint and chat endpoint support precomputed requirements', () => {
+  const parseRoute = source('app/api/rag/parse/route.ts');
+  const chatRoute = source('app/api/rag/chat/route.ts');
+
+  assert.match(parseRoute, /analyzeRequirement/);
+  assert.match(parseRoute, /suggestions/);
+  assert.match(chatRoute, /confirmedRequirement/);
+  assert.match(chatRoute, /requirement:\s*confirmedRequirement/);
+});

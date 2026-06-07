@@ -1,44 +1,38 @@
-import { Input, Button } from 'tdesign-react';
-import { SearchIcon } from 'tdesign-icons-react';
+import { ArrowRight, Search } from 'lucide-react';
 
 export function ChatInput({
   value,
   onChange,
   onSubmit,
   isLoading,
+  className = '',
 }: {
   value: string;
   onChange: (value: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
+  onSubmit: (event: React.FormEvent) => void;
   isLoading: boolean;
+  className?: string;
 }) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-slate-50 via-slate-50/95 to-transparent pt-10 pb-6 px-6">
-      <div className="max-w-[1280px] mx-auto">
-        <div className="cnbc-input-container p-2">
-          <form onSubmit={onSubmit} className="flex gap-3">
-            <Input
-              value={value}
-              onChange={(val) => onChange(String(val))}
-              placeholder="输入你的选书要求..."
-              size="large"
-              className="flex-1"
-              disabled={isLoading}
-              style={{ border: 'none', boxShadow: 'none' }}
-            />
-            <Button
-              type="submit"
-              theme="primary"
-              size="large"
-              loading={isLoading}
-              disabled={!value.trim() || isLoading}
-              icon={<SearchIcon />}
-            >
-              搜索推荐
-            </Button>
-          </form>
-        </div>
-      </div>
+    <div className={className}>
+      <form onSubmit={onSubmit} className="query-composer mx-auto flex w-full max-w-4xl items-center gap-2">
+        <Search className="ml-2 h-4 w-4 shrink-0 text-slate-500" />
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="描述主题、读者、预算或不想出现的内容"
+          disabled={isLoading}
+          className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-600"
+        />
+        <button
+          type="submit"
+          disabled={!value.trim() || isLoading}
+          className="primary-action mr-1 inline-flex items-center gap-1.5"
+        >
+          <span>{isLoading ? '处理中…' : '解析需求'}</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      </form>
     </div>
   );
 }
