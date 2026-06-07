@@ -8,6 +8,25 @@ import { getSafeErrorMessage, buildSafeErrorResponse, logServerError } from '@/l
 import { buildRecommendationSummary } from '@/lib/utils/recommendation-summary';
 import { z } from 'zod';
 
+const requirementSchema = z.object({
+  original_query: z.string(),
+  categories: z.array(z.string()),
+  keywords: z.array(z.string()),
+  expanded_search_terms: z.array(z.string()),
+  constraints: z.object({
+    budget: z.number().optional(),
+    target_count: z.number().optional(),
+    author: z.string().optional(),
+    price_min: z.number().optional(),
+    price_max: z.number().optional(),
+    exclude_keywords: z.array(z.string()).optional(),
+  }),
+  preferences: z.array(z.string()),
+  needs_clarification: z.boolean(),
+  clarification_questions: z.array(z.string()),
+  analysis_strategy: z.enum(['llm', 'local-fallback']).optional(),
+});
+
 const STREAM_TIMEOUT_MS = 9000;
 
 function encodeSseEvent(event: string, data: unknown): Uint8Array {
@@ -33,7 +52,7 @@ const chatRequestSchema = z.object({
   excludeKeywords: z.array(z.string()).optional(),
   categoryWeight: z.number().min(0).max(10).optional(),
   keywordWeight: z.number().min(0).max(10).optional(),
-  confirmedRequirement: z.custom<RequirementAnalysis>().optional(),
+  confirmedRequirement: requirementSchema.optional(),
 });
 
 export async function OPTIONS(req: NextRequest) {

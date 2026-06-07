@@ -56,7 +56,7 @@ export function RAGChat() {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [, setCurrentPhase] = useState<string | null>(null);
+
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastUserQuery, setLastUserQuery] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -616,8 +616,6 @@ export function RAGChat() {
     setInput('');
     setDraftRequirement(null);
     setIsLoading(true);
-    setCurrentPhase('requirement_analysis');
-
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
       abortControllerRef.current?.abort();
@@ -707,7 +705,6 @@ export function RAGChat() {
         }));
 
         setIsLoading(false);
-        setCurrentPhase(null);
         return;
       }
 
@@ -738,7 +735,6 @@ export function RAGChat() {
             const data = JSON.parse(dataStr);
 
             if (currentEvent === 'progress') {
-              if (data.phase) setCurrentPhase(data.phase);
               const sqlFromResp = data.data?.sql;
               if (sqlFromResp) {
                 setLastSql(sqlFromResp);
@@ -816,7 +812,6 @@ export function RAGChat() {
               }));
 
               setIsLoading(false);
-              setCurrentPhase(null);
             }
 
             if (currentEvent === 'error') {
@@ -827,7 +822,6 @@ export function RAGChat() {
                 status: 'error',
               }));
               setIsLoading(false);
-              setCurrentPhase(null);
             }
           } catch (parseError) {
             console.error('Failed to parse SSE data:', parseError);
@@ -841,7 +835,6 @@ export function RAGChat() {
     } catch (error) {
       console.error('Error:', error);
       setIsLoading(false);
-      setCurrentPhase(null);
       const isTimeout = error instanceof DOMException && error.name === 'AbortError';
       upsertAssistantMessage(assistantMessageId, () => ({
         id: assistantMessageId, role: 'assistant',
@@ -1007,7 +1000,7 @@ export function RAGChat() {
               </h2>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] text-slate-500 font-mono">Gemini RAG Engine v1.2</span>
+                <span className="text-[10px] text-slate-500 font-mono">{llmProvider.type === 'google' ? 'Gemini' : llmProvider.model || 'LLM'} RAG Engine v1.2</span>
               </div>
             </div>
           </div>

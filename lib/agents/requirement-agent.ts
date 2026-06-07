@@ -34,7 +34,6 @@ const RequirementAnalysisSchema = z.object({
 export interface RequirementAgentOptions {
   model?: LanguageModel;
   conversationContext?: string;
-  previousRequirements?: RequirementAnalysis[];
 }
 
 export function parseBudget(query: string): number | undefined {
@@ -144,7 +143,7 @@ function normalizeRequirement(
     const matches = userQuery.match(pattern);
     if (matches) {
       categories.add(category);
-      matches.forEach((item) => keywords.add(item));
+      matches.forEach((item) => { if (item) keywords.add(item); });
     }
   }
 
@@ -152,7 +151,7 @@ function normalizeRequirement(
     const matches = userQuery.match(pattern);
     if (matches) {
       preferences.add(preference);
-      matches.forEach((item) => keywords.add(item));
+      matches.forEach((item) => { if (item) keywords.add(item); });
     }
   }
 
@@ -160,8 +159,10 @@ function normalizeRequirement(
     const matches = userQuery.match(pattern);
     if (matches) {
       matches.forEach((item) => {
-        preferences.add(`受众:${item}`);
-        keywords.add(item);
+        if (item) {
+          preferences.add(`受众:${item}`);
+          keywords.add(item);
+        }
       });
     }
   }

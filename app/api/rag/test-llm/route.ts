@@ -22,33 +22,42 @@ export async function POST(req: NextRequest) {
 
     if (config.type === 'openai-compatible' && config.baseUrl) {
       const chatUrl = config.baseUrl.replace(/\/+$/, '') + '/chat/completions';
-      const diagnosticRes = await fetch(chatUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: config.model,
-          messages: [{ role: 'user', content: 'Hi' }],
-          max_tokens: 2,
-        }),
-      });
-      if (!diagnosticRes.ok) {
-        const body = await diagnosticRes.text().catch(() => '');
-        return NextResponse.json({
-          ok: false,
-          error: `诊断请求失败 (HTTP ${diagnosticRes.status})
+      const diagnosticStart = Date.now();
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 10000);
+      try {
+        const diagnosticRes = await fetch(chatUrl, {
+          method: 'POST',
+          signal: abortController.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: config.model,
+            messages: [{ role: 'user', content: 'Hi' }],
+            max_tokens: 2,
+          }),
+        });
+        const latency = Date.now() - diagnosticStart;
+        if (!diagnosticRes.ok) {
+          const body = await diagnosticRes.text().catch(() => '');
+          return NextResponse.json({
+            ok: false,
+            error: `诊断请求失败 (HTTP ${diagnosticRes.status})
 URL: ${chatUrl}
 响应: ${body.slice(0, 500)}`,
+          });
+        }
+        const data = await diagnosticRes.json().catch(() => null);
+        return NextResponse.json({
+          ok: true,
+          latency,
+          response: data?.choices?.[0]?.message?.content?.slice(0, 50) ?? '',
         });
+      } finally {
+        clearTimeout(timeoutId);
       }
-      const data = await diagnosticRes.json().catch(() => null);
-      return NextResponse.json({
-        ok: true,
-        latency: 0,
-        response: data?.choices?.[0]?.message?.content?.slice(0, 50) ?? '',
-      });
     }
 
     const model = createModel({

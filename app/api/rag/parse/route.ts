@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
     ]);
     const vocabulary = vocabularyResult.rows.map((row) => row.keyword).filter(Boolean);
     const suggestions = Array.from(new Set([
-      ...parseExcludedKeywords(parsed.data.query),
-      ...suggestExclusionCollisions(parsed.data.query, vocabulary),
+      ...parseExcludedKeywords(query),
+      ...suggestExclusionCollisions(query, vocabulary),
     ])).filter((word) => word && !/预算|元以内|数量|本书/u.test(word));
     requirement.constraints.exclude_keywords = suggestions;
 

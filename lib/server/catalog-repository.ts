@@ -250,7 +250,7 @@ export async function* streamBooksForExport(
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const limit = filters.limit ?? 10000;
-  let lastId: bigint | number = 0;
+  let lastId = '0';
   let totalFetched = 0;
 
   while (totalFetched < limit) {
@@ -283,7 +283,7 @@ export async function* streamBooksForExport(
 
     yield batch;
     totalFetched += batch.length;
-    lastId = batch[batch.length - 1].book_id as unknown as bigint;
+    lastId = batch[batch.length - 1].book_id;
   }
 }
 
