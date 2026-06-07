@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { PassThrough } from 'stream';
 
-import { buildExcelBuffer } from '@/lib/book-list/excel-export';
+import { buildExcelExportStream, nodeStreamToWeb } from '@/lib/book-list';
+import { searchCatalog } from '@/lib/clients/catalog-service';
 import { logServerError, buildSafeErrorResponse } from '@/lib/utils/safe-error';
 
 const exportSchema = z.object({
@@ -9,7 +11,7 @@ const exportSchema = z.object({
   books: z
     .array(
       z.object({
-        book_id: z.number().int().optional(),
+        book_id: z.any().optional(),
         title: z.string().min(1).default('未知书名'),
         author: z.string().optional().nullable().default(null),
         publisher: z.string().optional().nullable().default(null),
@@ -21,7 +23,18 @@ const exportSchema = z.object({
         remark: z.string().optional().nullable().default(null),
       }),
     )
-    .min(1, '书籍列表至少需要1本书'),
+    .optional(),
+  filters: z
+    .object({
+      categories: z.array(z.string()).optional(),
+      author: z.string().optional(),
+      price_min: z.number().optional(),
+      price_max: z.number().optional(),
+      query: z.string().optional(),
+      search_terms: z.array(z.string()).optional(),
+      limit: z.number().optional(),
+    })
+    .optional(),
   budget: z.number().nonnegative().optional().nullable().default(null),
   total_price: z.number().nonnegative().optional().nullable().default(null),
 });
@@ -30,14 +43,49 @@ export async function POST(req: NextRequest) {
   try {
     const json = await req.json();
     const body = exportSchema.parse(json);
-    const buffer = await buildExcelBuffer(body);
+
+    let exportBooks: any[] = [];
+    if (body.books && body.books.length > 0) {
+      exportBooks = body.books;
+    } else if (body.filters) {
+      // Fetch books from database using filters
+      const dbBooks = await searchCatalog(body.filters);
+      exportBooks = dbBooks.map((b, i) => ({
+        book_id: Number(b.book_id) || i + 1,
+        title: b.title,
+        author: b.author,
+        publisher: b.publisher,
+        category: b.category,
+        price: b.price,
+        stock: b.stock,
+        score: b.relevance_score,
+        source: 'catalog_search',
+        remark: '',
+      }));
+    } else {
+      return NextResponse.json({ error: 'Must provide either books or filters' }, { status: 400 });
+    }
+
+    // Prepare streaming response
+    const passThrough = new PassThrough();
+    buildExcelExportStream(
+      {
+        booklist_name: body.booklist_name,
+        books: exportBooks,
+        budget: body.budget,
+        total_price: body.total_price,
+      },
+      passThrough,
+    );
 
     const safeName = body.booklist_name.replace(/[^\w\s\-]/g, '_');
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const filename = `${safeName}_${dateStr}.xlsx`;
     const encodedFilename = encodeURIComponent(filename);
 
-    return new Response(new Uint8Array(buffer), {
+    const webStream = nodeStreamToWeb(passThrough);
+
+    return new Response(webStream, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

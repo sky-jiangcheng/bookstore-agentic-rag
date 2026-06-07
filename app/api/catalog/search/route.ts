@@ -53,6 +53,9 @@ export async function GET(req: NextRequest) {
     const limit = searchParams.get('limit');
     if (limit) filters.limit = parseInt(limit, 10);
 
+    const page = searchParams.get('page');
+    if (page) filters.page = parseInt(page, 10);
+
     return await handleSearch(filters);
   } catch (error) {
     logServerError('[catalog/search]', error);

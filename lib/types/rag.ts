@@ -69,6 +69,7 @@ export interface CatalogSearchFilters {
   query?: string;
   search_terms?: string[];
   limit?: number;
+  page?: number;
 }
 
 export interface UserInfo {

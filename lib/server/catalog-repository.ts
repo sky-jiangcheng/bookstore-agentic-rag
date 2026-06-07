@@ -82,8 +82,10 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const limit = filters.limit !== undefined ? filters.limit : 10000;
-  const limitClause = limit > 0 ? `LIMIT ${limit}` : '';
+  const limit = filters.limit !== undefined ? filters.limit : (filters.page !== undefined ? 30 : 10000);
+  const page = filters.page !== undefined ? Math.max(1, filters.page) : 1;
+  const offset = (page - 1) * limit;
+  const limitClause = limit > 0 ? `LIMIT ${limit} OFFSET ${offset}` : '';
 
   const query = `
     SELECT
