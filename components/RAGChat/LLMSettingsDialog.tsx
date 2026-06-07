@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Settings, Eye, EyeOff, Check, ExternalLink } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Settings, Eye, EyeOff, Check, ExternalLink, Loader2, AlertCircle, Zap } from 'lucide-react';
 import {
   Dialog,
   DialogTrigger,
@@ -39,6 +39,9 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
   const [model, setModel] = useState(config.model);
   const [baseUrl, setBaseUrl] = useState(config.baseUrl ?? '');
   const [showKey, setShowKey] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testStatus, setTestStatus] = useState<'idle' | 'success' | 'fail'>('idle');
+  const [testError, setTestError] = useState('');
 
   const handleSave = () => {
     const newConfig: LLMProviderConfig = {
@@ -56,7 +59,42 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
     if (newType === 'openai-compatible' && !baseUrl) {
       setBaseUrl('https://api.openai.com/v1');
     }
+    setTestStatus('idle');
+    setTestError('');
   };
+
+  const handleTestConnection = useCallback(async () => {
+    setTesting(true);
+    setTestStatus('idle');
+    setTestError('');
+
+    const providerConfig: LLMProviderConfig = {
+      type,
+      apiKey: apiKey.trim(),
+      model: model.trim() || (type === 'google' ? 'gemini-2.0-flash' : 'gpt-4o'),
+      baseUrl: type === 'openai-compatible' ? (baseUrl.trim() || undefined) : undefined,
+    };
+
+    try {
+      const res = await fetch('/api/rag/test-llm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(providerConfig),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTestStatus('success');
+      } else {
+        setTestStatus('fail');
+        setTestError(data.error || '连接失败');
+      }
+    } catch (err) {
+      setTestStatus('fail');
+      setTestError(err instanceof Error ? err.message : '网络请求失败');
+    } finally {
+      setTesting(false);
+    }
+  }, [type, apiKey, model, baseUrl]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -174,15 +212,42 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
               }
             </span>
           </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-all active:scale-95"
-          >
-            <Check className="h-3.5 w-3.5" />
-            保存
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleTestConnection}
+              disabled={testing || !apiKey.trim()}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-400 hover:border-slate-600 hover:text-slate-200 transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+            >
+              {testing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : testStatus === 'success' ? (
+                <Zap className="h-3.5 w-3.5 text-emerald-400" />
+              ) : (
+                <Zap className="h-3.5 w-3.5" />
+              )}
+              <span>
+                {testing ? '测试中…' : '测试连接'}
+              </span>
+              {testStatus === 'success' && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.6)]" />}
+              {testStatus === 'fail' && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-all active:scale-95"
+            >
+              <Check className="h-3.5 w-3.5" />
+              保存
+            </button>
+          </div>
         </div>
+        {testStatus === 'fail' && testError && (
+          <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-700/50 bg-rose-500/10 px-3 py-2.5">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400" />
+            <p className="text-[11px] leading-5 text-rose-200">{testError}</p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
