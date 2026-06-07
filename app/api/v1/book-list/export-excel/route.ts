@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { PassThrough } from 'stream';
 
+import { nodeStreamToWeb } from '@/lib/book-list';
 import { logServerError, buildSafeErrorResponse } from '@/lib/utils/safe-error';
-import { hasDatabaseConfig } from '@/lib/config/environment';
 import { streamBooksForExport } from '@/lib/server/catalog-repository';
 import ExcelJS from 'exceljs';
 
@@ -90,8 +91,7 @@ function mapDbBookToExportRow(book: any, index: number): any[] {
 
 async function buildExcelBuffer(
   booklistName: string,
-  filters: (z.infer<typeof exportSchema>['filters'] & { limit?: number }) | undefined,
-  staticBooks: any[] | undefined,
+  staticBooks: any[],
   budget: number | null | undefined,
   total_price: number | null | undefined,
 ): Promise<Buffer> {
@@ -106,6 +106,7 @@ async function buildExcelBuffer(
 
   const metaRows: [string, string][] = [
     ['书单名称', booklistName],
+    ['总数', ''],
   ];
   if (budget != null) {
     metaRows.push(['预算', `¥${Number(budget).toFixed(2)}`]);
@@ -142,24 +143,91 @@ async function buildExcelBuffer(
   const centerCols = new Set([1, 7, 8, 9]);
   let rowIndex = 1;
 
-  if (staticBooks) {
-    for (const book of staticBooks) {
-      const bookId = String(book.book_id ?? '');
-      const rowData = [
-        rowIndex++,
-        isAbnormalId(bookId) ? `${bookId} ⚠` : bookId,
-        book.title,
-        book.author ?? '',
-        book.publisher ?? '',
-        book.category ?? '',
-        book.price ?? 0,
-        book.stock ?? 0,
-        book.score != null
-          ? (book.score <= 1 ? `${Math.round(book.score * 100)}%` : `${Math.round(book.score)}%`)
-          : '0%',
-        book.source ?? '',
-        book.remark ?? '',
-      ];
+  for (const book of staticBooks) {
+    const bookId = String(book.book_id ?? '');
+    const rowData = [
+      rowIndex++,
+      isAbnormalId(bookId) ? `${bookId} ⚠` : bookId,
+      book.title,
+      book.author ?? '',
+      book.publisher ?? '',
+      book.category ?? '',
+      book.price ?? 0,
+      book.stock ?? 0,
+      book.score != null
+        ? (book.score <= 1 ? `${Math.round(book.score * 100)}%` : `${Math.round(book.score)}%`)
+        : '0%',
+      book.source ?? '',
+      book.remark ?? '',
+    ];
+    const row = worksheet.addRow(rowData);
+    for (let col = 0; col < rowData.length; col++) {
+      const cell = row.getCell(col + 1);
+      cell.font = NORMAL_FONT;
+      cell.border = THIN_BORDER;
+      if (centerCols.has(col + 1)) cell.alignment = CENTER_ALIGN;
+      if (col + 1 === 7) cell.numFmt = '¥#,##0.00';
+    }
+  }
+
+  worksheet.getCell('A2').value = String(rowIndex - 1);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+async function writeExcelStream(
+  passThrough: PassThrough,
+  booklistName: string,
+  filters: (z.infer<typeof exportSchema>['filters'] & { limit?: number }),
+): Promise<void> {
+  const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+    stream: passThrough,
+    useStyles: true,
+    useSharedStrings: true,
+  });
+  const worksheet = workbook.addWorksheet(booklistName.slice(0, 31));
+
+  for (let i = 0; i < COL_WIDTHS.length; i++) {
+    worksheet.getColumn(i + 1).width = COL_WIDTHS[i];
+  }
+
+  const metaRows: [string, string][] = [
+    ['书单名称', booklistName],
+    ['总数', ''],
+  ];
+  metaRows.push(['导出时间', new Date().toISOString().replace('T', ' ').slice(0, 19)]);
+
+  for (const [label, value] of metaRows) {
+    const row = worksheet.addRow([label, value]);
+    row.getCell(1).font = META_FONT;
+    row.getCell(1).fill = META_FILL;
+    row.getCell(1).border = THIN_BORDER;
+    row.getCell(2).font = NORMAL_FONT;
+    row.getCell(2).fill = META_FILL;
+    row.getCell(2).border = THIN_BORDER;
+    row.commit();
+  }
+
+  worksheet.addRow([]).commit();
+
+  const headers = ['序号', '书号', '书名', '作者', '出版社', '分类', '价格', '库存', '相关度', '来源', '备注'];
+  const headerRow = worksheet.addRow(headers);
+  for (let col = 0; col < headers.length; col++) {
+    const cell = headerRow.getCell(col + 1);
+    cell.font = HEADER_FONT;
+    cell.fill = HEADER_FILL;
+    cell.alignment = CENTER_ALIGN;
+    cell.border = THIN_BORDER;
+  }
+  headerRow.commit();
+
+  const centerCols = new Set([1, 7, 8, 9]);
+  let rowIndex = 1;
+
+  for await (const batch of streamBooksForExport(filters)) {
+    for (const book of batch) {
+      const rowData = mapDbBookToExportRow(book, rowIndex++);
       const row = worksheet.addRow(rowData);
       for (let col = 0; col < rowData.length; col++) {
         const cell = row.getCell(col + 1);
@@ -168,27 +236,14 @@ async function buildExcelBuffer(
         if (centerCols.has(col + 1)) cell.alignment = CENTER_ALIGN;
         if (col + 1 === 7) cell.numFmt = '¥#,##0.00';
       }
-    }
-  } else if (filters && hasDatabaseConfig()) {
-    for await (const batch of streamBooksForExport(filters)) {
-      for (const book of batch) {
-        const rowData = mapDbBookToExportRow(book, rowIndex++);
-        const row = worksheet.addRow(rowData);
-        for (let col = 0; col < rowData.length; col++) {
-          const cell = row.getCell(col + 1);
-          cell.font = NORMAL_FONT;
-          cell.border = THIN_BORDER;
-          if (centerCols.has(col + 1)) cell.alignment = CENTER_ALIGN;
-          if (col + 1 === 7) cell.numFmt = '¥#,##0.00';
-        }
-      }
+      row.commit();
     }
   }
 
   worksheet.getCell('A2').value = String(rowIndex - 1);
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
+  worksheet.commit();
+  await workbook.commit();
 }
 
 export async function POST(req: NextRequest) {
@@ -205,22 +260,38 @@ export async function POST(req: NextRequest) {
     const filename = `${safeName}_${dateStr}.xlsx`;
     const encodedFilename = encodeURIComponent(filename);
 
-    const exportFilters = body.filters ? { ...body.filters, limit: body.filters.limit ?? 10000 } : undefined;
+    if (body.books) {
+      const buffer = await buildExcelBuffer(
+        body.booklist_name,
+        body.books,
+        body.budget,
+        body.total_price,
+      );
 
-    const buffer = await buildExcelBuffer(
-      body.booklist_name,
-      exportFilters,
-      body.books,
-      body.budget,
-      body.total_price,
-    );
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}`,
+          'Content-Length': String(buffer.length),
+        },
+      });
+    }
 
-    return new NextResponse(new Uint8Array(buffer), {
+    const exportFilters = { ...body.filters!, limit: body.filters!.limit ?? 10000 };
+    const passThrough = new PassThrough();
+    const writePromise = writeExcelStream(passThrough, body.booklist_name, exportFilters);
+    writePromise.catch((err) => {
+      if (!passThrough.destroyed) passThrough.destroy(err instanceof Error ? err : new Error(String(err)));
+    });
+
+    const webStream = nodeStreamToWeb(passThrough);
+
+    return new Response(webStream, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}`,
-        'Content-Length': String(buffer.length),
       },
     });
   } catch (err) {
