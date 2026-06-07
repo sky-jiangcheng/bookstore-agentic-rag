@@ -37,16 +37,14 @@ interface SessionItem {
 
 function generateBooklistName(userInput: string, requirement?: { categories?: string[]; constraints?: { target_count?: number } }): string {
   const cleanInput = userInput.trim().replace(/[^\w\u4e00-\u9fa5\s]/g, '').replace(/_+/g, '').replace(/\s+/g, '_').slice(0, 20);
-  const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
   if (!requirement || !requirement.categories || requirement.categories.length === 0) {
-    return cleanInput ? `${cleanInput}_${timestamp}` : `书单_${timestamp}`;
+    return cleanInput || '书单';
   }
 
   const primaryCategory = requirement.categories[0].replace(/_+/g, '');
   const targetCount = requirement.constraints?.target_count;
-  const name = targetCount ? `${primaryCategory}_${targetCount}本` : (primaryCategory || cleanInput || '书单');
-  return `${name}_${timestamp}`;
+  return targetCount ? `${primaryCategory}_${targetCount}本` : (primaryCategory || cleanInput || '书单');
 }
 
 export function RAGChat() {

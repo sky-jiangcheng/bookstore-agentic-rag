@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Must provide books array' }, { status: 400 });
     }
 
-    const safeName = body.booklist_name.replace(/[^\w\s\-]/g, '_');
+    const safeName = body.booklist_name.replace(/[^\w\u4e00-\u9fa5\s\-]/g, '_');
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const filename = `${safeName}_${dateStr}.xlsx`;
     const encodedFilename = encodeURIComponent(filename);
@@ -73,7 +73,8 @@ export async function POST(req: NextRequest) {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'BookStore RAG';
     workbook.created = new Date();
-    const worksheet = workbook.addWorksheet(body.booklist_name.slice(0, 31));
+    const sheetName = body.booklist_name.replace(/[\\\/?*\[\]:]/g, '_').slice(0, 31) || '书单';
+    const worksheet = workbook.addWorksheet(sheetName);
 
     for (let i = 0; i < COL_WIDTHS.length; i++) {
       worksheet.getColumn(i + 1).width = COL_WIDTHS[i];
