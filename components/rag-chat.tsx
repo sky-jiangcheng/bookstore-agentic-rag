@@ -194,12 +194,23 @@ export function RAGChat() {
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
         const data = await response.json();
-        const recommendations = data.recommendation?.books?.map((book: Record<string, unknown>) => ({
-          title: book.title, author: book.author, price: Number(book.price),
-          explanation: book.explanation, book_id: String(book.book_id ?? ''),
-          publisher: book.publisher, category: book.category, stock: book.stock,
-          match_score: book.match_score, source: book.source,
-        })) ?? [];
+        const rawBooks = data.recommendation?.books || [];
+        const maxScore = rawBooks.reduce((max: number, b: any) => {
+          const score = typeof b.relevance_score === 'number' ? b.relevance_score : 0;
+          return score > max ? score : max;
+        }, 0);
+        const recommendations = rawBooks.map((book: Record<string, unknown>) => {
+          let matchScore = typeof book.match_score === 'number' ? book.match_score : undefined;
+          if (matchScore === undefined && typeof book.relevance_score === 'number') {
+            matchScore = maxScore > 0 ? (book.relevance_score / maxScore) : 0.9;
+          }
+          return {
+            title: book.title, author: book.author, price: Number(book.price),
+            explanation: book.explanation, book_id: String(book.book_id ?? ''),
+            publisher: book.publisher, category: book.category, stock: book.stock,
+            match_score: matchScore, source: book.source,
+          };
+        });
 
         if (data.sessionId && data.sessionId !== sessionId) {
           setSessionId(data.sessionId);
@@ -270,12 +281,23 @@ export function RAGChat() {
 
             if (currentEvent === 'complete') {
               sawTerminalEvent = true;
-              const recommendations = data.recommendation?.books?.map((book: Record<string, unknown>) => ({
-                title: book.title, author: book.author, price: typeof book.price === 'number' ? book.price : Number(book.price) || 0,
-                explanation: book.explanation, book_id: String(book.book_id ?? ''),
-                publisher: book.publisher, category: book.category, stock: book.stock,
-                match_score: book.match_score, source: book.source,
-              })) ?? [];
+              const rawBooks = data.recommendation?.books || [];
+              const maxScore = rawBooks.reduce((max: number, b: any) => {
+                const score = typeof b.relevance_score === 'number' ? b.relevance_score : 0;
+                return score > max ? score : max;
+              }, 0);
+              const recommendations = rawBooks.map((book: Record<string, unknown>) => {
+                let matchScore = typeof book.match_score === 'number' ? book.match_score : undefined;
+                if (matchScore === undefined && typeof book.relevance_score === 'number') {
+                  matchScore = maxScore > 0 ? (book.relevance_score / maxScore) : 0.9;
+                }
+                return {
+                  title: book.title, author: book.author, price: typeof book.price === 'number' ? book.price : Number(book.price) || 0,
+                  explanation: book.explanation, book_id: String(book.book_id ?? ''),
+                  publisher: book.publisher, category: book.category, stock: book.stock,
+                  match_score: matchScore, source: book.source,
+                };
+              });
 
               if (data.sessionId && data.sessionId !== sessionId) {
                 setSessionId(data.sessionId);
