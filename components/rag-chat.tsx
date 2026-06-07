@@ -31,6 +31,7 @@ interface SessionItem {
   categoryWeight: number;
   keywordWeight: number;
   selectedExclusions: string[];
+  selectedKeywords?: string[];
 }
 
 function generateBooklistName(userInput: string, requirement?: { categories?: string[]; constraints?: { target_count?: number } }): string {
@@ -66,6 +67,7 @@ export function RAGChat() {
   const [keywordWeight, setKeywordWeight] = useState(0.6);
   const [, setDbExclusions] = useState<string[]>([]);
   const [selectedExclusions, setSelectedExclusions] = useState<string[]>([]);
+  const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
   const [lastSql, setLastSql] = useState<string | undefined>(undefined);
   const [templates, setTemplates] = useState<RequirementTemplate[]>([]);
   const [preparedQuery, setPreparedQuery] = useState('');
@@ -173,6 +175,7 @@ export function RAGChat() {
       setCategoryWeight(activeSession.categoryWeight ?? 1.2);
       setKeywordWeight(activeSession.keywordWeight ?? 0.6);
       setSelectedExclusions(activeSession.selectedExclusions ?? []);
+      setSelectedKeywords(activeSession.selectedKeywords ?? []);
       setSessionId(activeSession.id);
 
       const lastUser = [...(activeSession.messages || [])]
@@ -304,6 +307,18 @@ export function RAGChat() {
     updateActiveSession({ selectedExclusions: val });
   };
 
+  const handleKeywordsChange = (val: string[]) => {
+    setSelectedKeywords(val);
+    setConfirmedRequirement(null);
+    setIsDraftConfirmed(false);
+    setDraftRequirement((current) => current ? {
+      ...current,
+      keywords: val,
+      expanded_search_terms: val,
+    } : current);
+    updateActiveSession({ selectedKeywords: val });
+  };
+
   const handleResetSession = useCallback(() => {
     if (confirm('确认清空当前对话上下文并重新开始？')) {
       setMessages([]);
@@ -312,6 +327,7 @@ export function RAGChat() {
       setCategoryWeight(1.2);
       setKeywordWeight(0.6);
       setSelectedExclusions([]);
+      setSelectedKeywords([]);
       setLastUserQuery('');
       setPreparedQuery('');
       setDraftRequirement(null);
@@ -326,6 +342,7 @@ export function RAGChat() {
         categoryWeight: 1.2,
         keywordWeight: 0.6,
         selectedExclusions: [],
+        selectedKeywords: [],
         title: '新推荐会话',
       });
     }
@@ -351,6 +368,10 @@ export function RAGChat() {
     setConfirmedRequirement(null);
     setIsDraftConfirmed(false);
     setSelectedExclusions(exclusions);
+    setSelectedKeywords([...new Set([
+      ...(requirement.keywords || []),
+      ...(requirement.expanded_search_terms || []),
+    ])]);
     setTargetCount(nextRequirement.constraints.target_count ?? targetCount);
     setSuggestedExclusions(exclusions);
     setStrategy(nextStrategy);
@@ -409,6 +430,8 @@ export function RAGChat() {
     if (!draftRequirement) return;
     const confirmed = {
       ...draftRequirement,
+      keywords: selectedKeywords,
+      expanded_search_terms: selectedKeywords,
       constraints: {
         ...draftRequirement.constraints,
         target_count: targetCount,
@@ -418,7 +441,7 @@ export function RAGChat() {
     setConfirmedRequirement(confirmed);
     setDraftRequirement(confirmed);
     setIsDraftConfirmed(true);
-  }, [draftRequirement, selectedExclusions, targetCount]);
+  }, [draftRequirement, selectedExclusions, selectedKeywords, targetCount]);
 
   const saveSessionAsTemplate = useCallback((session: SessionItem) => {
     if (!draftRequirement || !preparedQuery) {
@@ -1114,6 +1137,9 @@ export function RAGChat() {
           dbExclusions={suggestedExclusions}
           selectedExclusions={selectedExclusions}
           onChangeExclusions={handleExclusionsChange}
+          suggestedKeywords={draftRequirement?.expanded_search_terms ?? draftRequirement?.keywords}
+          selectedKeywords={selectedKeywords}
+          onChangeKeywords={handleKeywordsChange}
           lastSql={lastSql}
           onClearSession={handleResetSession}
           suggestionCount={suggestedExclusions.length}
@@ -1159,6 +1185,9 @@ export function RAGChat() {
                 dbExclusions={suggestedExclusions}
                 selectedExclusions={selectedExclusions}
                 onChangeExclusions={handleExclusionsChange}
+                suggestedKeywords={draftRequirement?.expanded_search_terms ?? draftRequirement?.keywords}
+                selectedKeywords={selectedKeywords}
+                onChangeKeywords={handleKeywordsChange}
                 lastSql={lastSql}
                 onClearSession={handleResetSession}
                 suggestionCount={suggestedExclusions.length}
