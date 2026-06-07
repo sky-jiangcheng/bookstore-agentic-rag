@@ -48,8 +48,13 @@ export async function POST(req: NextRequest) {
     if (body.books && body.books.length > 0) {
       exportBooks = body.books;
     } else if (body.filters) {
-      // Fetch books from database using filters
-      const dbBooks = await searchCatalog(body.filters);
+      // Fetch books from database using filters, disabling pagination for exporting all results
+      const exportFilters = {
+        ...body.filters,
+        page: undefined,
+        limit: body.filters.limit ?? 10000,
+      };
+      const dbBooks = await searchCatalog(exportFilters);
       exportBooks = dbBooks.map((b, i) => ({
         book_id: Number(b.book_id) || i + 1,
         title: b.title,

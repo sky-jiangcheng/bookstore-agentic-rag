@@ -139,6 +139,10 @@ export function nodeStreamToWeb(nodeStream: PassThrough): ReadableStream {
     start(controller) {
       nodeStream.on('data', (chunk) => {
         controller.enqueue(chunk);
+        const queueSize = controller.desiredSize;
+        if (queueSize !== null && queueSize <= 0) {
+          nodeStream.pause();
+        }
       });
       nodeStream.on('end', () => {
         controller.close();
@@ -146,6 +150,9 @@ export function nodeStreamToWeb(nodeStream: PassThrough): ReadableStream {
       nodeStream.on('error', (err) => {
         controller.error(err);
       });
+    },
+    pull() {
+      nodeStream.resume();
     },
     cancel() {
       nodeStream.destroy();
