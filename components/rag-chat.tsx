@@ -75,7 +75,7 @@ export function RAGChat() {
     setExporting(true);
 
     try {
-      const seenBookIds = new Set<number | string>();
+      const seenBookIds = new Set<string>();
       const allBooks: Array<{
         book_id?: number; title: string; author?: string | null; publisher?: string | null;
         category?: string | null; price?: number | null; stock?: number | null;
@@ -85,11 +85,12 @@ export function RAGChat() {
       messages.forEach(msg => {
         if (msg.role === 'assistant' && msg.recommendations) {
           msg.recommendations.forEach(book => {
-            const bookId = book.book_id;
+            const bookId = String(book.book_id);
             if (bookId && !seenBookIds.has(bookId)) {
               seenBookIds.add(bookId);
+              const numericBookId = Number(bookId);
               allBooks.push({
-                book_id: typeof bookId === 'number' ? bookId : undefined,
+                book_id: Number.isSafeInteger(numericBookId) ? numericBookId : undefined,
                 title: book.title?.trim() || '未知书名',
                 author: book.author || null,
                 publisher: book.publisher || null,
@@ -195,7 +196,7 @@ export function RAGChat() {
         const data = await response.json();
         const recommendations = data.recommendation?.books?.map((book: Record<string, unknown>) => ({
           title: book.title, author: book.author, price: Number(book.price),
-          explanation: book.explanation, book_id: book.book_id,
+          explanation: book.explanation, book_id: String(book.book_id ?? ''),
           publisher: book.publisher, category: book.category, stock: book.stock,
           match_score: book.match_score, source: book.source,
         })) ?? [];
@@ -271,7 +272,7 @@ export function RAGChat() {
               sawTerminalEvent = true;
               const recommendations = data.recommendation?.books?.map((book: Record<string, unknown>) => ({
                 title: book.title, author: book.author, price: typeof book.price === 'number' ? book.price : Number(book.price) || 0,
-                explanation: book.explanation, book_id: book.book_id,
+                explanation: book.explanation, book_id: String(book.book_id ?? ''),
                 publisher: book.publisher, category: book.category, stock: book.stock,
                 match_score: book.match_score, source: book.source,
               })) ?? [];

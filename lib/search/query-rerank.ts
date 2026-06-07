@@ -63,6 +63,7 @@ const GENERIC_STOPWORDS = new Set<string>([
 ]);
 
 const SEARCH_INTENT_RULES: Array<{ terms: string[]; triggers: string[] }> = [
+  { terms: ['人工智能', 'AI', '机器学习', '深度学习', '智能'], triggers: ['人工智能', 'AI', '机器学习', '深度学习'] },
   { terms: ['健康', '养生', '医疗', '免疫力', '中老年', '老人', '长辈', '保健', '科普'], triggers: ['健康', '养生', '医疗', '免疫力', '中老年', '老人', '长辈', '保健'] },
   { terms: ['科普', '科学', '知识', '百科'], triggers: ['科普', '科学', '知识', '百科'] },
   { terms: ['历史', '传记', '人物', '鲁迅'], triggers: ['历史', '传记', '人物', '鲁迅'] },
@@ -144,11 +145,6 @@ function buildCatalogSearchTerms(query: unknown): string[] {
       .filter((term) => term && !GENERIC_STOPWORDS.has(term))
       .slice(0, 8)
   );
-}
-
-function buildCatalogSearchQuery(query: unknown): string {
-  const terms = buildCatalogSearchTerms(query);
-  return terms.length > 0 ? terms.join(' ') : normalizeText(query);
 }
 
 function matchCount(haystack: string, terms: string[]): number {
@@ -333,7 +329,6 @@ function rerankCatalogBooks<T extends CatalogRerankBook>(books: T[], query: unkn
 
 export {
   CATEGORY_ALIASES,
-  buildCatalogSearchQuery,
   buildCatalogSearchTerms,
   rerankCatalogBooks,
 };

@@ -9,21 +9,18 @@ function source(path) {
   return readFileSync(resolve(root, path), 'utf8');
 }
 
-test('local vector and query rerank helpers are TypeScript modules', () => {
-  assert.equal(existsSync(resolve(root, 'lib/local-vector.js')), false);
+test('query helpers are TypeScript modules', () => {
   assert.equal(existsSync(resolve(root, 'lib/search/query-rerank.js')), false);
-  assert.equal(existsSync(resolve(root, 'lib/local-vector.ts')), true);
   assert.equal(existsSync(resolve(root, 'lib/search/query-rerank.ts')), true);
+  assert.equal(existsSync(resolve(root, 'lib/search/catalog-query.ts')), true);
 });
 
 test('TypeScript source imports migrated helper modules without js suffixes', () => {
   for (const path of [
     'lib/upstash.ts',
-    'lib/embeddings.ts',
     'lib/server/catalog-repository.ts',
-    'scripts/vercel/precompute-embeddings.ts',
   ]) {
     const contents = source(path);
-    assert.doesNotMatch(contents, /local-vector\.js|query-rerank\.js/);
+    assert.doesNotMatch(contents, /catalog-query\.js|query-rerank\.js/);
   }
 });

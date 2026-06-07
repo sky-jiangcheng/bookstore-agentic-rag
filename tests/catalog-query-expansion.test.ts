@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildCatalogSearchTerms, buildCatalogSearchQuery } from '../lib/search/query-rerank';
+import { buildCatalogSearchTerms } from '../lib/search/query-rerank';
 
 test('expands health queries into useful search terms', () => {
   const terms = buildCatalogSearchTerms('推荐一些适合家里长辈看的健康养生和免疫力科普书。');
@@ -10,10 +10,6 @@ test('expands health queries into useful search terms', () => {
   assert.ok(terms.includes('免疫力'));
   assert.ok(terms.includes('科普'));
   assert.ok(terms.includes('长辈'));
-
-  const searchQuery = buildCatalogSearchQuery('推荐一些适合家里长辈看的健康养生和免疫力科普书。');
-  assert.ok(searchQuery.includes('健康'));
-  assert.ok(searchQuery.includes('免疫力'));
 });
 
 test('keeps chess queries focused on chinese chess terms', () => {

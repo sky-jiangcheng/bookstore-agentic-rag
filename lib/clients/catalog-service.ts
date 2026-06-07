@@ -1,7 +1,6 @@
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 import { hasDatabaseConfig } from '@/lib/config/environment';
 import {
-  fetchBooksByIds,
   getBookDetailsFromDatabase,
   getPopularBooksFromDatabase,
   searchCatalogFromDatabase,
@@ -23,20 +22,6 @@ export async function searchCatalog(filters: CatalogSearchFilters): Promise<Book
   }
 
   return (await filterBlockedBooks(await searchCatalogFromDatabase(filters))).books;
-}
-
-/**
- * Get details for multiple books by their IDs.
- */
-export async function getBookDetailsBatch(ids: string[]): Promise<Book[]> {
-  if (!hasDatabaseConfig()) {
-    throw unavailableDataSourceError();
-  }
-
-  let books = await fetchBooksByIds(ids);
-  books = (await filterBlockedBooks(books)).books;
-
-  return books;
 }
 
 /**

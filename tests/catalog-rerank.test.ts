@@ -68,3 +68,39 @@ test('prioritizes explicitly named people in history queries', () => {
 
   assert.equal(ranked[0].book_id, '2');
 });
+
+test('prioritizes explicit AI topics above broad computer-category matches', () => {
+  const books = [
+    {
+      book_id: '1',
+      title: 'JAVA编程教程',
+      author: '张三',
+      publisher: '计算机出版社',
+      price: 82,
+      stock: 10,
+      category: '计算机',
+      description: '',
+      cover_url: undefined,
+      relevance_score: 100,
+    },
+    {
+      book_id: '2',
+      title: '初识人工智能',
+      author: '李四',
+      publisher: '科技出版社',
+      price: 19.5,
+      stock: 8,
+      category: '人工智能',
+      description: '面向初学者介绍人工智能基础知识',
+      cover_url: undefined,
+      relevance_score: 1,
+    },
+  ];
+
+  const ranked = rerankCatalogBooks(
+    books,
+    '推荐5本人工智能入门书，预算200元',
+  );
+
+  assert.equal(ranked[0].book_id, '2');
+});

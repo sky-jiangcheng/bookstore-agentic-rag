@@ -9,30 +9,11 @@ function source(path) {
   return readFileSync(resolve(root, path), 'utf8');
 }
 
-test('SimpleVectorSearch bounds and evicts its in-memory cache', () => {
-  const storage = source('lib/vercel/storage.ts');
-
-  assert.match(storage, /MAX_CACHE_ENTRIES/);
-  assert.match(storage, /enforceMaxCacheSize/);
-  assert.match(storage, /this\.cache\.keys\(\)\.next\(\)\.value/);
-  assert.match(storage, /this\.cache\.delete\(oldestId\)/);
-});
-
-test('SimpleVectorSearch handles cold cache and zero vectors safely', () => {
-  const storage = source('lib/vercel/storage.ts');
-
-  assert.match(storage, /this\.cache\.size === 0/);
-  assert.match(storage, /await this\.loadFromDatabase\(\)/);
-  assert.match(storage, /normA === 0 \|\| normB === 0/);
-  assert.match(storage, /if \(normA === 0 \|\| normB === 0\) {\s*return 0;\s*}/);
-});
-
-test('orchestrator uses shared book taxonomy instead of a local keyword list', () => {
+test('orchestrator uses a single keyword retrieval path', () => {
   const orchestrator = source('lib/agents/orchestrator.ts');
 
-  assert.doesNotMatch(orchestrator, /const bookKeywords = \[/);
-  assert.match(orchestrator, /extractKnownBookKeywords/);
-  assert.match(source('lib/agents/book-taxonomy.ts'), /COMMON_BOOK_KEYWORDS/);
+  assert.match(orchestrator, /retrieveCandidates/);
+  assert.doesNotMatch(orchestrator, /runVercelRAGPipeline|evaluateRecommendation/);
 });
 
 test('requirement agent sanitizes prompt injection patterns in all prompt inputs', () => {

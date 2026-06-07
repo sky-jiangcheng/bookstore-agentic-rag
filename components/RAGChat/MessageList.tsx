@@ -5,15 +5,16 @@ import type { MessageType } from '@/components/rag-chat-utils';
 import { BookCard } from '@/components/RAGChat/BookCard';
 
 function getAggregatedStats(messages: MessageType[]) {
-  const seenBookIds = new Set<number | string>();
+  const seenBookIds = new Set<string>();
   let totalBooks = 0;
   let totalPrice = 0;
 
   messages.forEach(msg => {
     if (msg.role === 'assistant' && msg.recommendations) {
       msg.recommendations.forEach(book => {
-        if (book.book_id && !seenBookIds.has(book.book_id)) {
-          seenBookIds.add(book.book_id);
+        const bookId = String(book.book_id);
+        if (bookId && !seenBookIds.has(bookId)) {
+          seenBookIds.add(bookId);
           totalBooks++;
           if (book.price) {
             totalPrice += Number(book.price);

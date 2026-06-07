@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runBasicRAGPipeline } from '@/lib/vercel/simplified-orchestrator';
+import { runRAGPipeline } from '@/lib/agents/orchestrator';
 import { handleStreamingRequest } from '@/lib/vercel/rag-chat';
 import { corsHeaders, handleCorsPreflightRequest } from '@/lib/utils/cors';
 import { buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
@@ -45,7 +45,11 @@ export async function POST(req: NextRequest) {
     const { query, sessionId, fast } = parseResult.data;
 
     if (fast) {
-      const result = await runBasicRAGPipeline(query, sessionId);
+      const result = await runRAGPipeline({
+        userQuery: query,
+        sessionId,
+        enableConversationMemory: true,
+      });
       return NextResponse.json(
         { ...result, summary: buildRecommendationSummary(result) },
         { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(req) } }

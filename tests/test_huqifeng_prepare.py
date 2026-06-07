@@ -42,7 +42,6 @@ class MergeBookRecordsTests(unittest.TestCase):
 
         self.assertEqual(row["id"], "9787545144246")
         self.assertEqual(len(row["description"]), 200)
-        self.assertTrue(row["vector_text"].endswith("甲" * 260))
 
     def test_merge_prefers_main_record_and_fills_missing_from_supplement(self):
         merged = merge_book_records(
@@ -56,7 +55,6 @@ class MergeBookRecordsTests(unittest.TestCase):
                     "stock": 0,
                     "category": "思维心理学",
                     "description": "主简介",
-                    "vector_text": "主向量文本",
                     "cover_url": None,
                     "popularity_score": 0,
                     "_priority": 0,
@@ -70,7 +68,6 @@ class MergeBookRecordsTests(unittest.TestCase):
                     "stock": 5,
                     "category": "B842.5",
                     "description": "",
-                    "vector_text": "",
                     "cover_url": None,
                     "popularity_score": 5,
                     "_priority": 1,
@@ -82,7 +79,6 @@ class MergeBookRecordsTests(unittest.TestCase):
         self.assertEqual(merged["author"], "主作者")
         self.assertEqual(merged["publisher"], "辽海出版社")
         self.assertEqual(merged["description"], "主简介")
-        self.assertEqual(merged["vector_text"], "主向量文本")
         self.assertEqual(merged["stock"], 5)
 
 

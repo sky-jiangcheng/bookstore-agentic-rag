@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE TABLE IF NOT EXISTS books (
   id BIGINT PRIMARY KEY,
   source_id TEXT,
@@ -17,6 +19,11 @@ CREATE TABLE IF NOT EXISTS books (
 CREATE INDEX IF NOT EXISTS idx_books_category ON books(category);
 CREATE INDEX IF NOT EXISTS idx_books_author ON books(author);
 CREATE INDEX IF NOT EXISTS idx_books_popularity_score ON books(popularity_score DESC);
+CREATE INDEX IF NOT EXISTS idx_books_search_trgm
+  ON books
+  USING gin (
+    (concat_ws(' ', title, author, category, description)) gin_trgm_ops
+  );
 
 CREATE TABLE IF NOT EXISTS recommendation_feedback (
   id BIGSERIAL PRIMARY KEY,

@@ -91,19 +91,6 @@ def normalize_book_row(row: dict, priority: int) -> Optional[dict]:
         return None
 
     full_description = normalize_text(row.get("内容简介") or row.get("简介") or row.get("description"))
-    vector_text = "\n".join(
-        part
-        for part in [
-            f"Title: {title}",
-            f"Author: {normalize_text(row.get('作者') or row.get('author'))}",
-            f"Publisher: {normalize_text(row.get('出版社') or row.get('publisher'))}",
-            f"Category: {pick_category(row.get('主题词'), row.get('中图法') or row.get('中图分类'))}",
-            f"Keywords: {normalize_text(row.get('主题词'))}",
-            f"Description: {full_description}",
-        ]
-        if part and not part.endswith(": ")
-    )
-
     return {
         "id": str(book_id),
         "title": title[:255],
@@ -113,7 +100,6 @@ def normalize_book_row(row: dict, priority: int) -> Optional[dict]:
         "stock": normalize_int(row.get("库存") or row.get("stock")),
         "category": pick_category(row.get("主题词"), row.get("中图法") or row.get("中图分类")),
         "description": full_description[:DESCRIPTION_MAX_CHARS],
-        "vector_text": vector_text,
         "cover_url": None,
         "popularity_score": normalize_int(row.get("库存") or row.get("stock")),
         "_priority": priority,
@@ -125,7 +111,7 @@ def merge_book_records(records: List[dict]) -> dict:
     merged = ordered[0].copy()
 
     for record in ordered[1:]:
-        for field in ("publisher", "author", "description", "category", "vector_text"):
+        for field in ("publisher", "author", "description", "category"):
             if not merged.get(field) and record.get(field):
                 merged[field] = record[field]
 

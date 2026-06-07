@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 
 import type { AgentProgress } from '@/lib/types/rag';
-import { runVercelRAGPipeline } from './simplified-orchestrator';
+import { runRAGPipeline } from '@/lib/agents/orchestrator';
 import { corsHeaders } from '@/lib/utils/cors';
 import { getSafeErrorMessage } from '@/lib/utils/safe-error';
 import { buildRecommendationSummary } from '@/lib/utils/recommendation-summary';
@@ -41,10 +41,11 @@ export async function handleStreamingRequest(
         }
       };
 
-      runVercelRAGPipeline({
+      runRAGPipeline({
         userQuery: query,
         sessionId,
         onProgress,
+        enableConversationMemory: true,
       })
         .then((result) => {
           req.signal.removeEventListener('abort', onAbort);

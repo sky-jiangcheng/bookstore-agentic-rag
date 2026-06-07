@@ -32,7 +32,7 @@ export interface RequirementAnalysis {
 
 export interface RetrievalResult {
   books: Book[];
-  sources: ('semantic' | 'keyword' | 'popular' | 'reranker')[];
+  sources: ('keyword' | 'popular')[];
   total_candidates: number;
 }
 
@@ -48,27 +48,9 @@ export interface RecommendationResult {
   category_distribution: Record<string, number>;
 }
 
-export interface EvaluationResult {
-  overall_score: number;
-  scores: {
-    requirement_match: number;
-    diversity: number;
-    book_quality: number;
-    budget: number;
-  };
-  issues: string[];
-  needs_improvement: boolean;
-  suggestions: {
-    type: string;
-    action: string;
-    target: string;
-    description: string;
-  }[];
-}
-
 export interface AgentProgress {
-  type: 'phase_start' | 'phase_complete' | 'iteration_start' | 'clarification_needed' | 'optimization_needed' | 'complete' | 'error';
-  phase?: 'requirement_analysis' | 'retrieval' | 'generation' | 'evaluation';
+  type: 'phase_start' | 'phase_complete' | 'complete' | 'error';
+  phase?: 'requirement_analysis' | 'retrieval' | 'generation';
   content: string;
   data?: Record<string, unknown>;
 }
@@ -85,6 +67,7 @@ export interface CatalogSearchFilters {
   price_min?: number;
   price_max?: number;
   query?: string;
+  search_terms?: string[];
 }
 
 export interface UserInfo {
@@ -93,40 +76,6 @@ export interface UserInfo {
     favoriteCategories?: string[];
     priceRange?: { min: number; max: number };
   };
-}
-
-// ============================================================================
-// Classic RAG Components - New Types
-// ============================================================================
-
-/**
- * Text Chunk types for document processing
- */
-export interface TextChunk {
-  id: string;
-  text: string;
-  index: number;
-  bookId: string;
-  metadata: {
-    title?: string;
-    author?: string;
-    category?: string;
-    chunk_type?: 'metadata' | 'description';
-    chunk_size?: number;
-    strategy?: string;
-  };
-  embedding?: number[];
-}
-
-/**
- * Reranking result type
- */
-export interface RerankedResult {
-  book_id: string;
-  score: number;
-  rerank_score?: number;
-  original_rank: number;
-  new_rank: number;
 }
 
 /**
@@ -173,42 +122,4 @@ export interface ConversationSession {
     startTime: number;
     turnCount: number;
   };
-}
-
-/**
- * Vector search types
- */
-export interface SparseVector {
-  indices: number[];
-  values: number[];
-}
-
-export interface VectorBookMetadata {
-  bookId: string;
-  title: string;
-  author: string;
-  category: string;
-  description?: string;
-  sourceId?: string;
-}
-
-export interface ChunkMetadata {
-  bookId: string;
-  chunkIndex: number;
-  text: string;
-  title?: string;
-  author?: string;
-  category?: string;
-}
-
-/**
- * Enhanced retrieval options with RAG features
- */
-export interface EnhancedRetrievalOptions {
-  enableReranking?: boolean;
-  enableFeedbackBoost?: boolean;
-  enableGraphRetrieval?: boolean;
-  sessionId?: string;
-  topK?: number;
-  rerankerTopK?: number;
 }

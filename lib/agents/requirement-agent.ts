@@ -2,7 +2,7 @@
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
-import config from '@/lib/config/environment';
+import { getGoogleModel } from '@/lib/ai/google-model';
 import {
   AUDIENCE_PATTERNS,
   CATEGORY_PATTERNS,
@@ -230,7 +230,7 @@ export async function analyzeRequirement(
     console.log('[RequirementAgent] Conversation context:', options?.conversationContext ? 'present' : 'none');
 
     const { output } = await generateText({
-      model: config.google.model,
+      model: getGoogleModel(),
       prompt: ANALYSIS_PROMPT(userQuery, options?.conversationContext),
       output: Output.object({
         schema: RequirementAnalysisSchema,

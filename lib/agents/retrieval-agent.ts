@@ -1,34 +1,7 @@
 // lib/agents/retrieval-agent.ts
 import type { Book, RetrievalResult, RequirementAnalysis } from '@/lib/types/rag';
-import { vectorSearch } from '@/lib/vector-service';
-import { searchCatalog, getPopularBooks, getBookDetailsBatch } from '@/lib/clients/catalog-service';
-import { generateEmbeddingPair } from '@/lib/embeddings';
-import { rerankBooks, type RerankerConfig } from '@/lib/reranking';
+import { searchCatalog, getPopularBooks } from '@/lib/clients/catalog-service';
 import { RETRIEVAL_CONSTANTS } from '@/lib/constants';
-
-export interface RetrievalStrategy {
-  type: 'semantic' | 'keyword' | 'popular';
-  enabled: boolean;
-  topK: number;
-}
-
-export interface RetrievalOptions {
-  enableReranking?: boolean;
-  rerankerConfig?: RerankerConfig;
-  enableRerankingOnTopK?: number;
-}
-
-type RetrievalType = 'semantic' | 'keyword' | 'popular' | 'reranker';
-
-interface RetrievalResultItem {
-  books: Book[];
-  type: RetrievalType;
-}
-
-const DEFAULT_STRATEGIES: RetrievalStrategy[] = [
-  { type: 'keyword', enabled: true, topK: RETRIEVAL_CONSTANTS.KEYWORD_TOP_K },
-  { type: 'popular', enabled: true, topK: RETRIEVAL_CONSTANTS.POPULAR_TOP_K },
-];
 
 function createCategoryAliasMap(): Map<string, string[]> {
   const map = new Map<string, string[]>();
@@ -192,36 +165,6 @@ export function enforceHardConstraints(books: Book[], requirement: RequirementAn
   return sorted;
 }
 
-async function retrieveSemantic(requirement: RequirementAnalysis, topK: number): Promise<Book[]> {
-  try {
-    const { vector } = generateEmbeddingPair(requirement.original_query);
-    const vectorResults = await vectorSearch(vector, topK);
-    const ids = vectorResults.map((result) => result.id);
-
-    if (ids.length === 0) {
-      return [];
-    }
-
-    let bookMap = new Map<string, Book>();
-    try {
-      const books = await getBookDetailsBatch(ids);
-      bookMap = new Map(books.map((book) => [book.book_id, book]));
-    } catch (error) {
-      console.error('[semantic] Failed to batch get book details:', error);
-    }
-
-    const books = vectorResults
-      .map((result) => bookMap.get(result.id) ?? null)
-      .filter((book): book is Book => book !== null);
-
-    console.log(`[semantic] Retrieved ${books.length} books from vector search`);
-    return books;
-  } catch (error) {
-    console.error('[semantic] retrieval failed:', error);
-    throw error;
-  }
-}
-
 async function retrieveKeyword(requirement: RequirementAnalysis, topK: number): Promise<Book[]> {
   try {
     const searchTerms =
@@ -235,7 +178,8 @@ async function retrieveKeyword(requirement: RequirementAnalysis, topK: number): 
       author: requirement.constraints.author,
       price_min: requirement.constraints.price_min,
       price_max: requirement.constraints.price_max,
-      query: searchTerms.join(' '),
+      query: requirement.original_query,
+      search_terms: searchTerms,
     });
 
     for (const book of books) {
@@ -253,12 +197,8 @@ async function retrieveKeyword(requirement: RequirementAnalysis, topK: number): 
   }
 }
 
-async function retrievePopular(requirement: RequirementAnalysis, topK: number): Promise<Book[]> {
+async function retrievePopular(topK: number): Promise<Book[]> {
   try {
-    if (requirement.categories.length > 0 || requirement.keywords.length > 0) {
-      return [];
-    }
-
     const books = await getPopularBooks(topK);
     console.log(`[popular] Retrieved ${books.length} popular books`);
     return books;
@@ -268,120 +208,19 @@ async function retrievePopular(requirement: RequirementAnalysis, topK: number): 
   }
 }
 
-export function applyReciprocalRankFusion(results: Book[][], k: number = RETRIEVAL_CONSTANTS.RRF_K): Book[] {
-  const scores = new Map<string, number>();
-  const bookMap = new Map<string, Book>();
-
-  for (const resultList of results) {
-    for (let i = 0; i < resultList.length; i++) {
-      const book = resultList[i];
-      const rank = i + 1;
-      const bookId = book.book_id;
-      const contribution = 1 / (k + rank);
-
-      const currentScore = scores.get(bookId) ?? 0;
-      scores.set(bookId, currentScore + contribution);
-
-      if (!bookMap.has(bookId)) {
-        bookMap.set(bookId, book);
-      }
-    }
-  }
-
-  return Array.from(scores.entries())
-    .sort((a, b) => b[1] - a[1])
-    .map(([bookId]) => bookMap.get(bookId) as Book);
-}
-
-function getRerankerInputLimit(totalBooks: number, rerankerConfig: RerankerConfig): number {
-  return Math.min(
-    rerankerConfig.topK ?? RETRIEVAL_CONSTANTS.RERANKER_MAX_INPUT,
-    totalBooks,
-  );
-}
-
 export async function retrieveCandidates(
   requirement: RequirementAnalysis,
-  strategies: RetrievalStrategy[] = DEFAULT_STRATEGIES,
-  options?: RetrievalOptions,
+  topK: number = 30,
 ): Promise<RetrievalResult> {
-  const retrievalPromises: Promise<RetrievalResultItem>[] = [];
-
-  for (const strategy of strategies) {
-    if (!strategy.enabled) continue;
-
-    let promise: Promise<RetrievalResultItem>;
-
-    switch (strategy.type) {
-      case 'semantic':
-        promise = retrieveSemantic(requirement, strategy.topK).then((books) => ({
-          books,
-          type: 'semantic' as RetrievalType,
-        }));
-        break;
-
-      case 'keyword':
-        promise = retrieveKeyword(requirement, strategy.topK).then((books) => ({
-          books,
-          type: 'keyword' as RetrievalType,
-        }));
-        break;
-
-      case 'popular':
-        promise = retrievePopular(requirement, strategy.topK).then((books) => ({
-          books,
-          type: 'popular' as RetrievalType,
-        }));
-        break;
-
-      default:
-        continue;
-    }
-
-    retrievalPromises.push(promise);
-  }
-
-  const results = await Promise.allSettled(retrievalPromises);
-
-  const bookLists: Book[][] = [];
-  const sources: RetrievalType[] = [];
-
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      bookLists.push(result.value.books);
-      sources.push(result.value.type);
-    } else {
-      console.error('[retrieval] Strategy failed:', result.reason);
-    }
-  }
-
-  let fusedBooks = applyReciprocalRankFusion(bookLists);
-  fusedBooks = enforceHardConstraints(fusedBooks, requirement);
-
-  if (options?.enableReranking && options.rerankerConfig) {
-    try {
-      const topN = getRerankerInputLimit(fusedBooks.length, options.rerankerConfig);
-      const topCandidates = fusedBooks.slice(0, topN);
-      const remaining = fusedBooks.slice(topN);
-      const reranked = await rerankBooks(requirement.original_query, topCandidates, options.rerankerConfig);
-      fusedBooks = [...reranked, ...remaining];
-      sources.push('reranker');
-    } catch (error) {
-      console.warn('[retrieval] Reranking failed, using RRF results:', error);
-    }
-  }
-
   const hasSpecificIntent = requirement.categories.length > 0 || requirement.keywords.length > 0;
-  const minRecommendations = RETRIEVAL_CONSTANTS.MIN_RECOMMENDATIONS;
-  const targetCount = options?.rerankerConfig?.topK ?? requirement.constraints.target_count ?? minRecommendations;
-
-  const finalBooks = hasSpecificIntent
-    ? fusedBooks
-    : fusedBooks.slice(0, Math.max(minRecommendations, targetCount));
+  const books = hasSpecificIntent
+    ? await retrieveKeyword(requirement, topK)
+    : await retrievePopular(topK);
+  const finalBooks = enforceHardConstraints(books, requirement);
 
   return {
     books: finalBooks,
-    sources,
+    sources: [hasSpecificIntent ? 'keyword' : 'popular'],
     total_candidates: finalBooks.length,
   };
 }

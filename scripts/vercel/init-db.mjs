@@ -59,12 +59,19 @@ try {
   await sql`CREATE INDEX idx_books_popularity ON books(popularity_score DESC)`;
   console.log('✅ Created index: idx_books_popularity');
 
-  // Full-text search index
+  // Optional trigram index for fast ILIKE and fuzzy text matching.
   try {
-    await sql`CREATE INDEX idx_books_fulltext ON books USING gin(to_tsvector('simple', title || ' ' || COALESCE(author, '') || ' ' || COALESCE(category, '')))`;
-    console.log('✅ Created index: idx_books_fulltext (full-text search)');
+    await sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_books_search_trgm
+      ON books
+      USING gin (
+        (concat_ws(' ', title, author, category, description)) gin_trgm_ops
+      )
+    `;
+    console.log('✅ Created index: idx_books_search_trgm');
   } catch (e) {
-    console.log('⚠️  Full-text index skipped (not supported on all Postgres versions)');
+    console.log('⚠️  Trigram index skipped; keyword search will still work without it');
   }
 
   console.log('\n✨ Schema initialization complete!\n');

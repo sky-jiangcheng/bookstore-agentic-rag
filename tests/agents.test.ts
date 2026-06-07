@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import type { RequirementAnalysis } from '../lib/types/rag';
 
 import { sanitizePromptInput, extractQueryKeywords, parseBudget, parseTargetCount, parseExcludedKeywords } from '../lib/agents/requirement-agent';
-import { computeRelevanceScore, enforceHardConstraints, applyReciprocalRankFusion, hasExcludedKeywords, matchesCategories, getStrongKeywords } from '../lib/agents/retrieval-agent';
+import { computeRelevanceScore, enforceHardConstraints, hasExcludedKeywords, matchesCategories, getStrongKeywords } from '../lib/agents/retrieval-agent';
 import { enforceBudget, buildHeuristicExplanation, containsExcludedKeyword } from '../lib/agents/recommendation-agent';
 import { extractKnownBookKeywords } from '../lib/agents/book-taxonomy';
 
@@ -120,20 +120,6 @@ test('enforceHardConstraints filters excluded books', () => {
   const result = enforceHardConstraints(books, requirement);
   assert.equal(result.length, 1);
   assert.equal(result[0].title, '机器学习实战');
-});
-
-test('applyReciprocalRankFusion merges ranked results', () => {
-  const list1 = [
-    makeBook({ title: 'A', book_id: 'a1' }),
-    makeBook({ title: 'B', book_id: 'b1' }),
-  ];
-  const list2 = [
-    makeBook({ title: 'B', book_id: 'b1' }),
-    makeBook({ title: 'C', book_id: 'c1' }),
-  ];
-  const result = applyReciprocalRankFusion([list1, list2]);
-  assert.equal(result.length, 3);
-  assert.equal(result[0].title, 'B');
 });
 
 function makeRecBook(overrides: Record<string, unknown>) {

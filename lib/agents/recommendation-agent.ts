@@ -2,7 +2,7 @@
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
-import config from '@/lib/config/environment';
+import { getGoogleModel } from '@/lib/ai/google-model';
 import type { Book, RecommendedBook, RecommendationResult, RequirementAnalysis } from '@/lib/types/rag';
 import { filterBlockedBooks } from '@/lib/server/book-filters';
 
@@ -154,7 +154,7 @@ export async function generateRecommendation(
 
   try {
     const { output } = await generateText({
-      model: config.google.model,
+      model: getGoogleModel(),
       prompt: RECOMMENDATION_PROMPT(requirement, visibleCandidates, targetCount),
       output: Output.object({
         schema: RecommendationSchema,

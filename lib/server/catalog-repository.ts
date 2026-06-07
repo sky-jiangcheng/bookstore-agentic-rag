@@ -2,7 +2,8 @@ import 'server-only';
 
 import { sql } from '@vercel/postgres';
 
-import { buildCatalogSearchQuery, rerankCatalogBooks } from '@/lib/search/query-rerank';
+import { buildCatalogTextSearch } from '@/lib/search/catalog-query';
+import { buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 
 const MAX_RESULTS = 50;
@@ -45,61 +46,21 @@ function normalizeBooks(records: CatalogApiBook[]): Book[] {
   return records.map(mapBook);
 }
 
-export async function fetchBooksByIds(ids: string[]): Promise<Book[]> {
-  if (ids.length === 0) {
-    return [];
-  }
-
-  const numericIds = ids.map((id) => Number(id)).filter((n) => !isNaN(n));
-  if (numericIds.length === 0) {
-    return [];
-  }
-
-  const result = await sql.query<CatalogApiBook>(
-    `
-      SELECT
-        id AS book_id,
-        title,
-        author,
-        COALESCE(publisher, 'Unknown Publisher') AS publisher,
-        COALESCE(price, 0) AS price,
-        COALESCE(stock, 0) AS stock,
-        COALESCE(category, 'general') AS category,
-        COALESCE(description, '') AS description,
-        cover_url,
-        COALESCE(popularity_score, 0) AS relevance_score
-      FROM books
-      WHERE id = ANY($1::bigint[])
-    `,
-    [numericIds]
-  );
-
-  const byId = new Map(result.rows.map((row) => [String(row.book_id ?? row.id), mapBook(row)]));
-  return ids.map((id) => byId.get(String(id))).filter((book): book is Book => Boolean(book));
-}
-
 /**
  * 搜索目录：关键词 ILIKE 搜索 + 筛选。
  * query 来自用户自由文本，无 query 时仅按筛选条件返回热门图书。
  */
 export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): Promise<Book[]> {
-  const searchQuery = filters.query ? buildCatalogSearchQuery(filters.query) : '';
-  const queryText = searchQuery || filters.query || '';
-
   const conditions: string[] = [];
   const params: unknown[] = [];
 
-  // Text search across title, author, category
-  if (queryText) {
-    const searchTerms = queryText.split(/\s+/).filter(Boolean);
-    if (searchTerms.length > 0) {
-      const textConditions = searchTerms.map((_, i) => {
-        const p = `$${params.length + 1}`;
-        params.push(`%${searchTerms[i]}%`);
-        return `(title ILIKE ${p} OR author ILIKE ${p} OR category ILIKE ${p})`;
-      });
-      conditions.push(`(${textConditions.join(' AND ')})`);
-    }
+  const searchTerms = filters.search_terms?.length
+    ? filters.search_terms
+    : buildCatalogSearchTerms(filters.query ?? '');
+  const textSearch = buildCatalogTextSearch(searchTerms, params.length + 1);
+  if (textSearch.condition) {
+    conditions.push(textSearch.condition);
+    params.push(...textSearch.params);
   }
 
   if (filters.author) {
@@ -141,7 +102,10 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
   `;
 
   const books = normalizeBooks((await sql.query<CatalogApiBook>(query, params)).rows);
-  return rerankCatalogBooks(books, queryText);
+  return rerankCatalogBooks(
+    books,
+    [filters.query, ...searchTerms].filter(Boolean).join(' '),
+  );
 }
 
 export async function getBookDetailsFromDatabase(bookId: string): Promise<Book | null> {

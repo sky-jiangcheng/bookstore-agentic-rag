@@ -5,19 +5,6 @@
 
 export const RETRIEVAL_CONSTANTS = {
   /**
-   * 检索策略配置
-   */
-  SEMANTIC_TOP_K: 10,
-  KEYWORD_TOP_K: 10,
-  POPULAR_TOP_K: 10,
-
-  /**
-   * 重排序配置
-   */
-  RERANKER_TOP_K: 20,
-  RERANKER_MAX_INPUT: 50,
-
-  /**
    * 关键词过滤配置
    */
   MIN_KEYWORD_LENGTH: 2,
@@ -57,22 +44,11 @@ export const RETRIEVAL_CONSTANTS = {
   STOPWORDS: new Set(['推荐', '书', '书籍', '书单', '适合', '相关', '一个', '一些', '用户']),
 
   /**
-   * 互惠排名融合参数
-   */
-  RRF_K: 60,
-
-  /**
    * 结果限制
    */
   MIN_RECOMMENDATIONS: 5,
   MAX_RECOMMENDATIONS: 100,
   DEFAULT_RECOMMENDATIONS: 20,
-} as const;
-
-export const VECTOR_CONSTANTS = {
-  DIMENSION: 768,
-  DEFAULT_TOP_K: 10,
-  SEARCH_TIMEOUT_MS: 2500,
 } as const;
 
 export const BOOK_LIST_CONSTANTS = {

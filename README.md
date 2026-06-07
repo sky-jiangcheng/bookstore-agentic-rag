@@ -1,84 +1,81 @@
 # BookStore Agentic RAG
 
-面向 **Vercel** 部署的图书智能推荐系统，提供自然语言需求理解、向量检索、推荐生成和书单导出。
+面向 Vercel 部署的图书智能推荐系统。系统使用 Gemini 解析自然语言需求，以 Postgres 关键词召回和本地相关度排序替代向量数据库，并支持多轮对话和 Excel 书单导出。
 
-## 功能
+## 推荐流程
 
-- 自然语言需求分析（单次/多轮）
-- 向量 / 混合检索与候选召回
-- 基于候选的推荐生成（简化单趟流水线，适配 Serverless ~10s 预算）
-- 流式对话（`/api/rag/chat`）
-- 书单生成（`/api/v1/book-list/parse` + `/generate`）
-- 书单 Excel 导出（`/api/v1/book-list/export-excel`）
+1. Gemini 与本地规则提取分类、关键词、扩展词和约束。
+2. Postgres 使用同义词 `OR` 召回候选书。
+3. 标题、分类、作者、简介和热度参与本地相关度排序。
+4. Gemini 从候选中生成推荐理由；失败时自动使用规则推荐。
+5. 最终执行排除词、推荐数量和总预算硬约束。
+
+Redis 仅用于可选的会话记忆、反馈和分布式限流。未配置 Redis 时，首轮推荐仍可无状态运行。
 
 ## 技术栈
 
-- Frontend / BFF: Next.js 16
-- AI Runtime: Vercel AI SDK
-- LLM / Embedding: Google Gemini
-- Cache / Memory: Upstash Redis
-- Vector Search: Upstash Vector
-- Primary Data Store: Neon Postgres
-- Excel 导出: exceljs
+- Next.js 15
+- React 19
+- Vercel AI SDK
+- Google Gemini
+- Neon / Vercel Postgres
+- 可选 Upstash Redis
+- exceljs
 
-## 目录说明
-
-- `app/`: Next.js 页面与 API 路由
-- `components/`: UI 与 AI 交互组件
-- `lib/`: agents、clients、config、types
-- `docs/`: 核心设计与实施文档
-
-## 本地启动
+## 本地运行
 
 ```bash
 npm install
 npm run dev
 ```
 
-构建校验：
+验证：
 
 ```bash
-npm run check
+npm run test:unit
+npm run typecheck
+npm run build
 ```
 
 ## 环境变量
 
-请基于 `.env.local.example` 配置至少以下项目：
+必需：
 
-- `GOOGLE_API_KEY`
-- `DATABASE_URL`
-- `UPSTASH_VECTOR_REST_URL`
-- `UPSTASH_VECTOR_REST_TOKEN`
-- `UPSTASH_REDIS_REST_URL`
-- `UPSTASH_REDIS_REST_TOKEN`
+```dotenv
+GOOGLE_API_KEY=
+GOOGLE_MODEL=gemini-2.0-flash
+DATABASE_URL=
+```
 
-后续会补充：
+可选：
 
-- `AUTH_SECRET`
-- `CRON_SECRET`
+```dotenv
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+ALLOWED_ORIGINS=
+```
+
+## 数据库
+
+初始化：
+
+```bash
+node scripts/vercel/init-db.mjs
+```
+
+数据库脚本会尝试启用 `pg_trgm` 并创建文本搜索索引。如果当前数据库不允许安装该扩展，普通 `ILIKE` 关键词检索仍可工作，只是大数据量下查询会更慢。
 
 ## API
 
 | 端点 | 说明 |
-|------|------|
-| `GET /api/health` | 健康检查 |
-| `POST /api/rag/chat` | RAG 对话（JSON 或 SSE） |
-| `POST /api/rag/search` | 向量检索 |
-| `POST /api/catalog/search` | 目录检索 |
-| `POST /api/v1/book-list/parse` | 书单需求解析 |
-| `POST /api/v1/book-list/generate` | 书单推荐生成 |
-| `POST /api/v1/book-list/export-excel` | 导出书单为 .xlsx |
-
-## 书单 Excel 导出
-
-```bash
-curl -X POST http://localhost:3000/api/v1/book-list/export-excel \
-  -H 'Content-Type: application/json' \
-  -d '{"booklist_name":"测试书单","books":[{"title":"书名","author":"作者","price":29.9}]}' \
-  --output 书单.xlsx
-```
-
-前端对话界面在推荐结果下方提供"导出 Excel"按钮，一键下载。
+|---|---|
+| `GET /api/health` | 数据库、Redis 和搜索模式状态 |
+| `POST /api/rag/chat` | 图书推荐对话 |
+| `GET/POST /api/catalog/search` | 图书目录搜索 |
+| `POST /api/v1/book-list/parse` | 解析书单需求 |
+| `POST /api/v1/book-list/generate` | 生成推荐书单 |
+| `POST /api/v1/book-list/export-excel` | 导出 Excel |
 
 ## 图书导入
 
@@ -86,38 +83,13 @@ curl -X POST http://localhost:3000/api/v1/book-list/export-excel \
 npm run import:books -- ./data/books.json
 ```
 
-## 向量索引
-
-```bash
-npm run index:books
-```
-
-也可索引部分数据：
-
-```bash
-npm run index:books -- --book-id 123
-npm run index:books -- --limit 100 --offset 0
-```
-
-## Vercel 部署
-
-1. 在 Vercel 导入本项目
-2. 通过 Vercel Marketplace 连接：Neon Postgres、Upstash Redis、Upstash Vector
-3. 配置环境变量
-4. 初始化数据库：执行 `scripts/sql/001_init_books.sql`
-5. 部署完成后检查：`GET /api/health`、`POST /api/catalog/search`、`POST /api/rag/chat`
-
-## 健康检查
-
-- `GET /api/health`: 返回当前服务是否已配置数据库、向量库、Redis
-
-## 联调与冒烟测试
+## 冒烟测试
 
 ```bash
 npm run smoke:rag
 ```
 
-可选指定地址：
+指定部署地址：
 
 ```bash
 RAG_BASE_URL=https://your-deployment.vercel.app npm run smoke:rag

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runRAGPipeline } from '@/lib/agents/orchestrator';
 import type { RAGPipelineResult } from '@/lib/agents/orchestrator';
 import { validateConfig, config } from '@/lib/config/environment';
-import { runVercelRAGPipeline, runBasicRAGPipeline } from '@/lib/vercel/simplified-orchestrator';
 import type { AgentProgress } from '@/lib/types/rag';
 import { corsHeaders, handleCorsPreflightRequest } from '@/lib/utils/cors';
 import { getSafeErrorMessage, buildSafeErrorResponse, logServerError } from '@/lib/utils/safe-error';
@@ -76,20 +75,26 @@ export async function POST(req: NextRequest) {
 async function handleRequest(query: string, sessionId: string | undefined, fast: boolean, req: NextRequest) {
   try {
     if (fast) {
-      const result = await runBasicRAGPipeline(query, sessionId);
+      const result = await runRAGPipeline({
+        userQuery: query,
+        sessionId,
+        enableConversationMemory: true,
+      });
       return NextResponse.json(
         { ...result, summary: buildRecommendationSummary(result) },
         { headers: corsHeaders(req) }
       );
     }
 
-    const useVercelPipeline = config.vercel.enabled && config.vercel.useSimplifiedPipeline;
-
-    if (!useVercelPipeline) {
+    if (!config.vercel.enabled) {
       return await handleFullPipeline(query, sessionId, req);
     }
 
-    const result = await runVercelRAGPipeline({ userQuery: query, sessionId });
+    const result = await runRAGPipeline({
+      userQuery: query,
+      sessionId,
+      enableConversationMemory: true,
+    });
     return NextResponse.json(
       { ...result, summary: buildRecommendationSummary(result) },
       { headers: corsHeaders(req) }
@@ -132,7 +137,6 @@ async function handleFullPipeline(query: string, sessionId: string | undefined, 
           userQuery: query,
           sessionId,
           enableConversationMemory: true,
-          enableReranking: true,
           onProgress,
         });
 

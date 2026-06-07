@@ -14,7 +14,7 @@ export interface BookRecommendation {
   author: string;
   price: number;
   explanation: string;
-  book_id: number | string;
+  book_id: string;
   publisher?: string | null;
   category?: string | null;
   stock?: number | null;
@@ -99,7 +99,7 @@ export function normalizeBookRecommendations(
       author: typeof item.author === 'string' ? item.author.trim() : '未知作者',
       price: typeof item.price === 'number' ? item.price : Number(item.price) || 0,
       explanation: typeof item.explanation === 'string' ? item.explanation.trim() : '',
-      book_id: (item.book_id ?? '') as number | string,
+      book_id: item.book_id == null ? '' : String(item.book_id),
       publisher: typeof item.publisher === 'string' ? item.publisher.trim() || null : null,
       category: typeof item.category === 'string' ? item.category.trim() || null : null,
       stock: typeof item.stock === 'number' ? item.stock : null,

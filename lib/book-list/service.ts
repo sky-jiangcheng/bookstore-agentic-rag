@@ -21,7 +21,6 @@ import type {
   ParsedRequirements,
 } from '@/lib/book-list/types';
 import type { RecommendedBook } from '@/lib/types/rag';
-import { runVercelRAGPipeline } from '@/lib/vercel/simplified-orchestrator';
 import { logServerError } from '@/lib/utils/safe-error';
 
 export class BookListHttpError extends Error {
@@ -144,7 +143,6 @@ export async function generateBookList(
   }
 
   const started = Date.now();
-  const useVercelSimplified = config.vercel.enabled && config.vercel.useSimplifiedPipeline;
   const timeoutMs = config.vercel.timeout ?? 9000;
 
   let recommendationBooks: RecommendedBook[] = [];
@@ -152,49 +150,35 @@ export async function generateBookList(
   let pipelineSuccess: boolean;
   let pipelineError: string | undefined;
 
-  const pipelineTask = useVercelSimplified
-    ? (async () => {
-        try {
-          const preReq = parsedRequirementsToRequirementAnalysis(userQuery, requirements, limit);
-          preReq.constraints = { ...preReq.constraints, target_count: limit };
+  const pipelineTask = (async () => {
+    try {
+      const requirement = parsedRequirementsToRequirementAnalysis(
+        userQuery,
+        requirements,
+        limit,
+      );
+      requirement.constraints = {
+        ...requirement.constraints,
+        target_count: limit,
+      };
 
-          const vercelResult = await runVercelRAGPipeline({
-            userQuery,
-            requirement: preReq,
-            skipConversationMemory: true,
-          });
+      const result = await runRAGPipeline({
+        userQuery,
+        requirement,
+        enableConversationMemory: false,
+      });
 
-          return {
-            recommendationBooks: vercelResult.recommendation?.books ?? [],
-            pipelineRequirement: vercelResult.requirement,
-            pipelineSuccess: vercelResult.success,
-            pipelineError: vercelResult.error,
-          };
-        } catch (error) {
-          logServerError('[book-list/generate/vercel]', error);
-          throw error;
-        }
-      })()
-    : (async () => {
-        try {
-          const fullQuery = requestId ? `${userQuery}\n请推荐约 ${limit} 本书。` : userQuery;
-          const classic = await runRAGPipeline({
-            userQuery: fullQuery,
-            enableConversationMemory: false,
-            maxIterations: config.rag.maxIterations,
-          });
-
-          return {
-            recommendationBooks: classic.recommendation?.books ?? [],
-            pipelineRequirement: classic.requirement,
-            pipelineSuccess: classic.success,
-            pipelineError: classic.error,
-          };
-        } catch (error) {
-          logServerError('[book-list/generate/classic]', error);
-          throw error;
-        }
-      })();
+      return {
+        recommendationBooks: result.recommendation?.books ?? [],
+        pipelineRequirement: result.requirement,
+        pipelineSuccess: result.success,
+        pipelineError: result.error,
+      };
+    } catch (error) {
+      logServerError('[book-list/generate]', error);
+      throw error;
+    }
+  })();
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>(

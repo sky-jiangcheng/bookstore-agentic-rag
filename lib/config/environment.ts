@@ -3,7 +3,7 @@ import 'server-only';
 export const config = {
   google: {
     apiKey: process.env.GOOGLE_API_KEY || '',
-    model: process.env.GOOGLE_MODEL || 'google/gemini-2.0-flash',
+    model: process.env.GOOGLE_MODEL || 'gemini-2.0-flash',
   },
   database: {
     url: process.env.POSTGRES_URL || process.env.DATABASE_URL || '',
@@ -19,22 +19,12 @@ export const config = {
     url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   },
   rag: {
-    maxIterations: 1,
     defaultTargetCount: 15,
-    qualityThreshold: 0.8,
   },
   // Vercel Deployment
   vercel: {
     enabled: process.env.VERCEL === 'true' || process.env.VERCEL_ENV !== undefined,
     timeout: Number(process.env.VERCEL_TIMEOUT) || 7000, // 7 seconds (under 10s limit with cold start headroom)
-    useSimplifiedPipeline: process.env.VERCEL_USE_SIMPLIFIED !== 'false',
-  },
-  reranker: {
-    enabled: process.env.RERANKER_ENABLED === 'true',
-    type: (process.env.RERANKER_TYPE as 'local' | 'api' | 'cohere') || 'local',
-    model: process.env.RERANKER_MODEL || 'BAAI/bge-reranker-v2-m3',
-    apiKey: process.env.COHERE_API_KEY || '',
-    topK: Number(process.env.RERANKER_TOP_K) || 20,
   },
   feedback: {
     enabled: process.env.ENABLE_FEEDBACK !== 'false',

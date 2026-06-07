@@ -17,7 +17,7 @@ test('health endpoint exposes self-test dependency flags', () => {
   assert.match(healthRoute, /^\s+database(?=,|:)/m);
   assert.match(healthRoute, /dependencies:/);
   assert.doesNotMatch(healthRoute, /getFilterStatus/);
-  assert.match(healthRoute, /status:\s*'ok'/);
+  assert.match(healthRoute, /postgres-keyword/);
 });
 
 test('service fetches use bounded timeout helpers', () => {
@@ -32,23 +32,10 @@ test('service fetches use bounded timeout helpers', () => {
   assert.match(authClient, /fetchWithTimeout/);
 });
 
-test('catalog vector enrichment is bounded and optional for online smoke tests', () => {
+test('catalog search uses the shared OR text-search builder', () => {
   const catalogRepository = source('lib/server/catalog-repository.ts');
 
-  assert.match(catalogRepository, /search_rank/);
-  assert.match(catalogRepository, /THEN search_rank/);
-  assert.match(catalogRepository, /VECTOR_SEARCH_TIMEOUT_MS/);
-  assert.match(catalogRepository, /!config\.vercel\.enabled/);
-  assert.match(catalogRepository, /withTimeout\(\s*vectorSearch/);
-  assert.match(catalogRepository, /AsyncTimeoutError/);
-  assert.match(catalogRepository, /return sqlBooks/);
-});
-
-test('embedding taskType changes local embedding input instead of being ignored', () => {
-  const embeddings = source('lib/embeddings.ts');
-
-  assert.doesNotMatch(embeddings, /void taskType/);
-  assert.match(embeddings, /buildTaskAwareEmbeddingText/);
-  assert.match(embeddings, /RETRIEVAL_DOCUMENT/);
-  assert.match(embeddings, /SEMANTIC_SIMILARITY/);
+  assert.match(catalogRepository, /buildCatalogTextSearch/);
+  assert.match(catalogRepository, /search_terms/);
+  assert.doesNotMatch(catalogRepository, /textConditions\.join\(['"] AND ['"]\)/);
 });

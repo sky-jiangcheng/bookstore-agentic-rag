@@ -10,9 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "check": "npm run typecheck && npm run build",
     "test": "npm run test:unit",
-    "test:unit": "node --require ./scripts/preload.cjs --import tsx --test tests/*.test.ts",
+    "test:unit": "node --require ./scripts/preload.cjs --import tsx --test tests/*.test.ts tests/minor-issues-regression.test.mjs tests/no-vector-architecture.test.mjs tests/remaining-significant-issues.test.mjs tests/significant-issues-regression.test.mjs tests/type-migration-regression.test.mjs",
     "import:books": "node ./scripts/import-books.mjs",
-    "index:books": "tsx ./scripts/index-books.ts",
     "smoke:rag": "node ./scripts/smoke-rag.mjs",
     "vercel:build": "next build",
     "vercel:deploy": "vercel --prod"
@@ -42,7 +41,6 @@
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
     "@upstash/redis": "^1.28.4",
-    "@vercel/kv": "^2.0.0",
     "@vercel/postgres": "^0.10.0",
     "@xyflow/react": "^12.10.2",
     "ai": "^6.0.156",
