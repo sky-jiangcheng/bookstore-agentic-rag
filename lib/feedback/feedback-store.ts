@@ -109,6 +109,58 @@ export async function getFeedbackStats(bookId: string): Promise<FeedbackStats | 
 }
 
 /**
+ * Batch get feedback statistics for multiple books using MGET.
+ * Replaces N+1 pattern with a single round trip.
+ */
+export async function getFeedbackStatsBatch(bookIds: string[]): Promise<Map<string, FeedbackStats>> {
+  const result = new Map<string, FeedbackStats>();
+
+  if (!redis || bookIds.length === 0) {
+    return result;
+  }
+
+  const keys = bookIds.map((id) => REDIS_KEYS.stats(id));
+  const rawValues = await redis.mget<string[]>(...keys);
+
+  for (let i = 0; i < bookIds.length; i++) {
+    const bookId = bookIds[i];
+    const raw = rawValues?.[i];
+
+    if (!raw || typeof raw !== 'string') {
+      result.set(bookId, {
+        bookId,
+        positiveCount: 0,
+        negativeCount: 0,
+        averageScore: 0,
+        totalFeedback: 0,
+      });
+      continue;
+    }
+
+    try {
+      const stats = JSON.parse(raw) as FeedbackStats;
+      result.set(bookId, {
+        bookId,
+        positiveCount: Number(stats.positiveCount || 0),
+        negativeCount: Number(stats.negativeCount || 0),
+        averageScore: Number(stats.averageScore || 0),
+        totalFeedback: Number(stats.totalFeedback || 0),
+      });
+    } catch {
+      result.set(bookId, {
+        bookId,
+        positiveCount: 0,
+        negativeCount: 0,
+        averageScore: 0,
+        totalFeedback: 0,
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
  * Lua script for atomic feedback stats update.
  * Guarantees no lost updates even under concurrent writes.
  */

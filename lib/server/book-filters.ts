@@ -66,16 +66,58 @@ function getBookSearchText(book: Book): string {
     .toLowerCase();
 }
 
-function findBlockedKeyword(book: Book, keywords: string[]): string | null {
-  const haystack = getBookSearchText(book);
-
-  for (const keyword of keywords) {
-    if (haystack.includes(keyword.toLowerCase())) {
-      return keyword;
-    }
+/**
+ * Pre-compile keywords into a combined regex for O(1) matching per book.
+ * Falls back to loop for small keyword sets.
+ */
+function createBlockedKeywordMatcher(keywords: string[]): {
+  test: (haystack: string) => string | null;
+} {
+  if (keywords.length === 0) {
+    return { test: () => null };
   }
 
-  return null;
+  if (keywords.length <= 5) {
+    return {
+      test: (haystack: string) => {
+        for (const kw of keywords) {
+          if (haystack.includes(kw)) return kw;
+        }
+        return null;
+      },
+    };
+  }
+
+  const escaped = keywords.map((kw) =>
+    kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+  );
+  const pattern = new RegExp(escaped.join('|'));
+  return {
+    test: (haystack: string) => {
+      const match = haystack.match(pattern);
+      return match ? match[0] : null;
+    },
+  };
+}
+
+/** Cached matcher instance for the current keyword set */
+let cachedMatcher: {
+  matcher: ReturnType<typeof createBlockedKeywordMatcher>;
+  keywords: string[];
+} | null = null;
+
+function getMatcher(keywords: string[]): ReturnType<typeof createBlockedKeywordMatcher> {
+  if (cachedMatcher && cachedMatcher.keywords === keywords) {
+    return cachedMatcher.matcher;
+  }
+  const matcher = createBlockedKeywordMatcher(keywords);
+  cachedMatcher = { matcher, keywords };
+  return matcher;
+}
+
+function findBlockedKeyword(book: Book, keywords: string[]): string | null {
+  const haystack = getBookSearchText(book);
+  return getMatcher(keywords).test(haystack);
 }
 
 export async function getFilterStatus(forceRefresh: boolean = false): Promise<FilterStatus> {
