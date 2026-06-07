@@ -123,9 +123,14 @@ export function TuningPanel({
           </div>
           <div className="flex flex-wrap gap-1.5">
             {selectedExclusions.map((word) => (
-              <button key={word} type="button" onClick={() => toggleExclusion(word)} className="filter-chip filter-chip-active">
-                {word} ×
-              </button>
+              <span key={word} className="filter-chip filter-chip-active group">
+                <button type="button" onClick={() => { setCustomExclusion(word); toggleExclusion(word); }} className="hover:text-amber-200">
+                  {word}
+                </button>
+                <button type="button" onClick={() => toggleExclusion(word)} className="ml-1 text-slate-500 hover:text-rose-400">
+                  ×
+                </button>
+              </span>
             ))}
           </div>
         </div>
