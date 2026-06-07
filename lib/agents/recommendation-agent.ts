@@ -1,17 +1,6 @@
 // lib/agents/recommendation-agent.ts
-import { generateText, Output } from 'ai';
-import { z } from 'zod';
-
-import { getGoogleModel } from '@/lib/ai/google-model';
 import type { Book, RecommendedBook, RecommendationResult, RequirementAnalysis } from '@/lib/types/rag';
 import { filterBlockedBooks } from '@/lib/server/book-filters';
-
-const RecommendationSchema = z.object({
-  books: z.array(z.object({
-    book_id: z.string(),
-    explanation: z.string(),
-  })),
-});
 
 function rankForBudget(book: RecommendedBook, requirement: RequirementAnalysis): number {
   let score = book.relevance_score ?? 0;
@@ -98,6 +87,10 @@ export function buildHeuristicExplanation(book: Book, requirement: RequirementAn
   if (requirement.constraints.budget !== undefined) {
     explanationParts.push(`单本价格 ¥${book.price.toFixed(2)}`);
   }
+  if (book.description) {
+    const cleanDesc = book.description.replace(/\s+/g, ' ').trim();
+    explanationParts.push(`简介: ${cleanDesc.length > 60 ? cleanDesc.slice(0, 60) + '...' : cleanDesc}`);
+  }
 
   if (explanationParts.length === 0) {
     return '这本书与当前需求主题相关，且内容完整，适合作为候选。';
@@ -105,32 +98,6 @@ export function buildHeuristicExplanation(book: Book, requirement: RequirementAn
 
   return `${explanationParts.join('；')}。`;
 }
-
-// Extract prompt as constant to avoid recreation on each call
-const RECOMMENDATION_PROMPT = (
-  requirement: RequirementAnalysis,
-  candidates: Book[],
-  targetCount: number,
-) => `你是书店智能推荐系统的推荐生成专家。
-
-用户需求分析：
-- 原始查询: ${requirement.original_query}
-- 识别分类: ${JSON.stringify(requirement.categories)}
-- 关键词: ${JSON.stringify(requirement.keywords)}
-- 约束条件: ${JSON.stringify(requirement.constraints)}
-${requirement.constraints.budget ? `- 预算总价上限: ¥${requirement.constraints.budget}，推荐总价不能超过这个限额\n` : ''}
-- 用户偏好: ${JSON.stringify(requirement.preferences)}
-
-以下是经过检索得到的候选书籍，请从中选择 ${targetCount} 本书推荐给用户：
-
-${candidates.map((b, i) => `${i + 1}. ${b.title} by ${b.author}, ${b.category}, ¥${b.price}`).join('\n\n')}
-
-请为用户生成个性化推荐：
-1. 选择 ${targetCount} 本最符合用户需求的书籍
-2. 为每本书写一段推荐理由（2-3句话，说明为什么适合用户需求）
-3. 注意价格不要超过用户预算约束（如果有预算限制）
-
-以JSON格式输出。`;
 
 export async function generateRecommendation(
   requirement: RequirementAnalysis,
@@ -152,98 +119,38 @@ export async function generateRecommendation(
     };
   }
 
-  try {
-    const { output } = await generateText({
-      model: getGoogleModel(),
-      prompt: RECOMMENDATION_PROMPT(requirement, visibleCandidates, targetCount),
-      output: Output.object({
-        schema: RecommendationSchema,
-      }),
-    });
+  const mappedBooks: RecommendedBook[] = visibleCandidates.map(book => ({
+    ...book,
+    explanation: buildHeuristicExplanation(book, requirement),
+  }));
 
-    // Map the recommended book IDs back to full book objects and add explanations:
-    const recommendedBooks: RecommendedBook[] = output.books
-      .map(({ book_id, explanation }) => {
-        const originalBook = visibleCandidates.find(b => b.book_id === book_id);
-        if (!originalBook) return null;
-        return {
-          ...originalBook,
-          explanation,
-        };
-      })
-      .filter((book): book is RecommendedBook => book !== null);
+  const finalBooks = enforceRecommendationConstraints(mappedBooks, requirement, targetCount);
 
-    // If we got fewer books than requested due to parsing issues, fill with top candidates
-    if (recommendedBooks.length < targetCount && recommendedBooks.length < visibleCandidates.length) {
-      const usedIds = new Set(recommendedBooks.map(b => b.book_id));
-      for (const candidate of visibleCandidates) {
-        if (!usedIds.has(candidate.book_id) && recommendedBooks.length < targetCount) {
-          recommendedBooks.push({
-            ...candidate,
-            explanation: buildHeuristicExplanation(candidate, requirement),
-          });
-        }
-      }
-    }
-
-    const finalBooks = enforceRecommendationConstraints(recommendedBooks, requirement, targetCount);
-
-    // Calculate category distribution:
-    const category_distribution: Record<string, number> = {};
-    for (const book of finalBooks) {
-      category_distribution[book.category] = (category_distribution[book.category] || 0) + 1;
-    }
-
-    // Calculate total price:
-    const total_price = finalBooks.reduce((sum, book) => sum + book.price, 0);
-
-    // Coverage ratio: proportion of visible candidates that made it into the final selection
-    const coverage_score = finalBooks.length / visibleCandidates.length;
-
-    // Calculate confidence: based on how clear the requirement is
-    // More keywords and categories = higher confidence
-    // If needs clarification, confidence is lower (0.3 + clarity/2)
-    const clarityScore = Math.min(1, (
-      (requirement.categories.length + requirement.keywords.length + requirement.preferences.length) / 6
-    ));
-    const confidence = requirement.needs_clarification
-      ? 0.3 + clarityScore * 0.2  // Lower base confidence when clarification needed
-      : 0.5 + clarityScore * 0.5;
-
-    return {
-      books: finalBooks,
-      total_price,
-      quality_score: coverage_score,
-      confidence,
-      category_distribution,
-    };
-  } catch (error) {
-    // If LLM processing fails, fall back to simple heuristic ranking:
-    const fallbackBooks = visibleCandidates
-      .slice(0, targetCount)
-      .map(book => ({
-        ...book,
-        explanation: buildHeuristicExplanation(book, requirement),
-      }));
-
-    const finalFallback = enforceRecommendationConstraints(fallbackBooks, requirement, targetCount);
-
-    const category_distribution: Record<string, number> = {};
-    for (const book of finalFallback) {
-      category_distribution[book.category] = (category_distribution[book.category] || 0) + 1;
-    }
-
-    const total_price = finalFallback.reduce((sum, book) => sum + book.price, 0);
-    const quality_score = finalFallback.length / visibleCandidates.length;
-    // Lower confidence when we fall back to heuristic ranking
-    const confidence = 0.5;
-
-    return {
-      books: finalFallback,
-      total_price,
-      quality_score,
-      confidence,
-      category_distribution,
-    };
+  // Calculate category distribution:
+  const category_distribution: Record<string, number> = {};
+  for (const book of finalBooks) {
+    category_distribution[book.category] = (category_distribution[book.category] || 0) + 1;
   }
+
+  // Calculate total price:
+  const total_price = finalBooks.reduce((sum, book) => sum + book.price, 0);
+
+  // Coverage ratio: proportion of visible candidates that made it into the final selection
+  const coverage_score = finalBooks.length / visibleCandidates.length;
+
+  // Calculate confidence: based on how clear the requirement is
+  const clarityScore = Math.min(1, (
+    (requirement.categories.length + requirement.keywords.length + requirement.preferences.length) / 6
+  ));
+  const confidence = requirement.needs_clarification
+    ? 0.3 + clarityScore * 0.2  // Lower base confidence when clarification needed
+    : 0.5 + clarityScore * 0.5;
+
+  return {
+    books: finalBooks,
+    total_price,
+    quality_score: coverage_score,
+    confidence,
+    category_distribution,
+  };
 }
