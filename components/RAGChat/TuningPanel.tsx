@@ -102,19 +102,16 @@ export function TuningPanel({
 
           {suggestedKeywords && suggestedKeywords.length > 0 ? (
             <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
-              {suggestedKeywords.map((word) => {
-                const selected = selectedKeywords.includes(word);
-                return (
-                  <button
-                    key={word}
-                    type="button"
-                    onClick={() => toggleKeyword(word)}
-                    className={selected ? 'filter-chip filter-chip-active' : 'filter-chip'}
-                  >
-                    {word}
-                  </button>
-                );
-              })}
+              {suggestedKeywords.filter((w) => !selectedKeywords.includes(w)).map((word) => (
+                <button
+                  key={word}
+                  type="button"
+                  onClick={() => toggleKeyword(word)}
+                  className="filter-chip"
+                >
+                  {word}
+                </button>
+              ))}
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-slate-700 px-3 py-4 text-xs leading-5 text-slate-500">
