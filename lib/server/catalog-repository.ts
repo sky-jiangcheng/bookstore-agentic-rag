@@ -88,6 +88,11 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
     params.push(...filters.categories);
   }
 
+  if (filters.library_category && filters.library_category !== 'none') {
+    params.push(filters.library_category);
+    conditions.push(`library_types @> ARRAY[$${params.length}]::text[]`);
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const limit = filters.limit !== undefined ? filters.limit : (filters.page !== undefined ? 30 : 10000);
   const page = filters.page !== undefined ? Math.max(1, filters.page) : 1;

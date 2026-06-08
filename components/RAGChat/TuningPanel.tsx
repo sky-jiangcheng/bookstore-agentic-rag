@@ -8,7 +8,6 @@ interface TuningPanelProps {
   onChangeCategoryWeight: (val: number) => void;
   keywordWeight: number;
   onChangeKeywordWeight: (val: number) => void;
-  dbExclusions: string[];
   selectedExclusions: string[];
   onChangeExclusions: (exclusions: string[]) => void;
   onAddCustomExclusion?: (word: string) => void;
@@ -18,7 +17,6 @@ interface TuningPanelProps {
   onChangeKeywords?: (keywords: string[]) => void;
   lastSql?: string;
   onClearSession: () => void;
-  suggestionCount?: number;
   libraryCategory: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none';
   onChangeLibraryCategory: (category: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none') => void;
 }
@@ -30,7 +28,6 @@ export function TuningPanel({
   onChangeCategoryWeight,
   keywordWeight,
   onChangeKeywordWeight,
-  dbExclusions,
   selectedExclusions,
   onChangeExclusions,
   onAddCustomExclusion,
@@ -39,7 +36,6 @@ export function TuningPanel({
   selectedKeywords = [],
   onChangeKeywords,
   onClearSession,
-  suggestionCount = 0,
   libraryCategory,
   onChangeLibraryCategory,
 }: TuningPanelProps) {
@@ -198,34 +194,12 @@ export function TuningPanel({
         <div className="mb-3 flex items-center justify-between border-b border-white/5 pb-3">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-amber-300" />
-            <h3 className="text-sm font-semibold text-slate-200">碰撞建议与排除词</h3>
+            <h3 className="text-sm font-semibold text-slate-200">排除词</h3>
           </div>
-          <span className="text-[10px] text-amber-200">{suggestionCount} 项建议</span>
+          <span className="text-[10px] text-amber-200">人工输入</span>
         </div>
 
-        {dbExclusions.length > 0 ? (
-          <div className="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
-            {dbExclusions.map((word) => {
-              const selected = selectedExclusions.includes(word);
-              return (
-                <button
-                  key={word}
-                  type="button"
-                  onClick={() => toggleExclusion(word)}
-                  className={selected ? 'filter-chip filter-chip-active' : 'filter-chip'}
-                >
-                  {word}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-md border border-dashed border-slate-700 px-3 py-4 text-xs leading-5 text-slate-500">
-            输入需求后，将在这里建议可能需要排除的关键词。
-          </div>
-        )}
-
-        <div className="mt-3 flex gap-2">
+        <div className="flex gap-2">
           <input
             value={customExclusion}
             onChange={(event) => setCustomExclusion(event.target.value)}
@@ -235,33 +209,32 @@ export function TuningPanel({
                 addCustomExclusion();
               }
             }}
-            placeholder="人工输入排除词"
+            placeholder="输入排除词（不包含这些关键词的图书）"
             className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#101216] px-2.5 py-2 text-xs text-slate-200 outline-none focus:border-amber-500/60"
           />
           <button type="button" onClick={addCustomExclusion} className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 px-2.5 text-xs text-amber-200 hover:bg-amber-500/10">
             <Plus className="h-3.5 w-3.5" />
-            添加排除词
+            添加
           </button>
         </div>
 
-        <div className="mt-4 border-t border-white/5 pt-3">
-          <div className="mb-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span>确认后生效排除词</span>
-            <span>{selectedExclusions.length}</span>
+        {selectedExclusions.length > 0 && (
+          <div className="mt-4 border-t border-white/5 pt-3">
+            <div className="mb-2 flex items-center justify-between text-[11px] text-slate-400">
+              <span>生效排除词</span>
+              <span>{selectedExclusions.length}</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {selectedExclusions.map((word) => (
+                <span key={word} className="filter-chip filter-chip-active group">
+                  <button type="button" onClick={() => toggleExclusion(word)} className="ml-1 text-slate-500 hover:text-rose-400">
+                    {word} ×
+                  </button>
+                </span>
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {selectedExclusions.map((word) => (
-              <span key={word} className="filter-chip filter-chip-active group">
-                <button type="button" onClick={() => { setCustomExclusion(word); toggleExclusion(word); }} className="hover:text-amber-200">
-                  {word}
-                </button>
-                <button type="button" onClick={() => toggleExclusion(word)} className="ml-1 text-slate-500 hover:text-rose-400">
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        </div>
+        )}
       </section>
 
       <button type="button" onClick={onClearSession} className="inline-flex items-center justify-center gap-2 rounded-md border border-rose-500/30 px-3 py-2.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/10">

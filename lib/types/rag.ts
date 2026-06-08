@@ -75,6 +75,7 @@ export interface CatalogSearchFilters {
   limit?: number;
   page?: number;
   requirement?: any;
+  library_category?: string;
 }
 
 export interface UserInfo {

@@ -25,6 +25,7 @@ export interface RAGPipelineOptions {
   excludeKeywords?: string[];
   categoryWeight?: number;
   keywordWeight?: number;
+  libraryCategory?: string;
 }
 
 export interface RAGPipelineResult {
@@ -45,7 +46,7 @@ function getCandidateLimit(requirement: RequirementAnalysis): number {
 export async function runRAGPipeline(
   options: RAGPipelineOptions,
 ): Promise<RAGPipelineResult> {
-  const {
+    const {
     userQuery,
     sessionId: inputSessionId,
     userId,
@@ -56,6 +57,7 @@ export async function runRAGPipeline(
     excludeKeywords,
     categoryWeight,
     keywordWeight,
+    libraryCategory,
   } = options;
 
   let requirement: RequirementAnalysis | undefined;
@@ -136,6 +138,7 @@ export async function runRAGPipeline(
     retrieval = await retrieveCandidates(
       requirement,
       getCandidateLimit(requirement),
+      { libraryCategory },
     );
 
     onProgress?.({

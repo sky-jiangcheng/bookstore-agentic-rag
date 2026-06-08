@@ -72,7 +72,7 @@ export function RAGChat() {
   const [draftRequirement, setDraftRequirement] = useState<RequirementAnalysis | null>(null);
   const [confirmedRequirement, setConfirmedRequirement] = useState<RequirementAnalysis | null>(null);
   const [isDraftConfirmed, setIsDraftConfirmed] = useState(false);
-  const [suggestedExclusions, setSuggestedExclusions] = useState<string[]>([]);
+
   const [strategy, setStrategy] = useState<{ type: 'ai' | 'template'; label: string; detail: string } | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
   const [libraryCategory, setLibraryCategory] = useState<'公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none'>('none');
@@ -170,19 +170,6 @@ export function RAGChat() {
       const cat = activeSession.libraryCategory ?? 'none';
       setLibraryCategory(cat);
       setSessionId(activeSession.id);
-
-      if (cat !== 'none') {
-        fetch(`/api/rag/exclusions?category=${encodeURIComponent(cat)}`)
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
-            if (data && data.keywords) {
-              setSuggestedExclusions(data.keywords);
-            }
-          })
-          .catch((err) => console.error('Failed to load exclusions on session switch:', err));
-      } else {
-        setSuggestedExclusions([]);
-      }
     }
   }, [activeSessionId, sessions]);
 
@@ -231,7 +218,6 @@ export function RAGChat() {
     setCategoryWeight(1.2);
     setKeywordWeight(0.6);
     setSelectedExclusions([]);
-    setSuggestedExclusions([]);
     setLibraryCategory('none');
     setSessionId(newSessId);
   }, []);
@@ -322,34 +308,6 @@ export function RAGChat() {
   const handleLibraryCategoryChange = useCallback(async (val: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none') => {
     setLibraryCategory(val);
     updateActiveSession({ libraryCategory: val });
-
-    if (val === 'none') {
-      setSuggestedExclusions([]);
-      setSelectedExclusions([]);
-      setDraftRequirement((current) => current ? {
-        ...current,
-        constraints: { ...current.constraints, exclude_keywords: [] },
-      } : current);
-      updateActiveSession({ selectedExclusions: [] });
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/rag/exclusions?category=${encodeURIComponent(val)}`);
-      if (res.ok) {
-        const data = await res.json();
-        const keywords = data.keywords || [];
-        setSuggestedExclusions(keywords);
-        setSelectedExclusions(keywords);
-        setDraftRequirement((current) => current ? {
-          ...current,
-          constraints: { ...current.constraints, exclude_keywords: keywords },
-        } : current);
-        updateActiveSession({ selectedExclusions: keywords });
-      }
-    } catch (err) {
-      console.error('Failed to load exclusions for category:', err);
-    }
   }, [updateActiveSession]);
 
   const handleAddCustomExclusion = useCallback(async (word: string) => {
@@ -359,7 +317,6 @@ export function RAGChat() {
     if (!selectedExclusions.includes(trimmedWord)) {
       const newExclusions = [...selectedExclusions, trimmedWord];
       setSelectedExclusions(newExclusions);
-      setSuggestedExclusions(prev => prev.includes(trimmedWord) ? prev : [...prev, trimmedWord]);
       setConfirmedRequirement(null);
       setIsDraftConfirmed(false);
       setDraftRequirement((current) => current ? {
@@ -441,7 +398,6 @@ export function RAGChat() {
       setDraftRequirement(null);
       setConfirmedRequirement(null);
       setIsDraftConfirmed(false);
-      setSuggestedExclusions([]);
       setStrategy(null);
       updateActiveSession({
         messages: [],
@@ -483,7 +439,6 @@ export function RAGChat() {
       ...(requirement.expanded_search_terms || []),
     ])]);
     setTargetCount(nextRequirement.constraints.target_count ?? targetCount);
-    setSuggestedExclusions(exclusions);
     setLibraryCategory(inferredCat);
     setStrategy(nextStrategy);
     setInput('');
@@ -757,6 +712,7 @@ export function RAGChat() {
           keywordWeight: keywordWeight,
           confirmedRequirement: prepared,
           llmProvider: llmProvider.apiKey ? llmProvider : undefined,
+          libraryCategory: libraryCategory !== 'none' ? libraryCategory : undefined,
         }),
         signal: controller.signal,
       });
@@ -1230,7 +1186,6 @@ export function RAGChat() {
           onChangeCategoryWeight={handleCategoryWeightChange}
           keywordWeight={keywordWeight}
           onChangeKeywordWeight={handleKeywordWeightChange}
-          dbExclusions={suggestedExclusions}
           selectedExclusions={selectedExclusions}
           onChangeExclusions={handleExclusionsChange}
           onAddCustomExclusion={handleAddCustomExclusion}
@@ -1240,7 +1195,6 @@ export function RAGChat() {
           onChangeKeywords={handleKeywordsChange}
           lastSql={lastSql}
           onClearSession={handleResetSession}
-          suggestionCount={suggestedExclusions.length}
           libraryCategory={libraryCategory}
           onChangeLibraryCategory={handleLibraryCategoryChange}
         />
@@ -1282,7 +1236,6 @@ export function RAGChat() {
                 onChangeCategoryWeight={handleCategoryWeightChange}
                 keywordWeight={keywordWeight}
                 onChangeKeywordWeight={handleKeywordWeightChange}
-                dbExclusions={suggestedExclusions}
                 selectedExclusions={selectedExclusions}
                 onChangeExclusions={handleExclusionsChange}
                 onAddCustomExclusion={handleAddCustomExclusion}
@@ -1292,7 +1245,6 @@ export function RAGChat() {
                 onChangeKeywords={handleKeywordsChange}
                 lastSql={lastSql}
                 onClearSession={handleResetSession}
-                suggestionCount={suggestedExclusions.length}
                 libraryCategory={libraryCategory}
                 onChangeLibraryCategory={handleLibraryCategoryChange}
               />

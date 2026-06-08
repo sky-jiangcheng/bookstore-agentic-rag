@@ -53,6 +53,7 @@ const chatRequestSchema = z.object({
   categoryWeight: z.number().min(0).max(10).optional(),
   keywordWeight: z.number().min(0).max(10).optional(),
   confirmedRequirement: requirementSchema.optional(),
+  libraryCategory: z.string().optional(),
 });
 
 export async function OPTIONS(req: NextRequest) {
@@ -84,9 +85,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { query, sessionId, fast, limit, excludeKeywords, categoryWeight, keywordWeight, confirmedRequirement } = parseResult.data;
+    const { query, sessionId, fast, limit, excludeKeywords, categoryWeight, keywordWeight, confirmedRequirement, libraryCategory } = parseResult.data;
 
-    return await handleRequest(query, sessionId, fast, limit, excludeKeywords, categoryWeight, keywordWeight, confirmedRequirement, req);
+    return await handleRequest(query, sessionId, fast, limit, excludeKeywords, categoryWeight, keywordWeight, confirmedRequirement, libraryCategory, req);
   } catch (error) {
     logServerError('[RAG Chat]', error);
     return NextResponse.json(
@@ -105,31 +106,11 @@ async function handleRequest(
   categoryWeight: number | undefined,
   keywordWeight: number | undefined,
   confirmedRequirement: RequirementAnalysis | undefined,
+  libraryCategory: string | undefined,
   req: NextRequest
 ) {
   try {
-    if (fast) {
-      const result = await runRAGPipeline({
-        userQuery: query,
-        sessionId,
-        enableConversationMemory: true,
-        limit,
-        excludeKeywords,
-        categoryWeight,
-        keywordWeight,
-        requirement: confirmedRequirement,
-      });
-      return NextResponse.json(
-        { ...result, summary: buildRecommendationSummary(result) },
-        { headers: corsHeaders(req) }
-      );
-    }
-
-    if (!config.vercel.enabled) {
-      return await handleFullPipeline(query, sessionId, limit, excludeKeywords, categoryWeight, keywordWeight, confirmedRequirement, req);
-    }
-
-    const result = await runRAGPipeline({
+    const pipelineOpts = {
       userQuery: query,
       sessionId,
       enableConversationMemory: true,
@@ -138,7 +119,22 @@ async function handleRequest(
       categoryWeight,
       keywordWeight,
       requirement: confirmedRequirement,
-    });
+      libraryCategory,
+    };
+
+    if (fast) {
+      const result = await runRAGPipeline(pipelineOpts);
+      return NextResponse.json(
+        { ...result, summary: buildRecommendationSummary(result) },
+        { headers: corsHeaders(req) }
+      );
+    }
+
+    if (!config.vercel.enabled) {
+      return await handleFullPipeline(query, sessionId, limit, excludeKeywords, categoryWeight, keywordWeight, confirmedRequirement, libraryCategory, req);
+    }
+
+    const result = await runRAGPipeline(pipelineOpts);
     return NextResponse.json(
       { ...result, summary: buildRecommendationSummary(result) },
       { headers: corsHeaders(req) }
@@ -160,6 +156,7 @@ async function handleFullPipeline(
   categoryWeight: number | undefined,
   keywordWeight: number | undefined,
   confirmedRequirement: RequirementAnalysis | undefined,
+  libraryCategory: string | undefined,
   req: NextRequest
 ) {
   try {
@@ -196,6 +193,7 @@ async function handleFullPipeline(
           categoryWeight,
           keywordWeight,
           requirement: confirmedRequirement,
+          libraryCategory,
         });
 
         pipelinePromise.then((result: RAGPipelineResult) => {

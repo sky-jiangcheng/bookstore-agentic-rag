@@ -22,7 +22,11 @@ export async function searchCatalog(filters: CatalogSearchFilters): Promise<Book
   }
 
   const category = filters.requirement?.inferred_library_type;
-  return (await filterBlockedBooks(await searchCatalogFromDatabase(filters), category)).books;
+  const result = await searchCatalogFromDatabase({
+    ...filters,
+    library_category: filters.library_category ?? category,
+  });
+  return (await filterBlockedBooks(result, category)).books;
 }
 
 /**

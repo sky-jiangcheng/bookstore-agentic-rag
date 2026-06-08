@@ -165,7 +165,11 @@ export function enforceHardConstraints(books: Book[], requirement: RequirementAn
   return sorted;
 }
 
-async function retrieveKeyword(requirement: RequirementAnalysis, topK: number): Promise<Book[]> {
+interface RetrieveOptions {
+  libraryCategory?: string;
+}
+
+async function retrieveKeyword(requirement: RequirementAnalysis, topK: number, options?: RetrieveOptions): Promise<Book[]> {
   try {
     const searchTerms =
       requirement.expanded_search_terms?.length > 0
@@ -182,6 +186,7 @@ async function retrieveKeyword(requirement: RequirementAnalysis, topK: number): 
       search_terms: searchTerms,
       limit: topK * 2,
       requirement,
+      library_category: options?.libraryCategory,
     });
 
     for (const book of books) {
@@ -261,6 +266,7 @@ LIMIT ${limitNum};`;
 export async function retrieveCandidates(
   requirement: RequirementAnalysis,
   topK: number = 30,
+  options?: RetrieveOptions,
 ): Promise<RetrievalResult> {
   const hasSpecificIntent = requirement.categories.length > 0 || requirement.keywords.length > 0;
 
@@ -270,7 +276,7 @@ export async function retrieveCandidates(
       : expandSearchTerms(requirement);
 
   let books = hasSpecificIntent
-    ? await retrieveKeyword(requirement, topK)
+    ? await retrieveKeyword(requirement, topK, options)
     : await retrievePopular(topK);
   let source: RetrievalResult['sources'][number] = hasSpecificIntent ? 'keyword' : 'popular';
 
