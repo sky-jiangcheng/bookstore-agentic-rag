@@ -9,13 +9,19 @@
  *
  * Environment: POSTGRES_URL or DATABASE_URL must be set.
  */
-import { createPool, sql } from '@vercel/postgres';
+import { createPool } from '@vercel/postgres';
 import { loadEnvFile } from './lib/load-env.mjs';
 
-const BATCH_SIZE = parseInt(process.argv.find(a => a.startsWith('--batch-size='))?.split('=')[1] || '200', 10);
+const BATCH_SIZE = parseInt(process.argv.find(a => a.startsWith('--batch-size='))?.split('=')[1] || '500', 10);
+const ENV_FILE = process.argv.find(a => a.startsWith('--env-file='))?.split('=')[1];
+
+// Escape single quotes for SQL literals
+function esc(val) {
+  return val.replace(/'/g, "''");
+}
 
 async function main() {
-  loadEnvFile();
+  loadEnvFile(ENV_FILE);
 
   if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
     throw new Error('Missing POSTGRES_URL or DATABASE_URL');
@@ -25,14 +31,14 @@ async function main() {
     connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
   });
 
-  // Load active rules
-  const rulesResult = await pool.sql`
+  // Load rules grouped by category
+  const rulesResult = await pool.query(`
     SELECT DISTINCT fk.keyword, fk.category
     FROM filter_keywords fk
     INNER JOIN library_categories lc ON lc.code = fk.category
     WHERE fk.is_active = TRUE
     ORDER BY fk.category, fk.keyword
-  `;
+  `);
   const rules = rulesResult.rows;
 
   if (rules.length === 0) {
@@ -41,7 +47,6 @@ async function main() {
     return;
   }
 
-  // Group by category
   const rulesByCategory = new Map();
   for (const rule of rules) {
     const list = rulesByCategory.get(rule.category) || [];
@@ -51,66 +56,47 @@ async function main() {
 
   console.log(`Loaded ${rules.length} rules across ${rulesByCategory.size} categories`);
 
-  let processed = 0;
-  let lastId = '0';
-  let hasMore = true;
   const updatedCategories = new Set();
 
-  while (hasMore) {
-    const batch = await pool.sql`
-      SELECT id::text, title, category, COALESCE(description, '') AS description
-      FROM books
-      WHERE id > ${lastId}::bigint
-      ORDER BY id ASC
-      LIMIT ${BATCH_SIZE}
+  // Step 1: Apply each category's rules via bulk UPDATE
+  // Skip rows that already have this category to minimize writes
+  for (const [category, keywords] of rulesByCategory) {
+    const conditions = keywords.map(kw => {
+      const escaped = esc(kw);
+      return `CONCAT(COALESCE(title,''), ' ', COALESCE(category,''), ' ', COALESCE(description,'')) ILIKE '%${escaped}%'`;
+    }).join(' OR ');
+
+    const sql_ = `
+      UPDATE books
+      SET library_types = array_append(library_types, '${esc(category)}')
+      WHERE ${conditions}
+        AND NOT (library_types @> ARRAY['${esc(category)}'])
     `;
 
-    if (batch.rows.length === 0) {
-      hasMore = false;
-      break;
-    }
-
-    for (const book of batch.rows) {
-      const haystack = `${book.title} ${book.category} ${book.description}`.toLowerCase();
-      const matched = [];
-
-      for (const [category, keywords] of rulesByCategory) {
-        if (keywords.some(kw => haystack.includes(kw.toLowerCase()))) {
-          matched.push(category);
-          updatedCategories.add(category);
-        }
-      }
-
-      // Default to 公共馆
-      if (matched.length === 0) {
-        matched.push('公共馆');
-        updatedCategories.add('公共馆');
-      }
-
-      await pool.sql`
-        UPDATE books
-        SET library_types = ${sql.array(matched)}::text[]
-        WHERE id = ${book.id}::bigint
-      `;
-
-      processed += 1;
-    }
-
-    lastId = batch.rows[batch.rows.length - 1].id;
-
-    if (processed % 1000 === 0 || batch.rows.length < BATCH_SIZE) {
-      console.log(`Processed ${processed} books...`);
-    }
+    const result = await pool.query(sql_);
+    updatedCategories.add(category);
+    console.log(`  [${category}] matched ${result.rowCount} books`);
   }
 
-  // Update reclassified_at
+  // Step 2: Default unmatched books to 公共馆
+  const defaultResult = await pool.query(`
+    UPDATE books
+    SET library_types = array_append(library_types, '公共馆')
+    WHERE library_types = '{}'
+      AND NOT (library_types @> ARRAY['公共馆'])
+  `);
+  if (defaultResult.rowCount > 0) {
+    updatedCategories.add('公共馆');
+    console.log(`  [公共馆] default ${defaultResult.rowCount} unmatched books`);
+  }
+
+  // Step 4: Update reclassified_at
   for (const code of updatedCategories) {
-    await pool.sql`
-      UPDATE library_categories SET reclassified_at = NOW(), updated_at = NOW() WHERE code = ${code}
-    `;
+    await pool.query(`UPDATE library_categories SET reclassified_at = NOW(), updated_at = NOW() WHERE code = '${esc(code)}'`);
   }
 
-  console.log(`Reclassification complete: ${processed} books processed across ${updatedCategories.size} categories`);
+  const countResult = await pool.query(`SELECT COUNT(*)::int AS cnt FROM books WHERE array_length(library_types, 1) > 0`);
+  console.log(`Reclassification complete: ${countResult.rows[0].cnt} books have library_types across ${updatedCategories.size} categories`);
   await pool.end();
 }
 
