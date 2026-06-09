@@ -12,6 +12,7 @@ coverage
 tsconfig.tsbuildinfo
 .vercel
 .superpowers/
+.worktrees/
 .env*.local
 .env.local.backup
 .env.production.check
