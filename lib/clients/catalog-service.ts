@@ -21,11 +21,15 @@ export async function searchCatalog(filters: CatalogSearchFilters): Promise<Book
     throw unavailableDataSourceError();
   }
 
-  const category = filters.requirement?.inferred_library_type;
+  // 明确优先级：用户选择的 library_category > AI 推断的 inferred_library_type
+  const category = filters.library_category ?? filters.requirement?.inferred_library_type;
+  
   const result = await searchCatalogFromDatabase({
     ...filters,
-    library_category: filters.library_category ?? category,
+    library_category: category,
   });
+  
+  // 使用同一个 category 进行过滤，确保一致性
   return (await filterBlockedBooks(result, category)).books;
 }
 

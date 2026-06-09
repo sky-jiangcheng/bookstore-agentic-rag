@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@vercel/postgres';
+import { corsHeaders } from '@/lib/utils/cors';
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,10 +25,13 @@ export async function GET(req: NextRequest) {
     }
     
     const keywords = result.rows.map((row) => row.keyword).filter(Boolean);
-    return NextResponse.json({ keywords });
+    return NextResponse.json({ keywords }, { headers: corsHeaders(req) });
   } catch (error) {
     console.error('[exclusions api] Failed to fetch active exclusion keywords:', error);
-    return NextResponse.json({ error: 'Failed to fetch exclusion keywords' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to fetch exclusion keywords' },
+      { status: 500, headers: corsHeaders(req) }
+    );
   }
 }
 

@@ -10,8 +10,11 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 const createSchema = z.object({
-  code: z.string().min(1).max(50),
-  name: z.string().min(1).max(100),
+  code: z.string()
+    .min(1, '馆别代码不能为空')
+    .max(50, '馆别代码最长 50 字符')
+    .regex(/^[\u4e00-\u9fa5a-zA-Z0-9_]+$/, '馆别代码只能包含中文、字母、数字和下划线'),
+  name: z.string().min(1, '馆别名称不能为空').max(100, '馆别名称最长 100 字符'),
   sort_order: z.number().int().min(0).optional(),
 });
 

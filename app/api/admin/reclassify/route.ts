@@ -88,7 +88,8 @@ export async function POST(req: NextRequest) {
           updatedCategories.add('公共馆');
         }
 
-        // Build array literal: each category needs quoting to be safe
+        // Update book's library_types
+        // TODO: Performance optimization - use UNNEST for batch updates instead of individual UPDATEs
         const typesStr = '{' + matched.map(c => `"${c.replace(/"/g, '\\"')}"`).join(',') + '}';
         await sql`
           UPDATE books

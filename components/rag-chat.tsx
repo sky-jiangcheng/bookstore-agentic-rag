@@ -33,7 +33,7 @@ interface SessionItem {
   keywordWeight: number;
   selectedExclusions: string[];
   selectedKeywords?: string[];
-  libraryCategory?: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none';
+  libraryCategory?: string;
 }
 
 function generateBooklistName(userInput: string, requirement?: { categories?: string[]; constraints?: { target_count?: number } }): string {
@@ -75,7 +75,9 @@ export function RAGChat() {
 
   const [strategy, setStrategy] = useState<{ type: 'ai' | 'template'; label: string; detail: string } | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
-  const [libraryCategory, setLibraryCategory] = useState<'公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none'>('none');
+  const [libraryCategory, setLibraryCategory] = useState<string>('none');
+  const [availableCategories, setAvailableCategories] = useState<{ code: string; name: string; keyword_count: number }[]>([]);
+  const [loadingCategory, setLoadingCategory] = useState(false);
   const [llmProvider, setLlmProvider] = useState<LLMProviderConfig>(() => {
     if (typeof window !== 'undefined') return loadProviderConfig();
     return { type: 'google' as const, apiKey: '', model: 'gemini-2.0-flash' };
@@ -104,6 +106,22 @@ export function RAGChat() {
     } catch {
       setTemplates([]);
     }
+  }, []);
+
+  // 加载可用的馆别列表
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const res = await fetch('/api/admin/library-categories');
+        if (res.ok) {
+          const data = await res.json();
+          setAvailableCategories(data.categories || []);
+        }
+      } catch (err) {
+        console.error('Failed to load library categories:', err);
+      }
+    };
+    loadCategories();
   }, []);
 
   // Load sessions from localStorage on mount
@@ -305,9 +323,39 @@ export function RAGChat() {
     updateActiveSession({ selectedKeywords: val });
   };
 
-  const handleLibraryCategoryChange = useCallback(async (val: '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none') => {
+  const handleLibraryCategoryChange = useCallback(async (val: string) => {
     setLibraryCategory(val);
     updateActiveSession({ libraryCategory: val });
+    
+    // 自动加载该馆别的屏蔽词
+    if (val && val !== 'none') {
+      setLoadingCategory(true);
+      try {
+        const res = await fetch(`/api/rag/exclusions?category=${encodeURIComponent(val)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const keywords = data.keywords || [];
+          setSelectedExclusions(keywords);
+          setConfirmedRequirement(null);
+          setIsDraftConfirmed(false);
+          setDraftRequirement((current) => current ? {
+            ...current,
+            constraints: { ...current.constraints, exclude_keywords: keywords },
+          } : current);
+          updateActiveSession({ selectedExclusions: keywords });
+        }
+      } catch (err) {
+        console.error('Failed to load exclusion keywords:', err);
+        setToastMessage('加载屏蔽词失败');
+        setTimeout(() => setToastMessage(null), 3000);
+      } finally {
+        setLoadingCategory(false);
+      }
+    } else {
+      // 清空屏蔽词
+      setSelectedExclusions([]);
+      updateActiveSession({ selectedExclusions: [] });
+    }
   }, [updateActiveSession]);
 
   const handleAddCustomExclusion = useCallback(async (word: string) => {
@@ -1197,6 +1245,8 @@ export function RAGChat() {
           onClearSession={handleResetSession}
           libraryCategory={libraryCategory}
           onChangeLibraryCategory={handleLibraryCategoryChange}
+          availableCategories={availableCategories}
+          loadingCategory={loadingCategory}
         />
       </aside>
 
@@ -1247,6 +1297,8 @@ export function RAGChat() {
                 onClearSession={handleResetSession}
                 libraryCategory={libraryCategory}
                 onChangeLibraryCategory={handleLibraryCategoryChange}
+                availableCategories={availableCategories}
+                loadingCategory={loadingCategory}
               />
             </div>
           </div>
