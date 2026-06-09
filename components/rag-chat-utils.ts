@@ -39,6 +39,16 @@ export interface AssistantMessageType {
   totalPrice?: number;
 }
 
+export function attachRemoteSessionId<T extends { id: string }>(
+  session: T,
+  remoteSessionId: string,
+): T & { remoteSessionId: string } {
+  return {
+    ...session,
+    remoteSessionId,
+  };
+}
+
 export function recoverInterruptedMessages(messages: MessageType[]): MessageType[] {
   return messages.map((message) => {
     if (message.status !== 'streaming') return message;

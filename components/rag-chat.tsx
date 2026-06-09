@@ -8,7 +8,7 @@ import { MessageList } from '@/components/RAGChat/MessageList';
 import { ChatInput } from '@/components/RAGChat/ChatInput';
 import { Toast } from '@/components/RAGChat/Toast';
 import { TuningPanel } from '@/components/RAGChat/TuningPanel';
-import { recoverInterruptedMessages } from '@/components/rag-chat-utils';
+import { attachRemoteSessionId, recoverInterruptedMessages } from '@/components/rag-chat-utils';
 import {
   buildPseudoSql,
   findExactTemplate,
@@ -25,6 +25,7 @@ const CHAT_REQUEST_TIMEOUT_MS = 30_000;
 
 interface SessionItem {
   id: string;
+  remoteSessionId?: string;
   title: string;
   messages: MessageType[];
   lastSql?: string;
@@ -187,7 +188,7 @@ export function RAGChat() {
       setSelectedKeywords(activeSession.selectedKeywords ?? []);
       const cat = activeSession.libraryCategory ?? 'none';
       setLibraryCategory(cat);
-      setSessionId(activeSession.id);
+      setSessionId(activeSession.remoteSessionId ?? activeSession.id);
     }
   }, [activeSessionId, sessions]);
 
@@ -449,6 +450,7 @@ export function RAGChat() {
       setStrategy(null);
       updateActiveSession({
         messages: [],
+        remoteSessionId: undefined,
         lastSql: undefined,
         targetCount: 15,
         categoryWeight: 1.2,
@@ -796,19 +798,17 @@ export function RAGChat() {
           setTimeout(() => updateActiveSession({ lastSql: sqlFromResp }), 0);
         }
 
-        if (data.sessionId && data.sessionId !== activeSessionId) {
+        if (data.sessionId && data.sessionId !== sessionId) {
           setSessions((prev) => {
             const updated = prev.map((s) => {
               if (s.id === activeSessionId) {
-                return { ...s, id: data.sessionId };
+                return attachRemoteSessionId(s, data.sessionId);
               }
               return s;
             });
             localStorage.setItem('rag-chat-sessions', JSON.stringify(updated));
             return updated;
           });
-          setActiveSessionId(data.sessionId);
-          localStorage.setItem('rag-active-session-id', data.sessionId);
           setSessionId(data.sessionId);
         }
 
@@ -903,19 +903,17 @@ export function RAGChat() {
                 setTimeout(() => updateActiveSession({ lastSql: sqlFromResp }), 0);
               }
 
-              if (data.sessionId && data.sessionId !== activeSessionId) {
+              if (data.sessionId && data.sessionId !== sessionId) {
                 setSessions((prev) => {
                   const updated = prev.map((s) => {
                     if (s.id === activeSessionId) {
-                      return { ...s, id: data.sessionId };
+                      return attachRemoteSessionId(s, data.sessionId);
                     }
                     return s;
                   });
                   localStorage.setItem('rag-chat-sessions', JSON.stringify(updated));
                   return updated;
                 });
-                setActiveSessionId(data.sessionId);
-                localStorage.setItem('rag-active-session-id', data.sessionId);
                 setSessionId(data.sessionId);
               }
 
@@ -973,7 +971,7 @@ export function RAGChat() {
       if (timeoutId) clearTimeout(timeoutId);
       abortControllerRef.current = null;
     }
-  }, [isLoading, activeSessionId, sessionId, targetCount, selectedExclusions, categoryWeight, keywordWeight, upsertAssistantMessage, updateActiveSession, messages.length]);
+  }, [isLoading, activeSessionId, sessionId, targetCount, selectedExclusions, categoryWeight, keywordWeight, upsertAssistantMessage, updateActiveSession, messages.length, llmProvider, libraryCategory]);
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();

@@ -218,7 +218,7 @@ export function TuningPanel({
             <Filter className="h-4 w-4 text-amber-300" />
             <h3 className="text-sm font-semibold text-slate-200">排除词</h3>
           </div>
-          <span className="text-[10px] text-amber-200">人工输入</span>
+          <span className="text-[10px] text-amber-200">人工输入 / 碰撞建议</span>
         </div>
 
         <div className="flex gap-2">
@@ -236,7 +236,7 @@ export function TuningPanel({
           />
           <button type="button" onClick={addCustomExclusion} className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 px-2.5 text-xs text-amber-200 hover:bg-amber-500/10">
             <Plus className="h-3.5 w-3.5" />
-            添加
+            添加排除词
           </button>
         </div>
 

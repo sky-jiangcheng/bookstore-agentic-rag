@@ -31,7 +31,7 @@ async function getMappings(filters?: {
       SELECT 
         cm.category,
         cm.library_types,
-        ROUND(cm.confidence, 4) AS confidence,
+        ROUND(cm.confidence::numeric, 4) AS confidence,
         cm.auto_assigned,
         COUNT(*) AS book_count,
         cm.created_at,
@@ -70,7 +70,7 @@ async function getMappings(filters?: {
     SELECT 
       cm.category,
       cm.library_types,
-      ROUND(cm.confidence, 4) AS confidence,
+      ROUND(cm.confidence::numeric, 4) AS confidence,
       cm.auto_assigned,
       COUNT(*) AS book_count,
       cm.created_at,

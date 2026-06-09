@@ -96,6 +96,26 @@ test('recoverInterruptedMessages preserves completed messages', () => {
   assert.deepEqual(ragChatUtils.recoverInterruptedMessages(original), original);
 });
 
+test('attachRemoteSessionId preserves the local session identity', () => {
+  const attachRemoteSessionId = (ragChatUtils as any).attachRemoteSessionId;
+  assert.equal(typeof attachRemoteSessionId, 'function');
+
+  const session = {
+    id: 'local-session',
+    title: '测试会话',
+    messages: [],
+    targetCount: 10,
+    categoryWeight: 1.2,
+    keywordWeight: 0.6,
+    selectedExclusions: [],
+  };
+
+  assert.deepEqual(attachRemoteSessionId(session, 'server-session'), {
+    ...session,
+    remoteSessionId: 'server-session',
+  });
+});
+
 test('recommendation summary stays concise and does not repeat book details', () => {
   const summary = buildRecommendationSummary({
     requirement: {

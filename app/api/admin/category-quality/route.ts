@@ -40,19 +40,32 @@ async function detectLowConfidenceMappings(): Promise<QualityIssue[]> {
  */
 async function detectUnmappedCategories(): Promise<QualityIssue[]> {
   const result = await sql<QualityIssue>`
+    WITH distribution AS (
+      SELECT
+        b.category,
+        lt,
+        COUNT(*) AS library_book_count
+      FROM books b
+      CROSS JOIN LATERAL UNNEST(b.library_types) AS lt
+      WHERE b.category IS NOT NULL
+        AND b.category != ''
+        AND NOT EXISTS (
+          SELECT 1
+          FROM category_library_mapping cm
+          WHERE cm.category = b.category
+        )
+      GROUP BY b.category, lt
+    )
     SELECT 
       'unmapped_category' AS issue_type,
-      b.category,
-      COUNT(*) AS book_count,
-      ARRAY_AGG(DISTINCT lt ORDER BY COUNT(*) DESC) FILTER (WHERE lt IS NOT NULL) AS library_types,
+      category,
+      SUM(library_book_count) AS book_count,
+      ARRAY_AGG(lt ORDER BY library_book_count DESC) FILTER (WHERE lt IS NOT NULL) AS library_types,
       0 AS confidence,
       '未在 category_library_mapping 中定义，建议添加映射' AS suggestion
-    FROM books b, UNNEST(b.library_types) AS lt
-    WHERE b.category IS NOT NULL 
-      AND b.category != ''
-      AND b.category NOT IN (SELECT category FROM category_library_mapping)
-    GROUP BY b.category
-    HAVING COUNT(*) > 100
+    FROM distribution
+    GROUP BY category
+    HAVING SUM(library_book_count) > 100
     ORDER BY book_count DESC
     LIMIT 50
   `;
@@ -97,6 +110,7 @@ async function detectMismatchedLibraries(): Promise<QualityIssue[]> {
         OR
         (category LIKE '%考研%'
          AND library_types @> ARRAY['小学'])
+      GROUP BY books.category, books.library_types
     )
     SELECT * FROM issues
     ORDER BY book_count DESC
