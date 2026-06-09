@@ -56,7 +56,7 @@ async function main() {
         publisher,
         price,
         stock,
-        category,
+        book_category,
         description,
         cover_url,
         popularity_score
@@ -78,7 +78,7 @@ async function main() {
         publisher = EXCLUDED.publisher,
         price = EXCLUDED.price,
         stock = EXCLUDED.stock,
-        category = EXCLUDED.category,
+        book_category = EXCLUDED.book_category,
         description = EXCLUDED.description,
         cover_url = EXCLUDED.cover_url,
         popularity_score = EXCLUDED.popularity_score,

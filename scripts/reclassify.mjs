@@ -1,7 +1,7 @@
 /**
  * Standalone reclassification script.
  *
- * Reads all active filter_keywords rules and recomputes books.library_types.
+ * Reads all active filter_keywords rules and recomputes books.library_codes.
  * Idempotent and batch-processed for large datasets.
  *
  * Usage:
@@ -33,11 +33,11 @@ async function main() {
 
   // Load rules grouped by category
   const rulesResult = await pool.query(`
-    SELECT DISTINCT fk.keyword, fk.category
+    SELECT DISTINCT fk.keyword, fk.library_code
     FROM filter_keywords fk
-    INNER JOIN library_categories lc ON lc.code = fk.category
+    INNER JOIN library_categories lc ON lc.code = fk.library_code
     WHERE fk.is_active = TRUE
-    ORDER BY fk.category, fk.keyword
+    ORDER BY fk.library_code, fk.keyword
   `);
   const rules = rulesResult.rows;
 
@@ -49,9 +49,9 @@ async function main() {
 
   const rulesByCategory = new Map();
   for (const rule of rules) {
-    const list = rulesByCategory.get(rule.category) || [];
+    const list = rulesByCategory.get(rule.library_code) || [];
     list.push(rule.keyword);
-    rulesByCategory.set(rule.category, list);
+    rulesByCategory.set(rule.library_code, list);
   }
 
   console.log(`Loaded ${rules.length} rules across ${rulesByCategory.size} categories`);
@@ -63,14 +63,14 @@ async function main() {
   for (const [category, keywords] of rulesByCategory) {
     const conditions = keywords.map(kw => {
       const escaped = esc(kw);
-      return `CONCAT(COALESCE(title,''), ' ', COALESCE(category,''), ' ', COALESCE(description,'')) ILIKE '%${escaped}%'`;
+      return `CONCAT(COALESCE(title,''), ' ', COALESCE(book_category,''), ' ', COALESCE(description,'')) ILIKE '%${escaped}%'`;
     }).join(' OR ');
 
     const sql_ = `
       UPDATE books
-      SET library_types = array_append(library_types, '${esc(category)}')
+      SET library_codes = array_append(library_codes, '${esc(category)}')
       WHERE ${conditions}
-        AND NOT (library_types @> ARRAY['${esc(category)}'])
+        AND NOT (library_codes @> ARRAY['${esc(category)}'])
     `;
 
     const result = await pool.query(sql_);
@@ -81,9 +81,9 @@ async function main() {
   // Step 2: Default unmatched books to 公共馆
   const defaultResult = await pool.query(`
     UPDATE books
-    SET library_types = array_append(library_types, '公共馆')
-    WHERE library_types = '{}'
-      AND NOT (library_types @> ARRAY['公共馆'])
+    SET library_codes = array_append(library_codes, '公共馆')
+    WHERE library_codes = '{}'
+      AND NOT (library_codes @> ARRAY['公共馆'])
   `);
   if (defaultResult.rowCount > 0) {
     updatedCategories.add('公共馆');
@@ -95,8 +95,8 @@ async function main() {
     await pool.query(`UPDATE library_categories SET reclassified_at = NOW(), updated_at = NOW() WHERE code = '${esc(code)}'`);
   }
 
-  const countResult = await pool.query(`SELECT COUNT(*)::int AS cnt FROM books WHERE array_length(library_types, 1) > 0`);
-  console.log(`Reclassification complete: ${countResult.rows[0].cnt} books have library_types across ${updatedCategories.size} categories`);
+  const countResult = await pool.query(`SELECT COUNT(*)::int AS cnt FROM books WHERE array_length(library_codes, 1) > 0`);
+  console.log(`Reclassification complete: ${countResult.rows[0].cnt} books have library_codes across ${updatedCategories.size} categories`);
   await pool.end();
 }
 

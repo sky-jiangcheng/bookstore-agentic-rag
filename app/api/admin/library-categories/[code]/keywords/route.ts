@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const result = await sql<{ keyword: string }>`
       SELECT keyword
       FROM filter_keywords
-      WHERE category = ${code} AND is_active = TRUE
+      WHERE library_code = ${code} AND is_active = TRUE
       ORDER BY id ASC
     `;
 
@@ -65,16 +65,23 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       await sql`
         UPDATE filter_keywords
         SET is_active = FALSE, updated_at = NOW()
-        WHERE category = ${code}
+        WHERE library_code = ${code}
       `;
 
       // Insert the new set
       for (const keyword of keywords) {
         await sql`
-          INSERT INTO filter_keywords (keyword, category, is_active)
-          VALUES (${keyword}, ${code}, TRUE)
-          ON CONFLICT (keyword, category)
-          DO UPDATE SET is_active = TRUE, updated_at = NOW()
+          UPDATE filter_keywords
+          SET is_active = TRUE, updated_at = NOW()
+          WHERE keyword = ${keyword} AND library_code = ${code}
+        `;
+        await sql`
+          INSERT INTO filter_keywords (keyword, library_code, is_active)
+          SELECT ${keyword}, ${code}, TRUE
+          WHERE NOT EXISTS (
+            SELECT 1 FROM filter_keywords
+            WHERE keyword = ${keyword} AND library_code = ${code}
+          )
         `;
       }
 

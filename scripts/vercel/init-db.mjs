@@ -38,7 +38,8 @@ try {
       cover_url VARCHAR(512),
       price DECIMAL(10, 2),
       stock INTEGER DEFAULT 0,
-      category VARCHAR(100),
+      book_category VARCHAR(100),
+      library_codes TEXT[] NOT NULL DEFAULT '{}',
       popularity_score DECIMAL(5, 2) DEFAULT 0,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
@@ -53,7 +54,7 @@ try {
   await sql`CREATE INDEX IF NOT EXISTS idx_books_author ON books(author)`;
   console.log('✅ Created index: idx_books_author');
 
-  await sql`CREATE INDEX IF NOT EXISTS idx_books_category ON books(category)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_books_category ON books(book_category)`;
   console.log('✅ Created index: idx_books_category');
 
   await sql`CREATE INDEX IF NOT EXISTS idx_books_popularity ON books(popularity_score DESC)`;
@@ -66,7 +67,7 @@ try {
       CREATE INDEX IF NOT EXISTS idx_books_search_trgm
       ON books
       USING gin (
-        (coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, '')) gin_trgm_ops
+        (coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(book_category, '') || ' ' || coalesce(description, '')) gin_trgm_ops
       )
     `;
     console.log('✅ Created index: idx_books_search_trgm');

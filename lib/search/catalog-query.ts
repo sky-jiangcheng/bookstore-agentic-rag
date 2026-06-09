@@ -1,4 +1,4 @@
-const SEARCH_DOCUMENT_SQL = "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, ''))";
+const SEARCH_DOCUMENT_SQL = "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(book_category, '') || ' ' || coalesce(description, ''))";
 
 /**
  * Threshold for switching to simplified rerank.

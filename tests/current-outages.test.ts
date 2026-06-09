@@ -15,8 +15,8 @@ test('category quality uses valid grouped aggregation queries', async () => {
   const source = await readSource('app/api/admin/category-quality/route.ts');
 
   assert.doesNotMatch(source, /ARRAY_AGG\(DISTINCT lt ORDER BY COUNT\(\*\) DESC\)/);
-  assert.match(source, /GROUP BY b\.category,\s*lt/);
-  assert.match(source, /GROUP BY books\.category,\s*books\.library_types/);
+  assert.match(source, /GROUP BY b\.book_category,\s*lt/);
+  assert.match(source, /GROUP BY books\.book_category,\s*books\.library_codes/);
 });
 
 test('chat keeps local and remote session identifiers separate', async () => {

@@ -222,18 +222,18 @@ function generatePseudoSql(
   limitNum: number
 ): string {
   if (!hasSpecificIntent) {
-    return `SELECT id, title, author, price, category, description, popularity_score
+    return `SELECT id, title, author, price, book_category, description, popularity_score
 FROM books
 ORDER BY popularity_score DESC, updated_at DESC
 LIMIT ${limitNum};`;
   }
 
   const termsClause = searchTerms
-    .map((term) => `(title || ' ' || author || ' ' || category || ' ' || description) ILIKE '%${term}%'`)
+    .map((term) => `(title || ' ' || author || ' ' || book_category || ' ' || description) ILIKE '%${term}%'`)
     .join('\n     OR ');
 
   const categoriesClause = requirement.categories.length > 0
-    ? `\n  AND category IN (${requirement.categories.map((c) => `'${c}'`).join(', ')})`
+    ? `\n  AND book_category IN (${requirement.categories.map((c) => `'${c}'`).join(', ')})`
     : '';
 
   const priceMaxClause = requirement.constraints.price_max !== undefined
@@ -250,11 +250,11 @@ LIMIT ${limitNum};`;
 
   const excludeClause = requirement.constraints.exclude_keywords?.length
     ? `\n  -- 排除项过滤\n  AND NOT (\n    ${requirement.constraints.exclude_keywords
-        .map((k) => `(title || ' ' || author || ' ' || category || ' ' || description) ILIKE '%${k}%'`)
+        .map((k) => `(title || ' ' || author || ' ' || book_category || ' ' || description) ILIKE '%${k}%'`)
         .join('\n     OR ')}\n  )`
     : '';
 
-  return `SELECT id, title, author, price, category, description, popularity_score
+  return `SELECT id, title, author, price, book_category, description, popularity_score
 FROM books
 WHERE (
      ${termsClause || '1=1'}

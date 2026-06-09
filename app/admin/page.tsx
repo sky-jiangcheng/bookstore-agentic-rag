@@ -10,7 +10,7 @@ export default function AdminPage() {
           <div className="border rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">分类映射管理</h2>
             <p className="text-muted-foreground mb-4">
-              管理和审核 category 与 library_types 的映射关系，支持人工调整、批量操作和质量监控。
+              管理和审核 book_category 与 library_codes 的映射关系，支持人工调整、批量操作和质量监控。
             </p>
             <CategoryMappingDialog />
           </div>

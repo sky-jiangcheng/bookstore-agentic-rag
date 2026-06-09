@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     if (inferredType !== 'none') {
       const vocabularyResult = await sql<{ keyword: string }>`
         SELECT keyword FROM filter_keywords
-        WHERE category = ${inferredType} AND is_active = TRUE
+        WHERE library_code = ${inferredType} AND is_active = TRUE
         ORDER BY id ASC
       `.catch(() => ({ rows: [] as Array<{ keyword: string }> }));
       vocabulary = vocabularyResult.rows.map((row) => row.keyword).filter(Boolean);

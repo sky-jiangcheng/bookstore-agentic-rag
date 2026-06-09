@@ -332,7 +332,7 @@ export function RAGChat() {
     if (val && val !== 'none') {
       setLoadingCategory(true);
       try {
-        const res = await fetch(`/api/rag/exclusions?category=${encodeURIComponent(val)}`);
+        const res = await fetch(`/api/rag/exclusions?library_code=${encodeURIComponent(val)}`);
         if (res.ok) {
           const data = await res.json();
           const keywords = data.keywords || [];
@@ -382,7 +382,7 @@ export function RAGChat() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             keyword: trimmedWord,
-            category: libraryCategory,
+            library_code: libraryCategory,
             action: 'add',
           }),
         });
@@ -418,7 +418,7 @@ export function RAGChat() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             keyword: word,
-            category: libraryCategory,
+            library_code: libraryCategory,
             action: isSelected ? 'remove' : 'add',
           }),
         });

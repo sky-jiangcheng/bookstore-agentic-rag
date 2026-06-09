@@ -65,10 +65,10 @@ async function flushBatch(pool, batch) {
 
   await pool.query(
     `
-      INSERT INTO filter_keywords (keyword, category, is_active)
+      INSERT INTO filter_keywords (keyword, library_code, is_active)
       VALUES ${valuesSql}
       ON CONFLICT (keyword) DO UPDATE SET
-        category = EXCLUDED.category,
+        library_code = EXCLUDED.library_code,
         is_active = EXCLUDED.is_active,
         updated_at = NOW()
     `,

@@ -7,7 +7,7 @@ import { requireAdminAuth } from '@/lib/utils/admin-auth';
 const BATCH_SIZE = 200;
 
 /**
- * Batched, idempotent reclassification of books.library_types.
+ * Batched, idempotent reclassification of books.library_codes.
  *
  * For each book, evaluate all active filter_keywords rules:
  *  - If a keyword appears in (title || category || description), add rule's category
@@ -24,11 +24,11 @@ export async function POST(req: NextRequest) {
 
     // Load all active classification rules: { keyword, category }
     const rulesResult = await sql<{ keyword: string; category: string }>`
-      SELECT DISTINCT fk.keyword, fk.category
+      SELECT DISTINCT fk.keyword, fk.library_code
       FROM filter_keywords fk
-      INNER JOIN library_categories lc ON lc.code = fk.category
+      INNER JOIN library_categories lc ON lc.code = fk.library_code
       WHERE fk.is_active = TRUE
-      ORDER BY fk.category, fk.keyword
+      ORDER BY fk.library_code, fk.keyword
     `;
     const rules = rulesResult.rows;
 
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     while (hasMore) {
       const batch = await sql<{ id: string; title: string; category: string; description: string }>`
-        SELECT id::text, title, category, COALESCE(description, '') AS description
+        SELECT id::text, title, book_category AS category, COALESCE(description, '') AS description
         FROM books
         WHERE id > ${lastId}::bigint
         ORDER BY id ASC
@@ -88,12 +88,12 @@ export async function POST(req: NextRequest) {
           updatedCategories.add('公共馆');
         }
 
-        // Update book's library_types
+        // Update the book's assigned library codes.
         // TODO: Performance optimization - use UNNEST for batch updates instead of individual UPDATEs
         const typesStr = '{' + matched.map(c => `"${c.replace(/"/g, '\\"')}"`).join(',') + '}';
         await sql`
           UPDATE books
-          SET library_types = ${typesStr}::text[]
+          SET library_codes = ${typesStr}::text[]
           WHERE id = ${book.id}::bigint
         `;
 

@@ -84,13 +84,13 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
   }
   if (filters.categories && filters.categories.length > 0) {
     const placeholders = filters.categories.map((_, i) => `$${params.length + i + 1}`).join(',');
-    conditions.push(`category IN (${placeholders})`);
+    conditions.push(`book_category IN (${placeholders})`);
     params.push(...filters.categories);
   }
 
   if (filters.library_category && filters.library_category !== 'none') {
     params.push(filters.library_category);
-    conditions.push(`library_types @> ARRAY[$${params.length}]::text[]`);
+    conditions.push(`library_codes @> ARRAY[$${params.length}]::text[]`);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -107,7 +107,7 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
       COALESCE(publisher, 'Unknown Publisher') AS publisher,
       COALESCE(price, 0) AS price,
       COALESCE(stock, 0) AS stock,
-      COALESCE(category, 'general') AS category,
+      COALESCE(book_category, 'general') AS category,
       COALESCE(description, '') AS description,
       cover_url,
       COALESCE(popularity_score, 0) AS relevance_score
@@ -156,7 +156,7 @@ export async function getBookDetailsFromDatabase(bookId: string): Promise<Book |
       COALESCE(publisher, 'Unknown Publisher') AS publisher,
       COALESCE(price, 0) AS price,
       COALESCE(stock, 0) AS stock,
-      COALESCE(category, 'general') AS category,
+      COALESCE(book_category, 'general') AS category,
       COALESCE(description, '') AS description,
       cover_url,
       COALESCE(popularity_score, 0) AS relevance_score
@@ -249,7 +249,7 @@ export async function* streamBooksForExport(
   }
   if (filters.categories && filters.categories.length > 0) {
     const placeholders = filters.categories.map(() => `$${paramIdx++}`).join(',');
-    conditions.push(`category IN (${placeholders})`);
+    conditions.push(`book_category IN (${placeholders})`);
     baseParams.push(...filters.categories);
   }
 
@@ -270,7 +270,7 @@ export async function* streamBooksForExport(
         COALESCE(publisher, 'Unknown Publisher') AS publisher,
         COALESCE(price, 0) AS price,
         COALESCE(stock, 0) AS stock,
-        COALESCE(category, 'general') AS category,
+        COALESCE(book_category, 'general') AS category,
         COALESCE(description, '') AS description,
         cover_url,
         COALESCE(popularity_score, 0) AS relevance_score
@@ -301,7 +301,7 @@ export async function getPopularBooksFromDatabase(count: number): Promise<Book[]
       COALESCE(publisher, 'Unknown Publisher') AS publisher,
       COALESCE(price, 0) AS price,
       COALESCE(stock, 0) AS stock,
-      COALESCE(category, 'general') AS category,
+      COALESCE(book_category, 'general') AS category,
       COALESCE(description, '') AS description,
       cover_url,
       COALESCE(popularity_score, 0) AS relevance_score

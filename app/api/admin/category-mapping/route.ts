@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@vercel/postgres';
 
 interface CategoryMapping {
-  category: string;
-  library_types: string[];
+  book_category: string;
+  library_codes: string[];
   confidence: number;
   auto_assigned: boolean;
   book_count: number;
@@ -29,16 +29,16 @@ async function getMappings(filters?: {
   if (!min_book_count && !max_confidence && !library_type && !auto_only) {
     const result = await sql<CategoryMapping>`
       SELECT 
-        cm.category,
-        cm.library_types,
+        cm.book_category,
+        cm.library_codes,
         ROUND(cm.confidence::numeric, 4) AS confidence,
         cm.auto_assigned,
         COUNT(*) AS book_count,
         cm.created_at,
         cm.updated_at
       FROM category_library_mapping cm
-      JOIN books ON books.category = cm.category
-      GROUP BY cm.category, cm.library_types, cm.confidence, cm.auto_assigned, cm.created_at, cm.updated_at
+      JOIN books ON books.book_category = cm.book_category
+      GROUP BY cm.book_category, cm.library_codes, cm.confidence, cm.auto_assigned, cm.created_at, cm.updated_at
       ORDER BY book_count DESC
       LIMIT ${limit}
     `;
@@ -60,7 +60,7 @@ async function getMappings(filters?: {
     values.push(max_confidence);
   }
   if (library_type) {
-    havingParts.push(`cm.library_types @> $${values.length + 1}`);
+    havingParts.push(`cm.library_codes @> $${values.length + 1}`);
     values.push([library_type]);
   }
   
@@ -68,17 +68,17 @@ async function getMappings(filters?: {
 
   const query = `
     SELECT 
-      cm.category,
-      cm.library_types,
+      cm.book_category,
+      cm.library_codes,
       ROUND(cm.confidence::numeric, 4) AS confidence,
       cm.auto_assigned,
       COUNT(*) AS book_count,
       cm.created_at,
       cm.updated_at
     FROM category_library_mapping cm
-    JOIN books ON books.category = cm.category
+    JOIN books ON books.book_category = cm.book_category
     ${whereClause}
-    GROUP BY cm.category, cm.library_types, cm.confidence, cm.auto_assigned, cm.created_at, cm.updated_at
+    GROUP BY cm.book_category, cm.library_codes, cm.confidence, cm.auto_assigned, cm.created_at, cm.updated_at
     ${havingClause}
     ORDER BY book_count DESC
     LIMIT ${limit}
@@ -93,22 +93,21 @@ async function getMappings(filters?: {
  * 更新单个映射
  */
 async function updateMapping(
-  category: string,
-  library_types: string[],
+  bookCategory: string,
+  libraryCodes: string[],
 ): Promise<CategoryMapping> {
-  // 将数组转换为 Postgres 数组格式
-  const libraryTypesStr = `{${library_types.join(',')}}`;
+  const libraryCodesStr = `{${libraryCodes.join(',')}}`;
   
   const result = await sql<CategoryMapping>`
     UPDATE category_library_mapping
     SET 
-      library_types = ${libraryTypesStr}::text[],
+      library_codes = ${libraryCodesStr}::text[],
       auto_assigned = FALSE,
       updated_at = NOW()
-    WHERE category = ${category}
+    WHERE book_category = ${bookCategory}
     RETURNING 
-      category,
-      library_types,
+      book_category,
+      library_codes,
       confidence,
       auto_assigned,
       created_at,
@@ -116,14 +115,14 @@ async function updateMapping(
   `;
 
   if (result.rows.length === 0) {
-    throw new Error(`Category not found: ${category}`);
+    throw new Error(`Category not found: ${bookCategory}`);
   }
 
   // 获取书籍数量
   const countResult = await sql<{ book_count: number }>`
     SELECT COUNT(*) AS book_count 
     FROM books 
-    WHERE category = ${category}
+    WHERE book_category = ${bookCategory}
   `;
 
   return {
@@ -135,40 +134,40 @@ async function updateMapping(
 /**
  * 删除映射（恢复为自动分配）
  */
-async function deleteMapping(category: string): Promise<void> {
+async function deleteMapping(bookCategory: string): Promise<void> {
   await sql`
     DELETE FROM category_library_mapping
-    WHERE category = ${category}
+    WHERE book_category = ${bookCategory}
   `;
 }
 
 /**
  * 重新计算映射（基于实际分布）
  */
-async function recalculateMapping(category?: string): Promise<{ updated: number }> {
+async function recalculateMapping(bookCategory?: string): Promise<{ updated: number }> {
   let result;
   
-  if (category) {
+  if (bookCategory) {
     // 重新计算单个 category
     result = await sql`
-      INSERT INTO category_library_mapping (category, library_types, confidence, auto_assigned)
+      INSERT INTO category_library_mapping (book_category, library_codes, confidence, auto_assigned)
       SELECT 
-        category,
-        ARRAY_AGG(lt ORDER BY pct DESC) FILTER (WHERE pct >= 0.2) AS library_types,
+        book_category,
+        ARRAY_AGG(lt ORDER BY pct DESC) FILTER (WHERE pct >= 0.2) AS library_codes,
         MAX(pct) AS confidence,
         TRUE AS auto_assigned
       FROM (
         SELECT 
-          category,
+          book_category,
           lt,
-          COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY category) AS pct
-        FROM books, UNNEST(library_types) AS lt
-        WHERE category = ${category}
-        GROUP BY category, lt
+          COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY book_category) AS pct
+        FROM books, UNNEST(library_codes) AS lt
+        WHERE book_category = ${bookCategory}
+        GROUP BY book_category, lt
       ) AS distribution
-      GROUP BY category
-      ON CONFLICT (category) DO UPDATE SET
-        library_types = EXCLUDED.library_types,
+      GROUP BY book_category
+      ON CONFLICT (book_category) DO UPDATE SET
+        library_codes = EXCLUDED.library_codes,
         confidence = EXCLUDED.confidence,
         auto_assigned = TRUE,
         updated_at = NOW()
@@ -176,24 +175,24 @@ async function recalculateMapping(category?: string): Promise<{ updated: number 
   } else {
     // 重新计算所有 category
     result = await sql`
-      INSERT INTO category_library_mapping (category, library_types, confidence, auto_assigned)
+      INSERT INTO category_library_mapping (book_category, library_codes, confidence, auto_assigned)
       SELECT 
-        category,
-        ARRAY_AGG(lt ORDER BY pct DESC) FILTER (WHERE pct >= 0.2) AS library_types,
+        book_category,
+        ARRAY_AGG(lt ORDER BY pct DESC) FILTER (WHERE pct >= 0.2) AS library_codes,
         MAX(pct) AS confidence,
         TRUE AS auto_assigned
       FROM (
         SELECT 
-          category,
+          book_category,
           lt,
-          COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY category) AS pct
-        FROM books, UNNEST(library_types) AS lt
-        WHERE category IS NOT NULL AND category != ''
-        GROUP BY category, lt
+          COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY book_category) AS pct
+        FROM books, UNNEST(library_codes) AS lt
+        WHERE book_category IS NOT NULL AND book_category != ''
+        GROUP BY book_category, lt
       ) AS distribution
-      GROUP BY category
-      ON CONFLICT (category) DO UPDATE SET
-        library_types = EXCLUDED.library_types,
+      GROUP BY book_category
+      ON CONFLICT (book_category) DO UPDATE SET
+        library_codes = EXCLUDED.library_codes,
         confidence = EXCLUDED.confidence,
         auto_assigned = TRUE,
         updated_at = NOW()
@@ -241,22 +240,22 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { category, library_types, action } = body;
+    const { book_category, library_codes, action } = body;
 
-    if (!category) {
+    if (!book_category) {
       return NextResponse.json(
-        { error: '缺少 category 参数' },
+        { error: '缺少 book_category 参数' },
         { status: 400 }
       );
     }
 
     if (action === 'delete') {
-      await deleteMapping(category);
+      await deleteMapping(book_category);
       return NextResponse.json({ success: true, message: '已删除映射' });
     }
 
     if (action === 'recalculate') {
-      const result = await recalculateMapping(category);
+      const result = await recalculateMapping(book_category);
       return NextResponse.json({ 
         success: true, 
         message: '已重新计算映射',
@@ -264,14 +263,14 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    if (!library_types || !Array.isArray(library_types)) {
+    if (!library_codes || !Array.isArray(library_codes)) {
       return NextResponse.json(
-        { error: 'library_types 必须是数组' },
+        { error: 'library_codes 必须是数组' },
         { status: 400 }
       );
     }
 
-    const updated = await updateMapping(category, library_types);
+    const updated = await updateMapping(book_category, library_codes);
     return NextResponse.json({ success: true, mapping: updated });
 
   } catch (error) {
@@ -286,10 +285,10 @@ export async function PATCH(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, category } = body;
+    const { action, book_category } = body;
 
     if (action === 'recalculate') {
-      const result = await recalculateMapping(category);
+      const result = await recalculateMapping(book_category);
       return NextResponse.json({ 
         success: true, 
         message: '已重新计算映射',

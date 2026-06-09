@@ -16,11 +16,11 @@ test('catalog text search joins expanded terms with OR', () => {
     search.condition,
     [
       '(',
-      "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, '')) ILIKE $3",
+      "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(book_category, '') || ' ' || coalesce(description, '')) ILIKE $3",
       'OR',
-      "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, '')) ILIKE $4",
+      "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(book_category, '') || ' ' || coalesce(description, '')) ILIKE $4",
       'OR',
-      "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(category, '') || ' ' || coalesce(description, '')) ILIKE $5",
+      "(coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(book_category, '') || ' ' || coalesce(description, '')) ILIKE $5",
       ')',
     ].join(' '),
   );

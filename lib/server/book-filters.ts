@@ -76,7 +76,7 @@ async function loadDatabaseKeywords(category?: string): Promise<string[]> {
     const result = await sql<{ keyword: string }>`
       SELECT keyword
       FROM filter_keywords
-      WHERE category = ${category} AND is_active = TRUE
+      WHERE library_code = ${category} AND is_active = TRUE
       ORDER BY char_length(keyword) DESC, keyword ASC
     `;
 

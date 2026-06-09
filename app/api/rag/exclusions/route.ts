@@ -5,14 +5,14 @@ import { corsHeaders } from '@/lib/utils/cors';
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const category = url.searchParams.get('category');
+    const libraryCode = url.searchParams.get('library_code');
 
     let result;
-    if (category && category !== 'none') {
+    if (libraryCode && libraryCode !== 'none') {
       result = await sql<{ keyword: string }>`
         SELECT keyword 
         FROM filter_keywords 
-        WHERE category = ${category} AND is_active = TRUE 
+        WHERE library_code = ${libraryCode} AND is_active = TRUE 
         ORDER BY id ASC
       `;
     } else {
@@ -38,24 +38,31 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { keyword, category, action } = body;
+    const { keyword, library_code, action } = body;
 
-    if (!keyword || !category || !action || !['add', 'remove'].includes(action)) {
+    if (!keyword || !library_code || !action || !['add', 'remove'].includes(action)) {
       return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
     }
 
     if (action === 'add') {
       await sql`
-        INSERT INTO filter_keywords (keyword, category, is_active)
-        VALUES (${keyword}, ${category}, TRUE)
-        ON CONFLICT (keyword, category) 
-        DO UPDATE SET is_active = TRUE, updated_at = NOW()
+        UPDATE filter_keywords
+        SET is_active = TRUE, updated_at = NOW()
+        WHERE keyword = ${keyword} AND library_code = ${library_code}
+      `;
+      await sql`
+        INSERT INTO filter_keywords (keyword, library_code, is_active)
+        SELECT ${keyword}, ${library_code}, TRUE
+        WHERE NOT EXISTS (
+          SELECT 1 FROM filter_keywords
+          WHERE keyword = ${keyword} AND library_code = ${library_code}
+        )
       `;
     } else {
       await sql`
         UPDATE filter_keywords
         SET is_active = FALSE, updated_at = NOW()
-        WHERE keyword = ${keyword} AND category = ${category}
+        WHERE keyword = ${keyword} AND library_code = ${library_code}
       `;
     }
 

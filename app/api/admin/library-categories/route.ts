@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
         lc.created_at,
         COUNT(fk.id)::int AS keyword_count
       FROM library_categories lc
-      LEFT JOIN filter_keywords fk ON fk.category = lc.code AND fk.is_active = TRUE
+      LEFT JOIN filter_keywords fk ON fk.library_code = lc.code AND fk.is_active = TRUE
       GROUP BY lc.code, lc.name, lc.icon, lc.sort_order, lc.reclassified_at, lc.created_at
       ORDER BY lc.sort_order ASC, lc.code ASC
     `;
@@ -96,7 +96,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Deactivate all keywords for this category, then remove the category
-    await sql`UPDATE filter_keywords SET is_active = FALSE, updated_at = NOW() WHERE category = ${code}`;
+    await sql`UPDATE filter_keywords SET is_active = FALSE, updated_at = NOW() WHERE library_code = ${code}`;
     await sql`DELETE FROM library_categories WHERE code = ${code}`;
 
     return NextResponse.json({ success: true }, { headers: corsHeaders(req) });

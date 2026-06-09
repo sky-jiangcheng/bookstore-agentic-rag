@@ -41,8 +41,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Settings, Search, Filter, RefreshCw, AlertCircle, X } from 'lucide-react';
 
 interface CategoryMapping {
-  category: string;
-  library_types: string[];
+  book_category: string;
+  library_codes: string[];
   confidence: number;
   book_count: number;
   auto_assigned: boolean;
@@ -135,7 +135,7 @@ export function CategoryMappingDialog() {
     if (!editingCategory) return;
     
     // 检查当前编辑的分类是否还在筛选结果中
-    const editingMapping = mappings.find(m => m.category === editingCategory);
+    const editingMapping = mappings.find(m => m.book_category === editingCategory);
     if (!editingMapping) {
       cancelEditing();
       return;
@@ -143,9 +143,9 @@ export function CategoryMappingDialog() {
     
     // 检查是否被筛选条件过滤掉
     let isInFiltered = true;
-    if (searchTerm && !editingMapping.category.includes(searchTerm)) isInFiltered = false;
+    if (searchTerm && !editingMapping.book_category.includes(searchTerm)) isInFiltered = false;
     if (showLowConfidenceOnly && editingMapping.confidence >= 0.3) isInFiltered = false;
-    if (filterLibraryType !== 'all' && !editingMapping.library_types.includes(filterLibraryType)) isInFiltered = false;
+    if (filterLibraryType !== 'all' && !editingMapping.library_codes.includes(filterLibraryType)) isInFiltered = false;
     
     if (!isInFiltered) {
       cancelEditing();
@@ -154,7 +154,7 @@ export function CategoryMappingDialog() {
 
   // 筛选映射
   const filteredMappings = mappings.filter((mapping) => {
-    if (searchTerm && !mapping.category.includes(searchTerm)) return false;
+    if (searchTerm && !mapping.book_category.includes(searchTerm)) return false;
     if (showLowConfidenceOnly && mapping.confidence >= 0.3) return false;
     return true;
   });
@@ -181,8 +181,8 @@ export function CategoryMappingDialog() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          category: editingCategory,
-          library_types: editingLibraryTypes,
+          book_category: editingCategory,
+          library_codes: editingLibraryTypes,
         }),
       });
       if (!response.ok) throw new Error('保存失败');
@@ -198,15 +198,15 @@ export function CategoryMappingDialog() {
   };
 
   // 重新计算映射
-  const recalculateMapping = async (category: string) => {
-    if (!confirm(`确定要重新计算 "${category}" 的映射关系吗？\n\n系统会基于当前书籍的实际分布重新计算馆别映射和置信度。`)) return;
+  const recalculateMapping = async (bookCategory: string) => {
+    if (!confirm(`确定要重新计算 "${bookCategory}" 的映射关系吗？\n\n系统会基于当前书籍的实际分布重新计算馆别映射和置信度。`)) return;
     try {
       const response = await fetch('/api/admin/category-mapping', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'recalculate',
-          category,
+          book_category: bookCategory,
         }),
       });
       if (!response.ok) throw new Error('重新计算失败');
@@ -219,14 +219,14 @@ export function CategoryMappingDialog() {
   };
 
   // 重置为自动分配
-  const resetToAuto = async (category: string) => {
-    if (!confirm(`确定要将 "${category}" 恢复为自动分配吗？\n\n这将删除人工映射，系统会基于最新数据重新自动分配馆别。`)) return;
+  const resetToAuto = async (bookCategory: string) => {
+    if (!confirm(`确定要将 "${bookCategory}" 恢复为自动分配吗？\n\n这将删除人工映射，系统会基于最新数据重新自动分配馆别。`)) return;
     try {
       const response = await fetch('/api/admin/category-mapping', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          category,
+          book_category: bookCategory,
           action: 'delete',
         }),
       });
@@ -240,8 +240,8 @@ export function CategoryMappingDialog() {
   };
 
   const startEditing = (mapping: CategoryMapping) => {
-    setEditingCategory(mapping.category);
-    setEditingLibraryTypes(mapping.library_types);
+    setEditingCategory(mapping.book_category);
+    setEditingLibraryTypes(mapping.library_codes);
   };
 
   const cancelEditing = () => {
@@ -395,14 +395,14 @@ export function CategoryMappingDialog() {
                   </TableHeader>
                   <TableBody>
                     {filteredMappings.map((mapping) => (
-                      <TableRow key={mapping.category}>
+                      <TableRow key={mapping.book_category}>
                         <TableCell className="font-medium">
-                          {mapping.category}
+                          {mapping.book_category}
                         </TableCell>
                         <TableCell>{mapping.book_count.toLocaleString()}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {mapping.library_types.map((type) => (
+                            {mapping.library_codes.map((type) => (
                               <Badge key={type} variant="secondary">
                                 {type}
                               </Badge>
@@ -434,7 +434,7 @@ export function CategoryMappingDialog() {
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          {editingCategory === mapping.category ? (
+                          {editingCategory === mapping.book_category ? (
                             <div className="flex justify-end gap-2">
                               <Button
                                 size="sm"
@@ -465,7 +465,7 @@ export function CategoryMappingDialog() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => recalculateMapping(mapping.category)}
+                                onClick={() => recalculateMapping(mapping.book_category)}
                                 disabled={!!editingCategory}
                               >
                                 重算
@@ -474,7 +474,7 @@ export function CategoryMappingDialog() {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => resetToAuto(mapping.category)}
+                                  onClick={() => resetToAuto(mapping.book_category)}
                                   disabled={!!editingCategory}
                                 >
                                   重置
