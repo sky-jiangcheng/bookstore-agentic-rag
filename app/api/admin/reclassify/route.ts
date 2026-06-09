@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@vercel/postgres';
 import { corsHeaders } from '@/lib/utils/cors';
 import { logServerError, buildSafeErrorResponse } from '@/lib/utils/safe-error';
+import { requireAdminAuth } from '@/lib/utils/admin-auth';
 
 const BATCH_SIZE = 200;
 
@@ -17,15 +18,23 @@ const BATCH_SIZE = 200;
  */
 export async function POST(req: NextRequest) {
   try {
-    // Load all active classification rules: { keyword, category }
-    const rulesResult = await sql<{ keyword: string; category: string }>`
-      SELECT DISTINCT fk.keyword, fk.category
-      FROM filter_keywords fk
-      INNER JOIN library_categories lc ON lc.code = fk.category
-      WHERE fk.is_active = TRUE
-      ORDER BY fk.category, fk.keyword
-    `;
-    const rules = rulesResult.rows;
+    // 认证检查
+    const authError = await requireAdminAuth(req);
+    if (authError) return authError;
+
+    // 开启事务
+    await sql`BEGIN`;
+
+    try {
+      // Load all active classification rules: { keyword, category }
+      const rulesResult = await sql<{ keyword: string; category: string }>`
+        SELECT DISTINCT fk.keyword, fk.category
+        FROM filter_keywords fk
+        INNER JOIN library_categories lc ON lc.code = fk.category
+        WHERE fk.is_active = TRUE
+        ORDER BY fk.category, fk.keyword
+      `;
+      const rules = rulesResult.rows;
 
     if (rules.length === 0) {
       return NextResponse.json({
@@ -105,12 +114,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 提交事务
+    await sql`COMMIT`;
+
     return NextResponse.json({
       status: 'complete',
       processed,
       rules_count: rules.length,
       categories_updated: Array.from(updatedCategories),
     }, { headers: corsHeaders(req) });
+    } catch (innerError) {
+      // 事务内错误，回滚
+      await sql`ROLLBACK`;
+      throw innerError;
+    }
   } catch (error) {
     logServerError('[admin/reclassify]', error);
     return NextResponse.json(

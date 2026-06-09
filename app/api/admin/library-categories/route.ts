@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@vercel/postgres';
 import { corsHeaders, handleCorsPreflightRequest } from '@/lib/utils/cors';
 import { logServerError, buildSafeErrorResponse } from '@/lib/utils/safe-error';
+import { requireAdminAuth } from '@/lib/utils/admin-auth';
 import { z } from 'zod';
 
 export async function OPTIONS(req: NextRequest) {
@@ -43,6 +44,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // 认证检查
+    const authError = await requireAdminAuth(req);
+    if (authError) return authError;
+
     const body = await req.json();
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) {
@@ -75,6 +80,10 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    // 认证检查
+    const authError = await requireAdminAuth(req);
+    if (authError) return authError;
+
     const code = req.nextUrl.searchParams.get('code');
     if (!code) {
       return NextResponse.json(

@@ -5,6 +5,7 @@ import { sql } from '@vercel/postgres';
 import type { Book } from '@/lib/types/rag';
 
 const FILTER_CACHE_TTL_MS = 60_000;
+const MAX_CACHE_ENTRIES = 50; // 最大缓存条目数，防止内存泄漏
 
 type FilterStatus = {
   enabled: boolean;
@@ -22,6 +23,33 @@ let filterCache: Record<
     status: FilterStatus;
   }
 > = {};
+
+/**
+ * 清理过期的缓存条目，避免内存泄漏
+ */
+function cleanupExpiredCache(): void {
+  const now = Date.now();
+  const keys = Object.keys(filterCache);
+  
+  // 清理过期条目
+  for (const key of keys) {
+    if (filterCache[key].expiresAt <= now) {
+      delete filterCache[key];
+    }
+  }
+  
+  // 如果仍然超过最大条目数，删除最早过期的条目
+  const remainingKeys = Object.keys(filterCache);
+  if (remainingKeys.length > MAX_CACHE_ENTRIES) {
+    const sortedByExpiry = remainingKeys.sort(
+      (a, b) => filterCache[a].expiresAt - filterCache[b].expiresAt
+    );
+    const toDelete = sortedByExpiry.slice(0, remainingKeys.length - MAX_CACHE_ENTRIES);
+    for (const key of toDelete) {
+      delete filterCache[key];
+    }
+  }
+}
 
 function parseKeywordList(raw: string | undefined): string[] {
   if (!raw) {
@@ -131,6 +159,10 @@ export async function getFilterStatus(
 ): Promise<FilterStatus> {
   const cacheKey = category || 'none';
   const now = Date.now();
+  
+  // 定期清理过期缓存
+  cleanupExpiredCache();
+  
   if (!forceRefresh && filterCache[cacheKey] && filterCache[cacheKey].expiresAt > now) {
     return filterCache[cacheKey].status;
   }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@vercel/postgres';
 import { corsHeaders } from '@/lib/utils/cors';
 import { logServerError, buildSafeErrorResponse } from '@/lib/utils/safe-error';
+import { requireAdminAuth } from '@/lib/utils/admin-auth';
 import { z } from 'zod';
 
 type RouteParams = { params: Promise<{ code: string }> };
@@ -36,6 +37,10 @@ const putSchema = z.object({
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
   try {
+    // 认证检查
+    const authError = await requireAdminAuth(req);
+    if (authError) return authError;
+
     const { code } = await params;
     if (!code) {
       return NextResponse.json({ error: 'Missing code' }, { status: 400, headers: corsHeaders(req) });
@@ -59,14 +64,26 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       WHERE category = ${code}
     `;
 
-    // Insert the new set
-    for (const keyword of keywords) {
-      await sql`
-        INSERT INTO filter_keywords (keyword, category, is_active)
-        VALUES (${keyword}, ${code}, TRUE)
-        ON CONFLICT (keyword, category)
-        DO UPDATE SET is_active = TRUE, updated_at = NOW()
-      `;
+    // 批量插入新关键词（优化性能）
+    if (keywords.length > 0) {
+      // 使用事务批量插入
+      await sql`BEGIN`;
+      
+      try {
+        for (const keyword of keywords) {
+          await sql`
+            INSERT INTO filter_keywords (keyword, category, is_active)
+            VALUES (${keyword}, ${code}, TRUE)
+            ON CONFLICT (keyword, category)
+            DO UPDATE SET is_active = TRUE, updated_at = NOW()
+          `;
+        }
+        
+        await sql`COMMIT`;
+      } catch (insertError) {
+        await sql`ROLLBACK`;
+        throw insertError;
+      }
     }
 
     // Mark category as needing reclassification
