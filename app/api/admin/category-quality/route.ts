@@ -86,15 +86,15 @@ async function detectMismatchedLibraries(): Promise<QualityIssue[]> {
         books.library_codes AS library_types,
         0 AS confidence,
         CASE 
-          WHEN books.book_category IN ('企业管理', '高等学校', '大学生') 
+          WHEN books.book_category IN ('企业管理', '高等学校', '大学生')
             AND books.library_codes @> ARRAY['小学']
           THEN '学科分类不适合小学馆，建议从小学馆排除'
           
-          WHEN books.book_category IN ('童话', '儿童故事', '图画故事', '儿童小说') 
+          WHEN books.book_category IN ('童话', '儿童故事', '图画故事', '儿童小说')
             AND books.library_codes @> ARRAY['大学']
           THEN '儿童读物不应主要在大学馆，建议审核大学馆分类'
           
-          WHEN books.book_category = '考研' 
+          WHEN books.book_category = '考研'
             AND books.library_codes @> ARRAY['小学']
           THEN '考研类书籍不适合小学馆'
           
@@ -102,7 +102,7 @@ async function detectMismatchedLibraries(): Promise<QualityIssue[]> {
         END AS suggestion
       FROM books
       WHERE 
-        (book_category IN ('企业管理', '高等学校', '大学生') 
+        (book_category IN ('企业管理', '高等学校', '大学生')
          AND library_codes @> ARRAY['小学'])
         OR
         (book_category IN ('童话', '儿童故事', '图画故事', '儿童小说')

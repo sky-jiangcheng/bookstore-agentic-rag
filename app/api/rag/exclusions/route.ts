@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       result = await sql<{ keyword: string }>`
         SELECT keyword 
         FROM filter_keywords 
-        WHERE library_code = ${libraryCode} AND is_active = TRUE 
+        WHERE library_code = ${libraryCode} AND is_active = TRUE
         ORDER BY id ASC
       `;
     } else {
