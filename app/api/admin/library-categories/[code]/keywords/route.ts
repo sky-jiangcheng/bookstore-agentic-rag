@@ -57,43 +57,43 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
     const { keywords } = parsed.data;
 
-    // Deactivate all existing keywords for this category
-    await sql`
-      UPDATE filter_keywords
-      SET is_active = FALSE, updated_at = NOW()
-      WHERE category = ${code}
-    `;
+    // 开启事务（确保所有更新原子性）
+    await sql`BEGIN`;
 
-    // 批量插入新关键词（优化性能）
-    if (keywords.length > 0) {
-      // 使用事务批量插入
-      await sql`BEGIN`;
-      
-      try {
-        for (const keyword of keywords) {
-          await sql`
-            INSERT INTO filter_keywords (keyword, category, is_active)
-            VALUES (${keyword}, ${code}, TRUE)
-            ON CONFLICT (keyword, category)
-            DO UPDATE SET is_active = TRUE, updated_at = NOW()
-          `;
-        }
-        
-        await sql`COMMIT`;
-      } catch (insertError) {
-        await sql`ROLLBACK`;
-        throw insertError;
+    try {
+      // Deactivate all existing keywords for this category
+      await sql`
+        UPDATE filter_keywords
+        SET is_active = FALSE, updated_at = NOW()
+        WHERE category = ${code}
+      `;
+
+      // Insert the new set
+      for (const keyword of keywords) {
+        await sql`
+          INSERT INTO filter_keywords (keyword, category, is_active)
+          VALUES (${keyword}, ${code}, TRUE)
+          ON CONFLICT (keyword, category)
+          DO UPDATE SET is_active = TRUE, updated_at = NOW()
+        `;
       }
+
+      // Mark category as needing reclassification
+      await sql`
+        UPDATE library_categories
+        SET reclassified_at = NULL, updated_at = NOW()
+        WHERE code = ${code}
+      `;
+
+      // 提交事务
+      await sql`COMMIT`;
+
+      return NextResponse.json({ success: true, count: keywords.length }, { headers: corsHeaders(req) });
+    } catch (innerError) {
+      // 事务内错误，回滚
+      await sql`ROLLBACK`;
+      throw innerError;
     }
-
-    // Mark category as needing reclassification
-    await sql`
-      UPDATE library_categories
-      SET reclassified_at = NULL, updated_at = NOW()
-      WHERE code = ${code}
-    `;
-
-    return NextResponse.json({ success: true, count: keywords.length }, { headers: corsHeaders(req) });
   } catch (error) {
     logServerError('[admin/keywords]', error);
     return NextResponse.json(

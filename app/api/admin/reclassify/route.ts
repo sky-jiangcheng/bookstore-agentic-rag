@@ -22,19 +22,15 @@ export async function POST(req: NextRequest) {
     const authError = await requireAdminAuth(req);
     if (authError) return authError;
 
-    // 开启事务
-    await sql`BEGIN`;
-
-    try {
-      // Load all active classification rules: { keyword, category }
-      const rulesResult = await sql<{ keyword: string; category: string }>`
-        SELECT DISTINCT fk.keyword, fk.category
-        FROM filter_keywords fk
-        INNER JOIN library_categories lc ON lc.code = fk.category
-        WHERE fk.is_active = TRUE
-        ORDER BY fk.category, fk.keyword
-      `;
-      const rules = rulesResult.rows;
+    // Load all active classification rules: { keyword, category }
+    const rulesResult = await sql<{ keyword: string; category: string }>`
+      SELECT DISTINCT fk.keyword, fk.category
+      FROM filter_keywords fk
+      INNER JOIN library_categories lc ON lc.code = fk.category
+      WHERE fk.is_active = TRUE
+      ORDER BY fk.category, fk.keyword
+    `;
+    const rules = rulesResult.rows;
 
     if (rules.length === 0) {
       return NextResponse.json({
@@ -44,13 +40,17 @@ export async function POST(req: NextRequest) {
       }, { headers: corsHeaders(req) });
     }
 
-    // Group rules by category for efficient checking
-    const rulesByCategory = new Map<string, string[]>();
-    for (const rule of rules) {
-      const list = rulesByCategory.get(rule.category) ?? [];
-      list.push(rule.keyword);
-      rulesByCategory.set(rule.category, list);
-    }
+    // 开启事务（确保所有更新原子性）
+    await sql`BEGIN`;
+
+    try {
+      // Group rules by category for efficient checking
+      const rulesByCategory = new Map<string, string[]>();
+      for (const rule of rules) {
+        const list = rulesByCategory.get(rule.category) ?? [];
+        list.push(rule.keyword);
+        rulesByCategory.set(rule.category, list);
+      }
 
     let processed = 0;
     let lastId = '0';
