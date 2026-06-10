@@ -63,7 +63,7 @@ async function main() {
   for (const [category, keywords] of rulesByCategory) {
     const conditions = keywords.map(kw => {
       const escaped = esc(kw);
-      return `CONCAT(COALESCE(title,''), ' ', COALESCE(book_category,''), ' ', COALESCE(description,'')) ILIKE '%${escaped}%'`;
+      return `CONCAT(COALESCE(title,''), ' ', COALESCE(book_category,'')) ILIKE '%${escaped}%'`;
     }).join(' OR ');
 
     const sql_ = `

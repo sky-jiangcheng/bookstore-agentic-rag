@@ -59,10 +59,11 @@ export async function POST(req: NextRequest) {
 
     while (hasMore) {
       const batch = await sql<{ id: string; title: string; category: string; description: string }>`
-        SELECT id::text, title, book_category AS category, COALESCE(description, '') AS description
-        FROM books
-        WHERE id > ${lastId}::bigint
-        ORDER BY id ASC
+        SELECT b.id::text, b.title, b.book_category AS category, COALESCE(bd.description, '') AS description
+        FROM books b
+        LEFT JOIN book_descriptions bd ON bd.book_id = b.id
+        WHERE b.id > ${lastId}::bigint
+        ORDER BY b.id ASC
         LIMIT ${BATCH_SIZE}
       `;
 

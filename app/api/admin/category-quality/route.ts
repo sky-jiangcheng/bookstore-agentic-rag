@@ -26,7 +26,7 @@ async function detectLowConfidenceMappings(): Promise<QualityIssue[]> {
       ROUND(cm.confidence::numeric, 4) AS confidence,
       '建议人工审核或调整 category 定义' AS suggestion
     FROM category_library_mapping cm
-    JOIN books ON books.book_category = cm.book_category
+    JOIN books ON split_part(books.book_category, '/', 2) = cm.book_category
     WHERE cm.confidence < 0.3
     GROUP BY cm.book_category, cm.library_codes, cm.confidence
     HAVING COUNT(*) > 1000
@@ -44,19 +44,19 @@ async function detectUnmappedCategories(): Promise<QualityIssue[]> {
   const result = await sql<QualityIssue>`
     WITH distribution AS (
       SELECT
-        b.book_category,
+        split_part(b.book_category, '/', 2) AS book_category,
         lt,
         COUNT(*) AS library_book_count
       FROM books b
       CROSS JOIN LATERAL UNNEST(b.library_codes) AS lt
-      WHERE b.book_category IS NOT NULL
-        AND b.book_category != ''
+      WHERE split_part(b.book_category, '/', 2) IS NOT NULL
+        AND split_part(b.book_category, '/', 2) != ''
         AND NOT EXISTS (
           SELECT 1
           FROM category_library_mapping cm
-          WHERE cm.book_category = b.book_category
+          WHERE cm.book_category = split_part(b.book_category, '/', 2)
         )
-      GROUP BY b.book_category, lt
+      GROUP BY split_part(b.book_category, '/', 2), lt
     )
     SELECT 
       'unmapped_category' AS issue_type,
@@ -94,12 +94,12 @@ async function detectMismatchedLibraries(): Promise<QualityIssue[]> {
     values.push(`类别"${category}"不适合${forbiddenLibraries.join('、')}馆，建议调整`);
 
     whenConditions.push(
-      `WHEN books.book_category = ${categoryParameter} ` +
+      `WHEN split_part(books.book_category, '/', 2) = ${categoryParameter} ` +
       `AND books.library_codes @> ${librariesParameter}::text[] ` +
       `THEN ${suggestionParameter}`
     );
     whereConditions.push(
-      `(books.book_category = ${categoryParameter} ` +
+      `(split_part(books.book_category, '/', 2) = ${categoryParameter} ` +
       `AND books.library_codes @> ${librariesParameter}::text[])`
     );
   }
@@ -112,7 +112,7 @@ async function detectMismatchedLibraries(): Promise<QualityIssue[]> {
     WITH issues AS (
       SELECT
         'mismatched_library' AS issue_type,
-        books.book_category AS category,
+        split_part(books.book_category, '/', 2) AS category,
         COUNT(*) AS book_count,
         books.library_codes AS library_types,
         0 AS confidence,
@@ -122,7 +122,7 @@ async function detectMismatchedLibraries(): Promise<QualityIssue[]> {
         END AS suggestion
       FROM books
       WHERE ${whereConditions.join('\n        OR ')}
-      GROUP BY books.book_category, books.library_codes
+      GROUP BY split_part(books.book_category, '/', 2), books.library_codes
     )
     SELECT * FROM issues
     ORDER BY book_count DESC
@@ -145,8 +145,8 @@ async function detectOrphanMappings(): Promise<QualityIssue[]> {
       cm.confidence,
       '映射存在但没有书籍，可能是 category 名称变更，建议删除' AS suggestion
     FROM category_library_mapping cm
-    LEFT JOIN books ON books.book_category = cm.book_category
-    WHERE books.book_category IS NULL
+    LEFT JOIN books ON split_part(books.book_category, '/', 2) = cm.book_category
+    WHERE split_part(books.book_category, '/', 2) IS NULL
     ORDER BY cm.created_at DESC
     LIMIT 50
   `;

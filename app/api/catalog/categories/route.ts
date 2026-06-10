@@ -33,7 +33,7 @@ async function getCategoriesByLibraryType(libraryType?: string): Promise<Categor
           ROUND(cm.confidence::numeric, 4) AS confidence,
           ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage
         FROM category_library_mapping cm
-        JOIN books ON books.book_category = cm.book_category
+        JOIN books ON split_part(books.book_category, '/', 2) = cm.book_category
         GROUP BY cm.book_category, cm.library_codes, cm.confidence
         ORDER BY book_count DESC
         LIMIT 100
@@ -62,7 +62,7 @@ async function getCategoriesByLibraryType(libraryType?: string): Promise<Categor
           ROUND(cm.confidence::numeric, 4) AS confidence,
           ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage
         FROM category_library_mapping cm
-        JOIN books ON books.book_category = cm.book_category
+        JOIN books ON split_part(books.book_category, '/', 2) = cm.book_category
         WHERE cm.library_codes @> ${`{${libraryType}}`}
         GROUP BY cm.book_category, cm.library_codes, cm.confidence
         ORDER BY book_count DESC
@@ -115,7 +115,7 @@ async function searchCategories(query: string, limit: number = 20): Promise<Cate
       ROUND(cm.confidence::numeric, 4) AS confidence,
       0 AS percentage
     FROM category_library_mapping cm
-    JOIN books ON books.book_category = cm.book_category
+    JOIN books ON split_part(books.book_category, '/', 2) = cm.book_category
     WHERE cm.book_category ILIKE ${`%${query}%`}
     GROUP BY cm.book_category, cm.library_codes, cm.confidence
     ORDER BY book_count DESC

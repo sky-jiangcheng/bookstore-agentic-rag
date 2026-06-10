@@ -64,7 +64,6 @@ async function main() {
         price,
         stock,
         book_category,
-        description,
         cover_url,
         popularity_score,
         clc_code,
@@ -79,7 +78,6 @@ async function main() {
         ${book.price},
         ${book.stock},
         ${book.category},
-        ${book.description},
         ${book.cover_url},
         ${book.popularity_score},
         ${book.clc_code},
@@ -94,7 +92,6 @@ async function main() {
         price = EXCLUDED.price,
         stock = EXCLUDED.stock,
         book_category = EXCLUDED.book_category,
-        description = EXCLUDED.description,
         cover_url = EXCLUDED.cover_url,
         popularity_score = EXCLUDED.popularity_score,
         clc_code = EXCLUDED.clc_code,
@@ -102,6 +99,20 @@ async function main() {
         age_max = EXCLUDED.age_max,
         updated_at = NOW()
     `;
+
+    if (book.description) {
+      await sql`
+        INSERT INTO book_descriptions (
+          book_id,
+          description
+        ) VALUES (
+          ${book.id},
+          ${book.description}
+        )
+        ON CONFLICT (book_id) DO UPDATE SET
+          description = EXCLUDED.description
+      `;
+    }
 
     imported += 1;
   }

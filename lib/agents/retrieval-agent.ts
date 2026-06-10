@@ -223,14 +223,14 @@ function generatePseudoSql(
   limitNum: number
 ): string {
   if (!hasSpecificIntent) {
-    return `SELECT id, title, author, price, book_category, description, popularity_score, clc_code, age_min, age_max
+    return `SELECT id, title, author, price, book_category, '' AS description, popularity_score, clc_code, age_min, age_max
 FROM books
 ORDER BY popularity_score DESC, updated_at DESC
 LIMIT ${limitNum};`;
   }
 
   const termsClause = searchTerms
-    .map((term) => `(title || ' ' || author || ' ' || book_category || ' ' || description) ILIKE '%${term}%'`)
+    .map((term) => `(title || ' ' || author || ' ' || book_category) ILIKE '%${term}%'`)
     .join('\n     OR ');
 
   const categoriesClause = requirement.categories.length > 0
@@ -255,11 +255,11 @@ LIMIT ${limitNum};`;
 
   const excludeClause = requirement.constraints.exclude_keywords?.length
     ? `\n  -- 排除项过滤\n  AND NOT (\n    ${requirement.constraints.exclude_keywords
-        .map((k) => `(title || ' ' || author || ' ' || book_category || ' ' || description) ILIKE '%${k}%'`)
+        .map((k) => `(title || ' ' || author || ' ' || book_category) ILIKE '%${k}%'`)
         .join('\n     OR ')}\n  )`
     : '';
 
-  return `SELECT id, title, author, price, book_category, description, popularity_score, clc_code, age_min, age_max
+  return `SELECT id, title, author, price, book_category, '' AS description, popularity_score, clc_code, age_min, age_max
 FROM books
 WHERE (
      ${termsClause || '1=1'}

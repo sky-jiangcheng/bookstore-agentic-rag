@@ -35,7 +35,6 @@ try {
       author VARCHAR(255),
       publisher VARCHAR(255),
       publication_year SMALLINT CHECK (publication_year BETWEEN 1900 AND 2100),
-      description TEXT,
       cover_url VARCHAR(512),
       price DECIMAL(10, 2),
       stock INTEGER DEFAULT 0,
@@ -50,6 +49,15 @@ try {
     )
   `;
   console.log('✅ Created table: books (with BIGINT id and source_id)');
+
+  // Create book_descriptions table for vertical partitioning
+  await sql`
+    CREATE TABLE IF NOT EXISTS book_descriptions (
+      book_id BIGINT PRIMARY KEY,
+      description TEXT
+    )
+  `;
+  console.log('✅ Created table: book_descriptions');
 
   // Create indexes
   await sql`CREATE INDEX IF NOT EXISTS idx_books_title ON books(title)`;
@@ -85,6 +93,12 @@ try {
   `;
   console.log('✅ Created index: idx_books_age_range');
 
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_books_primary_category
+    ON books (split_part(book_category, '/', 2))
+  `;
+  console.log('✅ Created index: idx_books_primary_category');
+
   // Optional trigram index for fast ILIKE and fuzzy text matching.
   try {
     await sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`;
@@ -92,7 +106,7 @@ try {
       CREATE INDEX IF NOT EXISTS idx_books_search_trgm
       ON books
       USING gin (
-        (coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(book_category, '') || ' ' || coalesce(description, '')) gin_trgm_ops
+        (coalesce(title, '') || ' ' || coalesce(author, '') || ' ' || coalesce(book_category, '')) gin_trgm_ops
       )
     `;
     console.log('✅ Created index: idx_books_search_trgm');

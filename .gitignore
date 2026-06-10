@@ -1,22 +1,62 @@
-node_modules
-.next
-out
-dist
-coverage
+# Dependencies
+node_modules/
+/dist/
+/out/
+
+# Next.js / Vercel
+.next/
+tsconfig.tsbuildinfo
+.vercel/
+
+# Testing & Coverage
+coverage/
 *.log
+
+# Environment / Secret variables (IMPORTANT: Never commit secrets)
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-tsconfig.tsbuildinfo
-.vercel
-.superpowers/
-.worktrees/
 .env*.local
 .env.local.backup
 .env.production.check
 .env.railway.example
 
-# AtomCode local-scope configs (machine-specific)
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+temp_venv/
+env/
+.env/
+
+# System / OS
+.DS_Store
+Thumbs.db
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Claude / Agentic configs
+.claude/*.local.json
+
+# AtomCode
 .atomcode/local/
+.atomcode/.setup.lock
+.atomcode/graph.bin
+.atomcode/setup-state.json
+
+# Superpowers & Worktrees
+.superpowers/
+.worktrees/

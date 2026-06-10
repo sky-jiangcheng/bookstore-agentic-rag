@@ -121,7 +121,7 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
       COALESCE(price, 0) AS price,
       COALESCE(stock, 0) AS stock,
       COALESCE(book_category, 'general') AS category,
-      COALESCE(description, '') AS description,
+      '' AS description,
       cover_url,
       COALESCE(popularity_score, 0) AS relevance_score,
       clc_code,
@@ -166,22 +166,23 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
 export async function getBookDetailsFromDatabase(bookId: string): Promise<Book | null> {
   const query = `
     SELECT
-      id AS book_id,
-      title,
-      author,
-      COALESCE(publisher, 'Unknown Publisher') AS publisher,
-      publication_year,
-      COALESCE(price, 0) AS price,
-      COALESCE(stock, 0) AS stock,
-      COALESCE(book_category, 'general') AS category,
-      COALESCE(description, '') AS description,
-      cover_url,
-      COALESCE(popularity_score, 0) AS relevance_score,
-      clc_code,
-      age_min,
-      age_max
-    FROM books
-    WHERE id = $1
+      b.id AS book_id,
+      b.title,
+      b.author,
+      COALESCE(b.publisher, 'Unknown Publisher') AS publisher,
+      b.publication_year,
+      COALESCE(b.price, 0) AS price,
+      COALESCE(b.stock, 0) AS stock,
+      COALESCE(b.book_category, 'general') AS category,
+      COALESCE(bd.description, '') AS description,
+      b.cover_url,
+      COALESCE(b.popularity_score, 0) AS relevance_score,
+      b.clc_code,
+      b.age_min,
+      b.age_max
+    FROM books b
+    LEFT JOIN book_descriptions bd ON bd.book_id = b.id
+    WHERE b.id = $1
     LIMIT 1
   `;
 
@@ -296,7 +297,7 @@ export async function* streamBooksForExport(
         COALESCE(price, 0) AS price,
         COALESCE(stock, 0) AS stock,
         COALESCE(book_category, 'general') AS category,
-        COALESCE(description, '') AS description,
+        '' AS description,
         cover_url,
         COALESCE(popularity_score, 0) AS relevance_score,
         clc_code,
@@ -331,7 +332,7 @@ export async function getPopularBooksFromDatabase(count: number): Promise<Book[]
       COALESCE(price, 0) AS price,
       COALESCE(stock, 0) AS stock,
       COALESCE(book_category, 'general') AS category,
-      COALESCE(description, '') AS description,
+      '' AS description,
       cover_url,
       COALESCE(popularity_score, 0) AS relevance_score,
       clc_code,

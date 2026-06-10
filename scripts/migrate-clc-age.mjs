@@ -25,7 +25,13 @@ async function printStatus(pool) {
       COUNT(age_max)::bigint AS with_age_max
     FROM books
   `);
-  console.log('Database Status:', result.rows[0]);
+  const descCount = await pool.query(`
+    SELECT COUNT(*)::bigint AS total_desc FROM book_descriptions
+  `);
+  console.log('Database Status:', {
+    ...result.rows[0],
+    ...descCount.rows[0]
+  });
 }
 
 async function main() {

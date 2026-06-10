@@ -7,7 +7,7 @@ from scripts.huqifeng_prepare import (
     normalize_book_row,
     normalize_publication_year,
     parse_filter_paragraphs,
-    pick_category,
+    format_book_category,
     parse_age_range,
 )
 
@@ -40,14 +40,14 @@ class AgeRangeParsingTests(unittest.TestCase):
 
 
 class CategoryTests(unittest.TestCase):
-    def test_pick_category_prefers_subject_keyword(self):
+    def test_format_book_category_prefers_subject_keyword(self):
         self.assertEqual(
-            pick_category("思维心理学\\通俗读物", "B842.5"),
-            "思维心理学",
+            format_book_category("思维心理学\\通俗读物", "B842.5"),
+            "/思维心理学/通俗读物/",
         )
 
-    def test_pick_category_falls_back_to_classification(self):
-        self.assertEqual(pick_category("", "D0"), "D0")
+    def test_format_book_category_falls_back_to_classification(self):
+        self.assertEqual(format_book_category("", "D0"), "/D0/")
 
 
 class MergeBookRecordsTests(unittest.TestCase):

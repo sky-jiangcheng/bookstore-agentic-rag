@@ -38,7 +38,7 @@ async function getMappings(filters?: {
         cm.created_at,
         cm.updated_at
       FROM category_library_mapping cm
-      JOIN books ON books.book_category = cm.book_category
+      JOIN books ON split_part(books.book_category, '/', 2) = cm.book_category
       GROUP BY cm.book_category, cm.library_codes, cm.confidence, cm.auto_assigned, cm.created_at, cm.updated_at
       ORDER BY book_count DESC
       LIMIT ${limit}
@@ -85,7 +85,7 @@ async function getMappings(filters?: {
       cm.created_at,
       cm.updated_at
     FROM category_library_mapping cm
-    JOIN books ON books.book_category = cm.book_category
+    JOIN books ON split_part(books.book_category, '/', 2) = cm.book_category
     ${whereClause}
     GROUP BY cm.book_category, cm.library_codes, cm.confidence, cm.auto_assigned, cm.created_at, cm.updated_at
     ${havingClause}
@@ -129,7 +129,7 @@ async function updateMapping(
   const countResult = await sql<{ book_count: number }>`
     SELECT COUNT(*) AS book_count 
     FROM books 
-    WHERE book_category = ${bookCategory}
+    WHERE split_part(book_category, '/', 2) = ${bookCategory}
   `;
 
   return {
@@ -165,12 +165,12 @@ async function recalculateMapping(bookCategory?: string): Promise<{ updated: num
         TRUE AS auto_assigned
       FROM (
         SELECT 
-          book_category,
+          split_part(book_category, '/', 2) AS book_category,
           lt,
-          COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY book_category) AS pct
+          COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY split_part(book_category, '/', 2)) AS pct
         FROM books, UNNEST(library_codes) AS lt
-        WHERE book_category = ${bookCategory}
-        GROUP BY book_category, lt
+        WHERE split_part(book_category, '/', 2) = ${bookCategory}
+        GROUP BY split_part(book_category, '/', 2), lt
       ) AS distribution
       GROUP BY book_category
       ON CONFLICT (book_category) DO UPDATE SET
@@ -190,12 +190,12 @@ async function recalculateMapping(bookCategory?: string): Promise<{ updated: num
         TRUE AS auto_assigned
       FROM (
         SELECT 
-          book_category,
+          split_part(book_category, '/', 2) AS book_category,
           lt,
-          COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY book_category) AS pct
+          COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY split_part(book_category, '/', 2)) AS pct
         FROM books, UNNEST(library_codes) AS lt
-        WHERE book_category IS NOT NULL AND book_category != ''
-        GROUP BY book_category, lt
+        WHERE split_part(book_category, '/', 2) IS NOT NULL AND split_part(book_category, '/', 2) != ''
+        GROUP BY split_part(book_category, '/', 2), lt
       ) AS distribution
       GROUP BY book_category
       ON CONFLICT (book_category) DO UPDATE SET

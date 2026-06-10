@@ -110,7 +110,6 @@ async function flushBatch(pool, batch) {
     'price',
     'stock',
     'book_category',
-    'description',
     'cover_url',
     'popularity_score',
     'clc_code',
@@ -130,7 +129,6 @@ async function flushBatch(pool, batch) {
         item.price,
         item.stock,
         item.category,
-        item.description ?? '',
         item.cover_url ?? null,
         normalizePopularityScore(item.popularity_score),
         item.clc_code ?? null,
@@ -154,7 +152,6 @@ async function flushBatch(pool, batch) {
         price = EXCLUDED.price,
         stock = EXCLUDED.stock,
         book_category = EXCLUDED.book_category,
-        description = EXCLUDED.description,
         cover_url = EXCLUDED.cover_url,
         popularity_score = EXCLUDED.popularity_score,
         clc_code = EXCLUDED.clc_code,
@@ -163,6 +160,23 @@ async function flushBatch(pool, batch) {
         updated_at = NOW()
     `,
   );
+
+  const descColumns = ['book_id', 'description'];
+  const descValuesSql = batch
+    .filter((item) => item.description)
+    .map((item) => `(${String(item.id)}, ${toSqlLiteral(item.description)})`)
+    .join(', ');
+
+  if (descValuesSql) {
+    await pool.query(
+      `
+        INSERT INTO book_descriptions (${descColumns.join(', ')})
+        VALUES ${descValuesSql}
+        ON CONFLICT (book_id) DO UPDATE SET
+          description = EXCLUDED.description
+      `,
+    );
+  }
 }
 
 async function main() {

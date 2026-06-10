@@ -93,15 +93,21 @@ def normalize_publication_year(value: object) -> Optional[int]:
     return year if 1900 <= year <= 2100 else None
 
 
-def pick_category(subject: object, classification: object) -> str:
+def format_book_category(subject: object, classification: object) -> str:
     subject_text = normalize_text(subject)
+    parts = []
     if subject_text:
         parts = [part.strip() for part in SUBJECT_SPLIT_RE.split(subject_text) if part.strip()]
-        if parts:
-            return parts[0][:100]
-
-    classification_text = normalize_text(classification)
-    return classification_text[:100] if classification_text else "general"
+    
+    if not parts:
+        classification_text = normalize_text(classification)
+        if classification_text:
+            parts = [classification_text]
+        else:
+            parts = ["general"]
+            
+    # Format with leading and trailing slashes
+    return "/" + "/".join(parts) + "/"
 
 
 def parse_age_range(subject: object) -> tuple[Optional[int], Optional[int]]:
@@ -162,7 +168,7 @@ def normalize_book_row(row: dict, priority: int) -> Optional[dict]:
         ),
         "price": normalize_float(row.get("定价") or row.get("price")),
         "stock": normalize_int(row.get("库存") or row.get("stock")),
-        "category": pick_category(row.get("主题词"), row.get("中图法") or row.get("中图分类")),
+        "category": format_book_category(row.get("主题词"), row.get("中图法") or row.get("中图分类")),
         "description": full_description[:DESCRIPTION_MAX_CHARS],
         "cover_url": None,
         "popularity_score": normalize_int(row.get("库存") or row.get("stock")),
