@@ -7,6 +7,7 @@ import { getGoogleModel } from '@/lib/ai/google-model';
 import { buildCatalogSearchTerms } from '@/lib/search/query-rerank';
 import {
   AUDIENCE_PATTERNS,
+  BOOKSTORE_INTENT_KEYWORDS,
   CATEGORY_PATTERNS,
   KEYWORD_STOPWORDS,
   PREFERENCE_PATTERNS,
@@ -69,26 +70,73 @@ export function parseTargetCount(query: string): number | undefined {
 
 export function parseExcludedKeywords(query: string): string[] {
   const exclusions: string[] = [];
-  const patterns = [
-    /排除\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
-    /不要\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
-    /不含\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
-    /去掉\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
-    /剔除\s*([^\s，。；、]+(?:[、,，/][^\s，。；、]+)*)/giu,
-  ];
+  const clausePattern =
+    /(?:排除|不要|不含|去掉|剔除)\s*(.+?)(?=排除|不要|不含|去掉|剔除|[，。；;!?！？]|$)/giu;
 
-  for (const pattern of patterns) {
-    for (const match of query.matchAll(pattern)) {
-      const raw = match[1]?.trim();
-      if (!raw) continue;
-      for (const token of raw.split(/[、,，/]/g)) {
-        const keyword = token.trim();
-        if (keyword) exclusions.push(keyword);
-      }
+  for (const match of query.matchAll(clausePattern)) {
+    const raw = match[1]?.trim();
+    if (!raw) continue;
+
+    for (const token of raw.split(/[、,，/]|(?:和|及|与)/gu)) {
+      const keyword = token
+        .trim()
+        .replace(/^(?:的|有关|相关)/u, '')
+        .replace(/(?:相关|有关)?(?:的)?(?:图书|书籍|读物|书|类)?$/u, '')
+        .trim();
+      if (keyword) exclusions.push(keyword);
     }
   }
 
   return Array.from(new Set(exclusions));
+}
+
+function stripExcludedClauses(query: string): string {
+  return query
+    .replace(
+      /(?:排除|不要|不含|去掉|剔除)\s*.+?(?=排除|不要|不含|去掉|剔除|[，。；;!?！？]|$)/giu,
+      ' ',
+    )
+    .replace(/[，。；;!?！？]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function extractBookstoreIntentKeywords(query: string): string[] {
+  return BOOKSTORE_INTENT_KEYWORDS.filter((keyword) => query.includes(keyword));
+}
+
+function parseChineseNumber(value: string): number | undefined {
+  if (/^\d+$/u.test(value)) return Number(value);
+
+  const digits: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  };
+  if (value in digits) return digits[value];
+  if (value.startsWith('十') && value.length === 2) {
+    return 10 + (digits[value[1]] ?? 0);
+  }
+  if (value.endsWith('十') && value.length === 2) {
+    return (digits[value[0]] ?? 0) * 10;
+  }
+  return undefined;
+}
+
+function parseRecencyPreference(query: string): string | undefined {
+  const match = query.match(/近\s*([一二两三四五六七八九十\d]+)\s*年/iu);
+  if (!match) return undefined;
+
+  const years = parseChineseNumber(match[1]);
+  return years && years > 0 ? `近${years}年出版` : undefined;
 }
 
 /**
@@ -136,12 +184,14 @@ function normalizeRequirement(
   userQuery: string,
   draft: RequirementAnalysis
 ): RequirementAnalysis {
+  const positiveQuery = stripExcludedClauses(userQuery);
+  const parsedExclusions = parseExcludedKeywords(userQuery);
   const categories = new Set(draft.categories);
   const keywords = new Set(draft.keywords);
   const preferences = new Set(draft.preferences);
 
   for (const { pattern, category } of CATEGORY_PATTERNS) {
-    const matches = userQuery.match(pattern);
+    const matches = positiveQuery.match(pattern);
     if (matches) {
       categories.add(category);
       matches.forEach((item) => { if (item) keywords.add(item); });
@@ -149,7 +199,7 @@ function normalizeRequirement(
   }
 
   for (const { pattern, preference } of PREFERENCE_PATTERNS) {
-    const matches = userQuery.match(pattern);
+    const matches = positiveQuery.match(pattern);
     if (matches) {
       preferences.add(preference);
       matches.forEach((item) => { if (item) keywords.add(item); });
@@ -157,7 +207,7 @@ function normalizeRequirement(
   }
 
   for (const pattern of AUDIENCE_PATTERNS) {
-    const matches = userQuery.match(pattern);
+    const matches = positiveQuery.match(pattern);
     if (matches) {
       matches.forEach((item) => {
         if (item) {
@@ -168,13 +218,21 @@ function normalizeRequirement(
     }
   }
 
-  for (const keyword of extractQueryKeywords(userQuery)) {
+  const bookstoreIntentKeywords = extractBookstoreIntentKeywords(positiveQuery);
+  for (const keyword of bookstoreIntentKeywords) {
     keywords.add(keyword);
+  }
+
+  if (draft.analysis_strategy !== 'local-fallback' || bookstoreIntentKeywords.length === 0) {
+    for (const keyword of extractQueryKeywords(positiveQuery)) {
+      keywords.add(keyword);
+    }
   }
 
   const budget = parseBudget(userQuery);
   const targetCount = parseTargetCount(userQuery);
-  const excludeKeywords = parseExcludedKeywords(userQuery);
+  const recencyPreference = parseRecencyPreference(positiveQuery);
+  if (recencyPreference) preferences.add(recencyPreference);
 
   return {
     ...draft,
@@ -185,7 +243,7 @@ function normalizeRequirement(
       ...draft.constraints,
       ...(budget !== undefined ? { budget } : {}),
       ...(targetCount !== undefined ? { target_count: targetCount } : {}),
-      ...(excludeKeywords.length > 0 ? { exclude_keywords: excludeKeywords } : {}),
+      ...(parsedExclusions.length > 0 ? { exclude_keywords: parsedExclusions } : {}),
     },
     preferences: Array.from(preferences),
   };
@@ -193,9 +251,10 @@ function normalizeRequirement(
 
 // Extract prompt as constant to avoid recreation on each call
 function inferLibraryTypeLocally(query: string): '公共馆' | '成人目录' | '初高中' | '小学' | '大学' | 'none' {
-  const lower = query.toLowerCase();
+  const lower = stripExcludedClauses(query).toLowerCase();
+  if (/中学/.test(lower) && /小学/.test(lower)) return '初高中';
   if (/小学生|幼儿园|儿童|绘本|拼音|少儿/i.test(lower)) return '小学';
-  if (/初中|高中|中考|高考|青春期/i.test(lower)) return '初高中';
+  if (/初中|高中|中学|中考|高考|青春期/i.test(lower)) return '初高中';
   if (/大学|考研|学术|专业课|高校/i.test(lower)) return '大学';
   if (/职场|经理|公司|理财|养生|美味/i.test(lower)) return '成人目录';
   if (/教材|学校|教师|老师/i.test(lower)) return '公共馆';
@@ -245,6 +304,52 @@ ${JSON.stringify(sanitizePromptInput(userQuery))}
 
 ${conversationContext ? `注意：结合历史对话上下文来理解用户需求。如果用户提到"同样的类型"或"再来几本"，请参考历史对话中的分类和关键词。` : ''}`;
 
+export function buildLocalFallbackRequirement(userQuery: string): RequirementAnalysis {
+  const extractedCategories: string[] = [];
+  const extractedKeywords: string[] = [];
+  const positiveQuery = stripExcludedClauses(userQuery);
+
+  for (const { pattern, category } of CATEGORY_PATTERNS) {
+    const matches = positiveQuery.match(pattern);
+    if (matches) {
+      extractedCategories.push(category);
+      extractedKeywords.push(...matches);
+    }
+  }
+
+  const bookstoreIntentKeywords = extractBookstoreIntentKeywords(positiveQuery);
+  extractedKeywords.push(...bookstoreIntentKeywords);
+  if (bookstoreIntentKeywords.length === 0) {
+    extractedKeywords.push(...extractQueryKeywords(positiveQuery));
+  }
+
+  const hasMeaningfulInfo = extractedCategories.length > 0 || extractedKeywords.length > 0;
+  const fallbackTerms = bookstoreIntentKeywords.length > 0
+    ? [...new Set([...extractedCategories, ...extractedKeywords])]
+    : [
+        ...new Set([
+          ...extractedCategories,
+          ...extractedKeywords,
+          ...buildCatalogSearchTerms(positiveQuery),
+        ]),
+      ];
+
+  return normalizeRequirement(userQuery, {
+    analysis_strategy: 'local-fallback',
+    original_query: userQuery,
+    categories: extractedCategories,
+    keywords: fallbackTerms,
+    expanded_search_terms: fallbackTerms,
+    constraints: {},
+    preferences: [],
+    needs_clarification: !hasMeaningfulInfo,
+    clarification_questions: hasMeaningfulInfo ? [] : [
+      '你对什么类型的书籍感兴趣？比如文学、历史、科技、旅游等。',
+    ],
+    inferred_library_type: inferLibraryTypeLocally(userQuery),
+  });
+}
+
 export async function analyzeRequirement(
   userQuery: string,
   options?: RequirementAgentOptions,
@@ -275,46 +380,6 @@ export async function analyzeRequirement(
     });
   } catch (error) {
     console.error('[RequirementAgent] Analysis failed:', error);
-
-    // Improved fallback: Try to extract basic info from the query
-    const extractedCategories: string[] = [];
-    const extractedKeywords: string[] = [];
-
-    // Common book categories
-    for (const { pattern, category } of CATEGORY_PATTERNS) {
-      const matches = userQuery.match(pattern);
-      if (matches) {
-        extractedCategories.push(category);
-        extractedKeywords.push(...matches);
-      }
-    }
-
-    const queryKeywords = extractQueryKeywords(userQuery);
-    extractedKeywords.push(...queryKeywords);
-
-    // If we found any meaningful information, don't require clarification
-    const hasMeaningfulInfo = extractedCategories.length > 0 || extractedKeywords.length > 0;
-
-    const fallbackTerms = [
-      ...new Set([
-        ...extractedCategories,
-        ...extractedKeywords,
-        ...buildCatalogSearchTerms(userQuery),
-      ]),
-    ];
-    return normalizeRequirement(userQuery, {
-      analysis_strategy: 'local-fallback',
-      original_query: userQuery,
-      categories: extractedCategories,
-      keywords: fallbackTerms,
-      expanded_search_terms: fallbackTerms,
-      constraints: {},
-      preferences: [],
-      needs_clarification: !hasMeaningfulInfo,
-      clarification_questions: hasMeaningfulInfo ? [] : [
-        '你对什么类型的书籍感兴趣？比如文学、历史、科技、旅游等。',
-      ],
-      inferred_library_type: inferLibraryTypeLocally(userQuery),
-    });
+    return buildLocalFallbackRequirement(userQuery);
   }
 }

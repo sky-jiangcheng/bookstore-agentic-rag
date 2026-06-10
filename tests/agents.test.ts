@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 
 import type { RequirementAnalysis } from '../lib/types/rag';
 
-import { sanitizePromptInput, extractQueryKeywords, parseBudget, parseTargetCount, parseExcludedKeywords } from '../lib/agents/requirement-agent';
+import {
+  buildLocalFallbackRequirement,
+  sanitizePromptInput,
+  extractQueryKeywords,
+  parseBudget,
+  parseTargetCount,
+  parseExcludedKeywords,
+} from '../lib/agents/requirement-agent';
 import { computeRelevanceScore, enforceHardConstraints, hasExcludedKeywords, matchesCategories, getStrongKeywords } from '../lib/agents/retrieval-agent';
 import { enforceBudget, buildHeuristicExplanation, containsExcludedKeyword } from '../lib/agents/recommendation-agent';
 import { extractKnownBookKeywords } from '../lib/agents/book-taxonomy';
@@ -46,9 +53,23 @@ test('parseTargetCount extracts book count', () => {
 
 test('parseExcludedKeywords extracts exclusion terms', () => {
   assert.deepEqual(parseExcludedKeywords('排除教材'), ['教材']);
-  assert.deepEqual(parseExcludedKeywords('不要教辅和考试'), ['教辅和考试']);
+  assert.deepEqual(parseExcludedKeywords('不要教辅和考试'), ['教辅', '考试']);
   assert.deepEqual(parseExcludedKeywords('不含小说'), ['小说']);
   assert.deepEqual(parseExcludedKeywords('推荐人工智能书'), []);
+});
+
+test('local fallback separates negated clauses from positive bookstore intent', async () => {
+  const query = '做一个中学小学课外读物图书目录要近二年的，不要大学的，不要中专的不要儿童书';
+  const requirement = buildLocalFallbackRequirement(query);
+
+  assert.equal(requirement.analysis_strategy, 'local-fallback');
+  assert.deepEqual(requirement.constraints.exclude_keywords, ['大学', '中专', '儿童']);
+  assert.equal(requirement.inferred_library_type, '初高中');
+  assert.deepEqual(requirement.keywords, ['课外读物', '中学', '小学']);
+  assert.deepEqual(requirement.expanded_search_terms, ['课外读物', '中学', '小学']);
+  assert.ok(requirement.preferences.includes('近2年出版'));
+  assert.ok(requirement.keywords.every((keyword) => !keyword.includes('不要')));
+  assert.ok(!requirement.categories.includes('少儿'));
 });
 
 test('sanitizePromptInput strips role markers', () => {

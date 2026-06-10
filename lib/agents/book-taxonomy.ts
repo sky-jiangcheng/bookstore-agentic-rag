@@ -87,6 +87,17 @@ export const COMMON_BOOK_KEYWORDS = [
   '职场',
 ] as const;
 
+export const BOOKSTORE_INTENT_KEYWORDS = [
+  '课外读物',
+  '课外阅读',
+  '中学生',
+  '小学生',
+  '初中',
+  '高中',
+  '中学',
+  '小学',
+] as const;
+
 export function extractKnownBookKeywords(text: string): string[] {
   return COMMON_BOOK_KEYWORDS.filter((keyword) => text.includes(keyword));
 }
