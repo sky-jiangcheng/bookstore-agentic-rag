@@ -71,6 +71,9 @@ export function buildPseudoSql(
   if (typeof requirement.constraints.price_max === 'number') {
     clauses.push(`price <= ${requirement.constraints.price_max}`);
   }
+  if (typeof requirement.constraints.publication_year_min === 'number') {
+    clauses.push(`publication_year >= ${requirement.constraints.publication_year_min}`);
+  }
 
   return [
     '-- 查询预览：确认调整后才会生效',

@@ -3,6 +3,7 @@ export interface Book {
   title: string;
   author: string;
   publisher: string;
+  publication_year?: number;
   price: number;
   stock: number;
   category: string;
@@ -25,6 +26,7 @@ export interface RequirementAnalysis {
     author?: string;
     price_min?: number;
     price_max?: number;
+    publication_year_min?: number;
     exclude_keywords?: string[];
   };
   preferences: string[];
@@ -70,6 +72,7 @@ export interface CatalogSearchFilters {
   author?: string;
   price_min?: number;
   price_max?: number;
+  publication_year_min?: number;
   query?: string;
   search_terms?: string[];
   limit?: number;

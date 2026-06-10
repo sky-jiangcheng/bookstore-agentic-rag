@@ -14,6 +14,7 @@ interface CatalogApiBook {
   title: string;
   author?: string | null;
   publisher?: string | null;
+  publication_year?: number | null;
   price?: number | null;
   stock?: number | null;
   category?: string | null;
@@ -39,6 +40,7 @@ function mapBook(record: CatalogApiBook): Book {
     title: record.title,
     author: record.author ?? 'Unknown Author',
     publisher: record.publisher ?? 'Unknown Publisher',
+    publication_year: record.publication_year ?? undefined,
     price: Number(record.price ?? 0),
     stock: Number(record.stock ?? 0),
     category: record.category ?? 'general',
@@ -82,6 +84,10 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
     params.push(filters.price_max);
     conditions.push(`price <= $${params.length}`);
   }
+  if (filters.publication_year_min !== undefined) {
+    params.push(filters.publication_year_min);
+    conditions.push(`publication_year >= $${params.length}`);
+  }
   if (filters.categories && filters.categories.length > 0) {
     const placeholders = filters.categories.map((_, i) => `$${params.length + i + 1}`).join(',');
     conditions.push(`book_category IN (${placeholders})`);
@@ -105,6 +111,7 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
       title,
       author,
       COALESCE(publisher, 'Unknown Publisher') AS publisher,
+      publication_year,
       COALESCE(price, 0) AS price,
       COALESCE(stock, 0) AS stock,
       COALESCE(book_category, 'general') AS category,
@@ -154,6 +161,7 @@ export async function getBookDetailsFromDatabase(bookId: string): Promise<Book |
       title,
       author,
       COALESCE(publisher, 'Unknown Publisher') AS publisher,
+      publication_year,
       COALESCE(price, 0) AS price,
       COALESCE(stock, 0) AS stock,
       COALESCE(book_category, 'general') AS category,
@@ -247,6 +255,10 @@ export async function* streamBooksForExport(
     baseParams.push(filters.price_max);
     conditions.push(`price <= $${paramIdx++}`);
   }
+  if (filters.publication_year_min !== undefined) {
+    baseParams.push(filters.publication_year_min);
+    conditions.push(`publication_year >= $${paramIdx++}`);
+  }
   if (filters.categories && filters.categories.length > 0) {
     const placeholders = filters.categories.map(() => `$${paramIdx++}`).join(',');
     conditions.push(`book_category IN (${placeholders})`);
@@ -268,6 +280,7 @@ export async function* streamBooksForExport(
         title,
         author,
         COALESCE(publisher, 'Unknown Publisher') AS publisher,
+        publication_year,
         COALESCE(price, 0) AS price,
         COALESCE(stock, 0) AS stock,
         COALESCE(book_category, 'general') AS category,
@@ -299,6 +312,7 @@ export async function getPopularBooksFromDatabase(count: number): Promise<Book[]
       title,
       author,
       COALESCE(publisher, 'Unknown Publisher') AS publisher,
+      publication_year,
       COALESCE(price, 0) AS price,
       COALESCE(stock, 0) AS stock,
       COALESCE(book_category, 'general') AS category,

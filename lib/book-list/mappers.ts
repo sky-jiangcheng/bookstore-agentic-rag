@@ -43,6 +43,9 @@ export function requirementAnalysisToParsed(
       `单价区间: ¥${req.constraints.price_min ?? 0} - ¥${req.constraints.price_max ?? '∞'}`,
     );
   }
+  if (req.constraints.publication_year_min !== undefined) {
+    constraints.push(`出版年份不早于 ${req.constraints.publication_year_min} 年`);
+  }
   if (req.constraints.exclude_keywords?.length) {
     constraints.push(`排除: ${req.constraints.exclude_keywords.join('、')}`);
   }
@@ -87,6 +90,10 @@ export function parsedRequirementsToRequirementAnalysis(
     const countMatch = line.match(/目标册数约\s*(\d+)/);
     if (countMatch) {
       constraints.target_count = Number(countMatch[1]);
+    }
+    const publicationYearMatch = line.match(/出版年份不早于\s*(\d{4})\s*年/);
+    if (publicationYearMatch) {
+      constraints.publication_year_min = Number(publicationYearMatch[1]);
     }
     if (line.startsWith('排除:')) {
       const rest = line.replace(/^排除:\s*/, '');
@@ -165,6 +172,7 @@ export function recommendedBookToApiBook(
     title: book.title,
     author: book.author || null,
     publisher: book.publisher || null,
+    publication_year: book.publication_year ?? null,
     price: book.price,
     stock: book.stock ?? null,
     category: book.category || null,

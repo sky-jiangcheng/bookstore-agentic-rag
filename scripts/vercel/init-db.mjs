@@ -34,6 +34,7 @@ try {
       title VARCHAR(255) NOT NULL,
       author VARCHAR(255),
       publisher VARCHAR(255),
+      publication_year SMALLINT CHECK (publication_year BETWEEN 1900 AND 2100),
       description TEXT,
       cover_url VARCHAR(512),
       price DECIMAL(10, 2),
@@ -59,6 +60,13 @@ try {
 
   await sql`CREATE INDEX IF NOT EXISTS idx_books_popularity ON books(popularity_score DESC)`;
   console.log('✅ Created index: idx_books_popularity');
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_books_publication_year
+    ON books(publication_year)
+    WHERE publication_year IS NOT NULL
+  `;
+  console.log('✅ Created index: idx_books_publication_year');
 
   // Optional trigram index for fast ILIKE and fuzzy text matching.
   try {

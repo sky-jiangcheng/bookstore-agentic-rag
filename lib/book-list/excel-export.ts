@@ -5,6 +5,7 @@ export interface ExportBookItem {
   title: string;
   author?: string | null;
   publisher?: string | null;
+  publication_year?: number | null;
   category?: string | null;
   price?: number | null;
   stock?: number | null;
@@ -46,7 +47,7 @@ const CENTER_ALIGN: Partial<ExcelJS.Alignment> = {
   horizontal: 'center', vertical: 'middle',
 };
 
-const COL_WIDTHS = [6, 30, 15, 20, 12, 10, 8, 10, 10, 20];
+const COL_WIDTHS = [6, 30, 15, 20, 10, 12, 10, 8, 10, 10, 20];
 
 export async function buildExcelBuffer(req: ExportBookListRequest): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
@@ -82,7 +83,7 @@ export async function buildExcelBuffer(req: ExportBookListRequest): Promise<Buff
 
   // Data table header
   const dataStartRow = metaRows.length + 2;
-  const headers = ['序号', '书名', '作者', '出版社', '分类', '价格', '库存', '相关度', '来源', '备注'];
+  const headers = ['序号', '书名', '作者', '出版社', '出版年份', '分类', '价格', '库存', '相关度', '来源', '备注'];
   const headerRow = ws.getRow(dataStartRow);
   for (let col = 0; col < headers.length; col++) {
     const cell = headerRow.getCell(col + 1);
@@ -94,7 +95,7 @@ export async function buildExcelBuffer(req: ExportBookListRequest): Promise<Buff
   }
 
   // Data rows
-  const centerCols = new Set([1, 6, 7, 8]); // 序号, 价格, 库存, 相关度
+  const centerCols = new Set([1, 5, 7, 8, 9]);
   for (let i = 0; i < req.books.length; i++) {
     const book = req.books[i];
     const row = ws.getRow(dataStartRow + 1 + i);
@@ -106,6 +107,7 @@ export async function buildExcelBuffer(req: ExportBookListRequest): Promise<Buff
       book.title,
       book.author ?? '',
       book.publisher ?? '',
+      book.publication_year ?? '',
       book.category ?? '',
       book.price ?? 0,
       book.stock ?? 0,
@@ -122,7 +124,7 @@ export async function buildExcelBuffer(req: ExportBookListRequest): Promise<Buff
       if (centerCols.has(col + 1)) {
         cell.alignment = CENTER_ALIGN;
       }
-      if (col + 1 === 6) {
+      if (col + 1 === 7) {
         cell.numFmt = '¥#,##0.00';
       }
     }

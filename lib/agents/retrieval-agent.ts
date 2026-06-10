@@ -182,6 +182,7 @@ async function retrieveKeyword(requirement: RequirementAnalysis, topK: number, o
       author: requirement.constraints.author,
       price_min: requirement.constraints.price_min,
       price_max: requirement.constraints.price_max,
+      publication_year_min: requirement.constraints.publication_year_min,
       query: requirement.original_query,
       search_terms: searchTerms,
       limit: topK * 2,
@@ -244,6 +245,10 @@ LIMIT ${limitNum};`;
     ? `\n  AND price >= ${requirement.constraints.price_min}`
     : '';
 
+  const publicationYearClause = requirement.constraints.publication_year_min !== undefined
+    ? `\n  AND publication_year >= ${requirement.constraints.publication_year_min}`
+    : '';
+
   const authorClause = requirement.constraints.author
     ? `\n  AND author ILIKE '%${requirement.constraints.author}%'`
     : '';
@@ -258,7 +263,7 @@ LIMIT ${limitNum};`;
 FROM books
 WHERE (
      ${termsClause || '1=1'}
-)${categoriesClause}${priceMinClause}${priceMaxClause}${authorClause}${excludeClause}
+)${categoriesClause}${priceMinClause}${priceMaxClause}${publicationYearClause}${authorClause}${excludeClause}
 ORDER BY popularity_score DESC, updated_at DESC
 LIMIT ${limitNum};`;
 }

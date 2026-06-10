@@ -26,3 +26,10 @@ test('chat keeps local and remote session identifiers separate', async () => {
   assert.doesNotMatch(source, /return \{ \.\.\.s, id: data\.sessionId \}/);
   assert.doesNotMatch(source, /setActiveSessionId\(data\.sessionId\)/);
 });
+
+test('catalog search applies publication year as a parameterized filter', async () => {
+  const source = await readSource('lib/server/catalog-repository.ts');
+
+  assert.match(source, /publication_year >= \$\$\{params\.length\}/);
+  assert.match(source, /publication_year >= \$\$\{paramIdx\+\+\}/);
+});

@@ -25,6 +25,7 @@ const RequirementAnalysisSchema = z.object({
     author: z.string().optional(),
     price_min: z.number().optional(),
     price_max: z.number().optional(),
+    publication_year_min: z.number().int().min(1900).max(2100).optional(),
     exclude_keywords: z.array(z.string()).optional(),
   }),
   preferences: z.array(z.string()),
@@ -131,12 +132,25 @@ function parseChineseNumber(value: string): number | undefined {
   return undefined;
 }
 
-function parseRecencyPreference(query: string): string | undefined {
-  const match = query.match(/近\s*([一二两三四五六七八九十\d]+)\s*年/iu);
+function parseRecencyYears(query: string): number | undefined {
+  const match = query.match(/(?:最近|近)\s*([一二两三四五六七八九十\d]+)\s*年/iu);
   if (!match) return undefined;
 
   const years = parseChineseNumber(match[1]);
-  return years && years > 0 ? `近${years}年出版` : undefined;
+  return years && years > 0 ? years : undefined;
+}
+
+function parseRecencyPreference(query: string): string | undefined {
+  const years = parseRecencyYears(query);
+  return years ? `近${years}年出版` : undefined;
+}
+
+export function parsePublicationYearMin(
+  query: string,
+  referenceYear = new Date().getFullYear(),
+): number | undefined {
+  const years = parseRecencyYears(query);
+  return years ? referenceYear - years + 1 : undefined;
 }
 
 /**
@@ -182,7 +196,8 @@ export function extractQueryKeywords(query: string): string[] {
 
 function normalizeRequirement(
   userQuery: string,
-  draft: RequirementAnalysis
+  draft: RequirementAnalysis,
+  referenceYear = new Date().getFullYear(),
 ): RequirementAnalysis {
   const positiveQuery = stripExcludedClauses(userQuery);
   const parsedExclusions = parseExcludedKeywords(userQuery);
@@ -232,6 +247,7 @@ function normalizeRequirement(
   const budget = parseBudget(userQuery);
   const targetCount = parseTargetCount(userQuery);
   const recencyPreference = parseRecencyPreference(positiveQuery);
+  const publicationYearMin = parsePublicationYearMin(positiveQuery, referenceYear);
   if (recencyPreference) preferences.add(recencyPreference);
 
   return {
@@ -243,6 +259,7 @@ function normalizeRequirement(
       ...draft.constraints,
       ...(budget !== undefined ? { budget } : {}),
       ...(targetCount !== undefined ? { target_count: targetCount } : {}),
+      ...(publicationYearMin !== undefined ? { publication_year_min: publicationYearMin } : {}),
       ...(parsedExclusions.length > 0 ? { exclude_keywords: parsedExclusions } : {}),
     },
     preferences: Array.from(preferences),
@@ -275,7 +292,7 @@ ${JSON.stringify(sanitizePromptInput(userQuery))}
 1. categories: 用户提到的书籍分类（如"小说"，"历史"，"围棋"，"计算机"等）
 2. keywords: 关键词（书名、主题、作者等关键词）
 3. expanded_search_terms: 搜索扩展词——根据用户的意图，生成 5-15 个同义/近义/相关的搜索词，用于覆盖用户可能不知道但内容相关的表达。例如用户说"围棋入门"，扩展词可以是["围棋", "围棋入门", "围棋教程", "围棋基础", "围棋技巧", "学围棋", "围棋初级", "围棋"]；用户说"Python编程"，扩展词可以是["Python", "Python编程", "Python开发", "Python入门", "编程", "Python语言"]。**要求：必须包含用户的原始关键词。**
-4. constraints: 约束条件 - 预算（总价上限），目标书籍数量，特定作者，价格区间，排除关键词(exclude_keywords)
+4. constraints: 约束条件 - 预算（总价上限），目标书籍数量，特定作者，价格区间，最近出版年份下限(publication_year_min，例如当前为2026年，“近2年”填2025)，排除关键词(exclude_keywords)
 5. preferences: 用户偏好描述（如"深入浅出"，"经典"，"新书"）
 6. inferred_library_type: 智能判断当前查询意图对应的目标图书馆别。从以下固定值中选择一个：'公共馆'、'成人目录'、'初高中'、'小学'、'大学'、'none'。
    - 判断指南：
@@ -304,7 +321,10 @@ ${JSON.stringify(sanitizePromptInput(userQuery))}
 
 ${conversationContext ? `注意：结合历史对话上下文来理解用户需求。如果用户提到"同样的类型"或"再来几本"，请参考历史对话中的分类和关键词。` : ''}`;
 
-export function buildLocalFallbackRequirement(userQuery: string): RequirementAnalysis {
+export function buildLocalFallbackRequirement(
+  userQuery: string,
+  referenceYear = new Date().getFullYear(),
+): RequirementAnalysis {
   const extractedCategories: string[] = [];
   const extractedKeywords: string[] = [];
   const positiveQuery = stripExcludedClauses(userQuery);
@@ -347,7 +367,7 @@ export function buildLocalFallbackRequirement(userQuery: string): RequirementAna
       '你对什么类型的书籍感兴趣？比如文学、历史、科技、旅游等。',
     ],
     inferred_library_type: inferLibraryTypeLocally(userQuery),
-  });
+  }, referenceYear);
 }
 
 export async function analyzeRequirement(

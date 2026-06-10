@@ -18,6 +18,9 @@ function normalizeBook(book) {
     title: String(book.title || '').trim(),
     author: book.author ? String(book.author).trim() : null,
     publisher: book.publisher ? String(book.publisher).trim() : null,
+    publication_year: Number.isInteger(Number(book.publication_year))
+      ? Number(book.publication_year)
+      : null,
     price: Number(book.price || 0),
     stock: Number(book.stock || 0),
     category: book.category ? String(book.category).trim() : 'general',
@@ -54,6 +57,7 @@ async function main() {
         title,
         author,
         publisher,
+        publication_year,
         price,
         stock,
         book_category,
@@ -65,6 +69,7 @@ async function main() {
         ${book.title},
         ${book.author},
         ${book.publisher},
+        ${book.publication_year},
         ${book.price},
         ${book.stock},
         ${book.category},
@@ -76,6 +81,7 @@ async function main() {
         title = EXCLUDED.title,
         author = EXCLUDED.author,
         publisher = EXCLUDED.publisher,
+        publication_year = EXCLUDED.publication_year,
         price = EXCLUDED.price,
         stock = EXCLUDED.stock,
         book_category = EXCLUDED.book_category,

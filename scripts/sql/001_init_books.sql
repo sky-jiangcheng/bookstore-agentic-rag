@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS books (
   title VARCHAR(255) NOT NULL,
   author VARCHAR(255),
   publisher VARCHAR(255),
+  publication_year SMALLINT CHECK (publication_year BETWEEN 1900 AND 2100),
   description TEXT,
   cover_url VARCHAR(512),
   price DECIMAL(10, 2) DEFAULT 0,
@@ -19,6 +20,9 @@ CREATE TABLE IF NOT EXISTS books (
 CREATE INDEX IF NOT EXISTS idx_books_category ON books(category);
 CREATE INDEX IF NOT EXISTS idx_books_author ON books(author);
 CREATE INDEX IF NOT EXISTS idx_books_popularity_score ON books(popularity_score DESC);
+CREATE INDEX IF NOT EXISTS idx_books_publication_year
+  ON books(publication_year)
+  WHERE publication_year IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_books_search_trgm
   ON books
   USING gin (

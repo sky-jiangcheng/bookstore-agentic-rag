@@ -5,6 +5,7 @@ import type { RequirementAnalysis } from '../lib/types/rag';
 
 import {
   buildLocalFallbackRequirement,
+  parsePublicationYearMin,
   sanitizePromptInput,
   extractQueryKeywords,
   parseBudget,
@@ -70,6 +71,18 @@ test('local fallback separates negated clauses from positive bookstore intent', 
   assert.ok(requirement.preferences.includes('近2年出版'));
   assert.ok(requirement.keywords.every((keyword) => !keyword.includes('不要')));
   assert.ok(!requirement.categories.includes('少儿'));
+});
+
+test('local fallback converts recent-year wording into an inclusive minimum year', () => {
+  assert.equal(parsePublicationYearMin('要近二年的课外读物', 2026), 2025);
+  assert.equal(parsePublicationYearMin('最近3年出版的图书', 2026), 2024);
+  assert.equal(parsePublicationYearMin('推荐历史书', 2026), undefined);
+
+  const requirement = buildLocalFallbackRequirement(
+    '做一个中学小学课外读物图书目录，要近二年的',
+    2026,
+  );
+  assert.equal(requirement.constraints.publication_year_min, 2025);
 });
 
 test('sanitizePromptInput strips role markers', () => {

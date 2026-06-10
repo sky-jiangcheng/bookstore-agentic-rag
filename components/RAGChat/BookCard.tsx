@@ -1,4 +1,4 @@
-import { Sparkles, Bookmark, Building, Tag, Package } from 'lucide-react';
+import { Sparkles, Bookmark, Building, Calendar, Tag, Package } from 'lucide-react';
 import type { BookRecommendation } from '@/components/rag-chat-utils';
 
 const getCoverGradient = (category: string | null, title: string) => {
@@ -57,6 +57,12 @@ export function BookCard({ book }: { book: BookRecommendation }) {
             <span className="inline-flex min-w-0 items-center gap-1">
               <Building className="h-2.5 w-2.5 shrink-0" />
               <span className="max-w-48 truncate">{book.publisher}</span>
+            </span>
+          )}
+          {book.publication_year && (
+            <span className="inline-flex items-center gap-1">
+              <Calendar className="h-2.5 w-2.5" />
+              {book.publication_year} 年
             </span>
           )}
           {book.category && (

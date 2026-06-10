@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import math
 import re
@@ -15,6 +16,7 @@ SUBJECT_SPLIT_RE = re.compile(r"[\\/\|,，;；]+")
 NON_DIGIT_RE = re.compile(r"\D+")
 BARCODE_PATTERN = re.compile(r"^\d+(?:\.0)?$")
 DESCRIPTION_MAX_CHARS = 200
+PUBLICATION_YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|2100)(?!\d)")
 
 
 def normalize_barcode(raw_value: object) -> Optional[int]:
@@ -71,6 +73,26 @@ def normalize_int(value: object) -> int:
     return int(number) if number is not None else 0
 
 
+def normalize_publication_year(value: object) -> Optional[int]:
+    if value is None:
+        return None
+
+    if isinstance(value, (datetime.date, datetime.datetime, pd.Timestamp)):
+        year = value.year
+        return year if 1900 <= year <= 2100 else None
+
+    text = normalize_text(value)
+    if not text:
+        return None
+
+    match = PUBLICATION_YEAR_PATTERN.search(text)
+    if not match:
+        return None
+
+    year = int(match.group(1))
+    return year if 1900 <= year <= 2100 else None
+
+
 def pick_category(subject: object, classification: object) -> str:
     subject_text = normalize_text(subject)
     if subject_text:
@@ -96,6 +118,12 @@ def normalize_book_row(row: dict, priority: int) -> Optional[dict]:
         "title": title[:255],
         "author": normalize_text(row.get("作者") or row.get("author"))[:255] or None,
         "publisher": normalize_text(row.get("出版社") or row.get("publisher"))[:255] or None,
+        "publication_year": normalize_publication_year(
+            row.get("出版时间")
+            or row.get("出版日期")
+            or row.get("出版年")
+            or row.get("publication_year")
+        ),
         "price": normalize_float(row.get("定价") or row.get("price")),
         "stock": normalize_int(row.get("库存") or row.get("stock")),
         "category": pick_category(row.get("主题词"), row.get("中图法") or row.get("中图分类")),
@@ -111,7 +139,7 @@ def merge_book_records(records: List[dict]) -> dict:
     merged = ordered[0].copy()
 
     for record in ordered[1:]:
-        for field in ("publisher", "author", "description", "category"):
+        for field in ("publisher", "author", "description", "category", "publication_year"):
             if not merged.get(field) and record.get(field):
                 merged[field] = record[field]
 

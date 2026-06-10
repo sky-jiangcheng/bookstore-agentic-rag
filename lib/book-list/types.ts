@@ -48,6 +48,7 @@ export interface BookRecommendation {
   title: string;
   author: string | null;
   publisher: string | null;
+  publication_year: number | null;
   price: number | null;
   stock: number | null;
   category: string | null;

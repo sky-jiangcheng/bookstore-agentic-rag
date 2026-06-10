@@ -50,6 +50,10 @@ export async function GET(req: NextRequest) {
     const priceMax = searchParams.get('price_max') || searchParams.get('priceMax');
     if (priceMax) filters.price_max = parseFloat(priceMax);
 
+    const publicationYearMin =
+      searchParams.get('publication_year_min') || searchParams.get('publicationYearMin');
+    if (publicationYearMin) filters.publication_year_min = parseInt(publicationYearMin, 10);
+
     const limit = searchParams.get('limit');
     if (limit) filters.limit = parseInt(limit, 10);
 

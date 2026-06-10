@@ -19,6 +19,7 @@ const requirementSchema = z.object({
     author: z.string().optional(),
     price_min: z.number().optional(),
     price_max: z.number().optional(),
+    publication_year_min: z.number().int().min(1900).max(2100).optional(),
     exclude_keywords: z.array(z.string()).optional(),
   }),
   preferences: z.array(z.string()),

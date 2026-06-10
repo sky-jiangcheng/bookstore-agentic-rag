@@ -16,6 +16,7 @@ export interface BookRecommendation {
   explanation: string;
   book_id: string;
   publisher?: string | null;
+  publication_year?: number | null;
   category?: string | null;
   stock?: number | null;
   match_score?: number;
@@ -29,6 +30,7 @@ export interface RequirementSnapshot {
   constraints: {
     budget?: number;
     target_count?: number;
+    publication_year_min?: number;
     exclude_keywords?: string[];
   };
 }
@@ -123,6 +125,9 @@ export function normalizeBookRecommendations(
       explanation: typeof item.explanation === 'string' ? item.explanation.trim() : '',
       book_id: item.book_id == null ? '' : String(item.book_id),
       publisher: typeof item.publisher === 'string' ? item.publisher.trim() || null : null,
+      publication_year: typeof item.publication_year === 'number'
+        ? item.publication_year
+        : (Number(item.publication_year) || null),
       category: typeof item.category === 'string' ? item.category.trim() || null : null,
       stock: typeof item.stock === 'number' ? item.stock : null,
       match_score: typeof item.match_score === 'number' ? item.match_score : undefined,
@@ -142,6 +147,13 @@ export function normalizeRequirementSnapshot(
     constraints: {
       budget: typeof constraints.budget === 'number' ? constraints.budget : (constraints.budget != null ? Number(constraints.budget) : undefined),
       target_count: typeof constraints.target_count === 'number' ? constraints.target_count : Number(constraints.target_count) || undefined,
+      ...(constraints.publication_year_min != null
+        ? {
+            publication_year_min: typeof constraints.publication_year_min === 'number'
+              ? constraints.publication_year_min
+              : Number(constraints.publication_year_min) || undefined,
+          }
+        : {}),
       exclude_keywords: Array.isArray(constraints.exclude_keywords) ? constraints.exclude_keywords as string[] : [],
     },
   };

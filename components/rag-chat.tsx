@@ -632,6 +632,7 @@ export function RAGChat() {
       const seenBookIds = new Set<string>();
       const allBooks: Array<{
         book_id?: number; title: string; author?: string | null; publisher?: string | null;
+        publication_year?: number | null;
         category?: string | null; price?: number | null; stock?: number | null;
         score?: number | null; source?: string; remark?: string | null;
       }> = [];
@@ -648,6 +649,7 @@ export function RAGChat() {
                 title: book.title?.trim() || '未知书名',
                 author: book.author || null,
                 publisher: book.publisher || null,
+                publication_year: book.publication_year ?? null,
                 category: book.category || null,
                 price: typeof book.price === 'number' ? book.price : null,
                 stock: typeof book.stock === 'number' ? book.stock : null,
@@ -787,7 +789,8 @@ export function RAGChat() {
           return {
             title: book.title, author: book.author, price: Number(book.price),
             explanation: book.explanation, book_id: String(book.book_id ?? ''),
-            publisher: book.publisher, category: book.category, stock: book.stock,
+            publisher: book.publisher, publication_year: book.publication_year,
+            category: book.category, stock: book.stock,
             match_score: matchScore, source: book.source,
           };
         });
@@ -892,7 +895,8 @@ export function RAGChat() {
                 return {
                   title: book.title, author: book.author, price: typeof book.price === 'number' ? book.price : Number(book.price) || 0,
                   explanation: book.explanation, book_id: String(book.book_id ?? ''),
-                  publisher: book.publisher, category: book.category, stock: book.stock,
+                  publisher: book.publisher, publication_year: book.publication_year,
+                  category: book.category, stock: book.stock,
                   match_score: matchScore, source: book.source,
                 };
               });
