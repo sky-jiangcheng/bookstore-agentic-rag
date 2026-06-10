@@ -40,7 +40,7 @@ const Toast: React.FC<ToastProps> = ({
   return (
     <div
       className={cn(
-        'fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg border px-4 py-3 shadow-lg transition-all',
+        'flex items-center gap-2 rounded-lg border px-4 py-3 shadow-lg transition-all animate-in slide-in-from-right-4',
         typeStyles[type]
       )}
     >
@@ -69,7 +69,7 @@ export function useToast() {
     message: string,
     type: 'success' | 'error' | 'info' | 'warning' = 'info'
   ) => {
-    const id = Math.random().toString(36).substring(7);
+    const id = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
     setToasts((prev) => [...prev, { id, message, type }]);
   };
 
@@ -78,7 +78,7 @@ export function useToast() {
   };
 
   const ToastContainer: React.FC = () => (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
+    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
       {toasts.map((toast) => (
         <Toast
           key={toast.id}

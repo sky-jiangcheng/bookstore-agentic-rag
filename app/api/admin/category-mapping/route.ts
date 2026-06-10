@@ -48,7 +48,7 @@ async function getMappings(filters?: {
 
   // 有筛选条件 - 使用参数化查询避免SQL注入
   const conditions: string[] = [];
-  const values: any[] = [];
+  const values: (string | number | boolean | string[])[] = [];
   
   if (auto_only) {
     conditions.push('cm.auto_assigned = TRUE');
@@ -72,6 +72,9 @@ async function getMappings(filters?: {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const havingClause = havingParts.length > 0 ? `HAVING ${havingParts.join(' AND ')}` : '';
 
+  // 添加limit参数
+  values.push(limit);
+
   const result = await sql.query<CategoryMapping>(`
     SELECT 
       cm.category,
@@ -87,7 +90,7 @@ async function getMappings(filters?: {
     GROUP BY cm.category, cm.library_types, cm.confidence, cm.auto_assigned, cm.created_at, cm.updated_at
     ${havingClause}
     ORDER BY book_count DESC
-    LIMIT ${limit}
+    LIMIT $${values.length}
   `, values);
   
   return result.rows;

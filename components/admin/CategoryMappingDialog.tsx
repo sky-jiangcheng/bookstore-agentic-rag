@@ -80,8 +80,12 @@ export function CategoryMappingDialog() {
   // 筛选条件
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLibraryType, setFilterLibraryType] = useState<string>('all');
-  const [minBookCount, setMinBookCount] = useState(1000);
-  const [maxConfidence, setMaxConfidence] = useState(0.3);
+  const [minBookCount, setMinBookCount] = useState(
+    APP_CONFIG.categoryMapping.minBookCount
+  );
+  const [maxConfidence, setMaxConfidence] = useState(
+    APP_CONFIG.qualityIssues.lowConfidenceThreshold
+  );
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false);
 
   // 编辑状态

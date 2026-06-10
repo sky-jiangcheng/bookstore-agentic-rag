@@ -5,7 +5,14 @@ export function requireAuth(req: NextRequest) {
   const apiKey = process.env.ADMIN_API_KEY;
   
   if (!apiKey) {
-    console.warn('ADMIN_API_KEY not configured, skipping authentication');
+    console.error('ADMIN_API_KEY not configured in production');
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        { error: '服务器配置错误' },
+        { status: 500 }
+      );
+    }
+    console.warn('ADMIN_API_KEY not configured, skipping authentication in development');
     return null;
   }
   

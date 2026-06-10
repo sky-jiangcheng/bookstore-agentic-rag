@@ -21,69 +21,83 @@ interface CategoryResponse {
  * 按馆别分类统计
  */
 async function getCategoriesByLibraryType(libraryType?: string): Promise<CategoryResponse> {
+  let result;
+  
   if (!libraryType) {
-    // 获取全局分类统计
-  const result = await sql<CategoryItem>`
-    SELECT 
-      cm.category,
-      COUNT(*) AS book_count,
-      cm.library_types,
-      ROUND(cm.confidence::numeric, 4) AS confidence,
-      ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage
-    FROM category_library_mapping cm
-    JOIN books ON books.category = cm.category
-    GROUP BY cm.category, cm.library_types, cm.confidence
-    ORDER BY book_count DESC
-    LIMIT 100
-  `;
-
-  const totalBooks = await sql<{ total_books: number }>`
-    SELECT SUM(book_count) as total_books FROM (
-      SELECT COUNT(*) AS book_count
-      FROM category_library_mapping cm
-      JOIN books ON books.category = cm.category
-      GROUP BY cm.category
-    ) AS subquery
-  `;
-
+    result = await sql<CategoryItem & { total_books: string }>`
+      WITH categories AS (
+        SELECT 
+          cm.category,
+          COUNT(*) AS book_count,
+          cm.library_types,
+          ROUND(cm.confidence::numeric, 4) AS confidence,
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage
+        FROM category_library_mapping cm
+        JOIN books ON books.category = cm.category
+        GROUP BY cm.category, cm.library_types, cm.confidence
+        ORDER BY book_count DESC
+        LIMIT 100
+      ),
+      totals AS (
+        SELECT SUM(book_count) as total_books FROM categories
+      )
+      SELECT 
+        c.category,
+        c.book_count,
+        c.library_types,
+        c.confidence,
+        c.percentage,
+        t.total_books
+      FROM categories c
+      CROSS JOIN totals t
+    `;
+  } else {
+    result = await sql<CategoryItem & { total_books: string }>`
+      WITH categories AS (
+        SELECT 
+          cm.category,
+          COUNT(*) AS book_count,
+          cm.library_types,
+          ROUND(cm.confidence::numeric, 4) AS confidence,
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage
+        FROM category_library_mapping cm
+        JOIN books ON books.category = cm.category
+        WHERE cm.library_types @> ${`{${libraryType}}`}
+        GROUP BY cm.category, cm.library_types, cm.confidence
+        ORDER BY book_count DESC
+        LIMIT 100
+      ),
+      totals AS (
+        SELECT SUM(book_count) as total_books FROM categories
+      )
+      SELECT 
+        c.category,
+        c.book_count,
+        c.library_types,
+        c.confidence,
+        c.percentage,
+        t.total_books
+      FROM categories c
+      CROSS JOIN totals t
+    `;
+  }
+  
+  if (result.rows.length === 0) {
     return {
-      categories: result.rows,
-      total_categories: result.rows.length,
-      total_books: Number(totalBooks.rows[0]?.total_books || 0),
+      categories: [],
+      total_categories: 0,
+      total_books: 0,
+      ...(libraryType && { library_type: libraryType }),
     };
   }
 
-  // 按特定馆别筛选
-  const result = await sql<CategoryItem>`
-    SELECT 
-      cm.category,
-      COUNT(*) AS book_count,
-      cm.library_types,
-      ROUND(cm.confidence::numeric, 4) AS confidence,
-      ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage
-    FROM category_library_mapping cm
-    JOIN books ON books.category = cm.category
-    WHERE cm.library_types @> ${`{${libraryType}}`}
-    GROUP BY cm.category, cm.library_types, cm.confidence
-    ORDER BY book_count DESC
-    LIMIT 100
-  `;
-
-  const totalBooks = await sql<{ total_books: number }>`
-    SELECT SUM(book_count) as total_books FROM (
-      SELECT COUNT(*) AS book_count
-      FROM category_library_mapping cm
-      JOIN books ON books.category = cm.category
-      WHERE cm.library_types @> ${`{${libraryType}}`}
-      GROUP BY cm.category
-    ) AS subquery
-  `;
-
+  const { total_books } = result.rows[0];
+  
   return {
-    library_type: libraryType,
-    categories: result.rows,
+    categories: result.rows.map(({ total_books: _, ...rest }) => rest),
     total_categories: result.rows.length,
-    total_books: Number(totalBooks.rows[0]?.total_books || 0),
+    total_books: Number(total_books || 0),
+    ...(libraryType && { library_type: libraryType }),
   };
 }
 
