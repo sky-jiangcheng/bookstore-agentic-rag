@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { sql } from '@vercel/postgres';
+import { APP_CONFIG } from '@/config/app';
+import { requireAuth } from '@/lib/auth';
 
 interface QualityIssue {
   issue_type: string;
@@ -64,6 +66,30 @@ async function detectUnmappedCategories(): Promise<QualityIssue[]> {
  * 检测馆别与分类不匹配
  */
 async function detectMismatchedLibraries(): Promise<QualityIssue[]> {
+  const { mismatchedRules } = APP_CONFIG.qualityIssues;
+  
+  const whenConditions: string[] = [];
+  const whereConditions: string[] = [];
+  
+  for (const [category, forbiddenLibraries] of Object.entries(mismatchedRules)) {
+    const forbiddenArray = `{${forbiddenLibraries.join(',')}}`;
+    whenConditions.push(
+      `WHEN books.category = '${category}' AND books.library_types @> '${forbiddenArray}'::text[] ` +
+      `THEN '类别"${category}"不适合${forbiddenLibraries.join('、')}馆，建议调整'`
+    );
+    whereConditions.push(
+      `(category = '${category}' AND library_types @> '${forbiddenArray}'::text[])`
+    );
+  }
+  
+  const caseExpression = whenConditions.length > 0 
+    ? whenConditions.join(' ') 
+    : 'ELSE \'类别与馆别可能不匹配，建议人工审核\'';
+    
+  const whereExpression = whereConditions.length > 0
+    ? whereConditions.join(' OR ')
+    : 'FALSE';
+    
   const result = await sql<QualityIssue>`
     WITH issues AS (
       SELECT 
@@ -73,30 +99,10 @@ async function detectMismatchedLibraries(): Promise<QualityIssue[]> {
         books.library_types,
         0 AS confidence,
         CASE 
-          WHEN books.category IN ('企业管理', '高等学校', '大学生') 
-            AND books.library_types @> ARRAY['小学']
-          THEN '学科分类不适合小学馆，建议从小学馆排除'
-          
-          WHEN books.category IN ('童话', '儿童故事', '图画故事', '儿童小说') 
-            AND books.library_types @> ARRAY['大学']
-          THEN '儿童读物不应主要在大学馆，建议审核大学馆分类'
-          
-          WHEN books.category = '考研' 
-            AND books.library_types @> ARRAY['小学']
-          THEN '考研类书籍不适合小学馆'
-          
-          ELSE '类别与馆别可能不匹配，建议人工审核'
+          ${caseExpression}
         END AS suggestion
       FROM books
-      WHERE 
-        (category IN ('企业管理', '高等学校', '大学生') 
-         AND library_types @> ARRAY['小学'])
-        OR
-        (category IN ('童话', '儿童故事', '图画故事', '儿童小说')
-         AND library_types @> ARRAY['大学'])
-        OR
-        (category LIKE '%考研%'
-         AND library_types @> ARRAY['小学'])
+      WHERE ${whereExpression}
     )
     SELECT * FROM issues
     ORDER BY book_count DESC
@@ -149,8 +155,8 @@ async function getQualitySummary() {
   ]);
 
   return {
-    total_mappings: (totalMappings.rows[0] as any).count,
-    total_books: (totalBooks.rows[0] as any).count,
+    total_mappings: Number(totalMappings.rows[0]?.count || 0),
+    total_books: Number(totalBooks.rows[0]?.count || 0),
     issues: {
       low_confidence: lowConf.length,
       unmapped_category: unmapped.length,
@@ -162,6 +168,9 @@ async function getQualitySummary() {
 }
 
 export async function GET(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+  
   try {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type');

@@ -37,10 +37,19 @@ async function getCategoriesByLibraryType(libraryType?: string): Promise<Categor
     LIMIT 100
   `;
 
+  const totalBooks = await sql<{ total_books: number }>`
+    SELECT SUM(book_count) as total_books FROM (
+      SELECT COUNT(*) AS book_count
+      FROM category_library_mapping cm
+      JOIN books ON books.category = cm.category
+      GROUP BY cm.category
+    ) AS subquery
+  `;
+
     return {
       categories: result.rows,
       total_categories: result.rows.length,
-      total_books: result.rows.reduce((sum, row) => sum + Number(row.book_count), 0),
+      total_books: Number(totalBooks.rows[0]?.total_books || 0),
     };
   }
 
@@ -60,11 +69,21 @@ async function getCategoriesByLibraryType(libraryType?: string): Promise<Categor
     LIMIT 100
   `;
 
+  const totalBooks = await sql<{ total_books: number }>`
+    SELECT SUM(book_count) as total_books FROM (
+      SELECT COUNT(*) AS book_count
+      FROM category_library_mapping cm
+      JOIN books ON books.category = cm.category
+      WHERE cm.library_types @> ${`{${libraryType}}`}
+      GROUP BY cm.category
+    ) AS subquery
+  `;
+
   return {
     library_type: libraryType,
     categories: result.rows,
     total_categories: result.rows.length,
-    total_books: result.rows.reduce((sum, row) => sum + Number(row.book_count), 0),
+    total_books: Number(totalBooks.rows[0]?.total_books || 0),
   };
 }
 
