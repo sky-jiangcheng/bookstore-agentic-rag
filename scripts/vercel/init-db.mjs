@@ -42,6 +42,9 @@ try {
       book_category VARCHAR(100),
       library_codes TEXT[] NOT NULL DEFAULT '{}',
       popularity_score DECIMAL(5, 2) DEFAULT 0,
+      clc_code VARCHAR(50),
+      age_min SMALLINT,
+      age_max SMALLINT,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )
@@ -67,6 +70,20 @@ try {
     WHERE publication_year IS NOT NULL
   `;
   console.log('✅ Created index: idx_books_publication_year');
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_books_clc_code
+    ON books(clc_code)
+    WHERE clc_code IS NOT NULL
+  `;
+  console.log('✅ Created index: idx_books_clc_code');
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_books_age_range
+    ON books(age_min, age_max)
+    WHERE age_min IS NOT NULL OR age_max IS NOT NULL
+  `;
+  console.log('✅ Created index: idx_books_age_range');
 
   // Optional trigram index for fast ILIKE and fuzzy text matching.
   try {

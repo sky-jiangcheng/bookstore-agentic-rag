@@ -27,6 +27,9 @@ function normalizeBook(book) {
     description: book.description ? String(book.description).trim() : '',
     cover_url: book.cover_url ? String(book.cover_url).trim() : null,
     popularity_score: Number(book.popularity_score || 0),
+    clc_code: book.clc_code ? String(book.clc_code).trim() : null,
+    age_min: Number.isInteger(Number(book.age_min)) ? Number(book.age_min) : null,
+    age_max: Number.isInteger(Number(book.age_max)) ? Number(book.age_max) : null,
   };
 }
 
@@ -63,7 +66,10 @@ async function main() {
         book_category,
         description,
         cover_url,
-        popularity_score
+        popularity_score,
+        clc_code,
+        age_min,
+        age_max
       ) VALUES (
         ${book.id},
         ${book.title},
@@ -75,7 +81,10 @@ async function main() {
         ${book.category},
         ${book.description},
         ${book.cover_url},
-        ${book.popularity_score}
+        ${book.popularity_score},
+        ${book.clc_code},
+        ${book.age_min},
+        ${book.age_max}
       )
       ON CONFLICT (id) DO UPDATE SET
         title = EXCLUDED.title,
@@ -88,6 +97,9 @@ async function main() {
         description = EXCLUDED.description,
         cover_url = EXCLUDED.cover_url,
         popularity_score = EXCLUDED.popularity_score,
+        clc_code = EXCLUDED.clc_code,
+        age_min = EXCLUDED.age_min,
+        age_max = EXCLUDED.age_max,
         updated_at = NOW()
     `;
 

@@ -113,6 +113,9 @@ async function flushBatch(pool, batch) {
     'description',
     'cover_url',
     'popularity_score',
+    'clc_code',
+    'age_min',
+    'age_max',
   ];
   const valuesSql = batch
     .map((item, rowIndex) => {
@@ -130,6 +133,9 @@ async function flushBatch(pool, batch) {
         item.description ?? '',
         item.cover_url ?? null,
         normalizePopularityScore(item.popularity_score),
+        item.clc_code ?? null,
+        item.age_min ?? null,
+        item.age_max ?? null,
       ]
         .map(toSqlLiteral)
         .join(', ')})`;
@@ -151,6 +157,9 @@ async function flushBatch(pool, batch) {
         description = EXCLUDED.description,
         cover_url = EXCLUDED.cover_url,
         popularity_score = EXCLUDED.popularity_score,
+        clc_code = EXCLUDED.clc_code,
+        age_min = EXCLUDED.age_min,
+        age_max = EXCLUDED.age_max,
         updated_at = NOW()
     `,
   );

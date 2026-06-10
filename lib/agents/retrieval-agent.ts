@@ -223,7 +223,7 @@ function generatePseudoSql(
   limitNum: number
 ): string {
   if (!hasSpecificIntent) {
-    return `SELECT id, title, author, price, book_category, description, popularity_score
+    return `SELECT id, title, author, price, book_category, description, popularity_score, clc_code, age_min, age_max
 FROM books
 ORDER BY popularity_score DESC, updated_at DESC
 LIMIT ${limitNum};`;
@@ -259,7 +259,7 @@ LIMIT ${limitNum};`;
         .join('\n     OR ')}\n  )`
     : '';
 
-  return `SELECT id, title, author, price, book_category, description, popularity_score
+  return `SELECT id, title, author, price, book_category, description, popularity_score, clc_code, age_min, age_max
 FROM books
 WHERE (
      ${termsClause || '1=1'}

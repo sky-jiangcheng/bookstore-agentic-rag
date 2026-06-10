@@ -8,6 +8,7 @@ from scripts.huqifeng_prepare import (
     normalize_publication_year,
     parse_filter_paragraphs,
     pick_category,
+    parse_age_range,
 )
 
 
@@ -17,6 +18,25 @@ class NormalizeBarcodeTests(unittest.TestCase):
 
     def test_normalize_barcode_rejects_non_digits(self):
         self.assertIsNone(normalize_barcode("ABC-123"))
+
+
+class AgeRangeParsingTests(unittest.TestCase):
+    def test_parse_age_range_hyphenated(self):
+        self.assertEqual(parse_age_range("儿童绘本/7-10岁/科幻"), (7, 10))
+        self.assertEqual(parse_age_range("3 - 6 岁"), (3, 6))
+        self.assertEqual(parse_age_range("11-14"), (11, 14))
+
+    def test_parse_age_range_plus_suffix(self):
+        self.assertEqual(parse_age_range("少儿故事/7岁+/拼音"), (7, None))
+        self.assertEqual(parse_age_range("12+"), (12, None))
+
+    def test_parse_age_range_single_age(self):
+        self.assertEqual(parse_age_range("适合7岁"), (7, 7))
+
+    def test_parse_age_range_empty_or_invalid(self):
+        self.assertEqual(parse_age_range(""), (None, None))
+        self.assertEqual(parse_age_range(None), (None, None))
+        self.assertEqual(parse_age_range("儿童文学"), (None, None))
 
 
 class CategoryTests(unittest.TestCase):
@@ -40,14 +60,15 @@ class MergeBookRecordsTests(unittest.TestCase):
         self.assertIsNone(normalize_publication_year("2222-02-02"))
         self.assertIsNone(normalize_publication_year("编号2202301"))
 
-    def test_normalize_book_row_truncates_description_for_storage(self):
+    def test_normalize_book_row_extracts_new_fields(self):
         row = normalize_book_row(
             {
                 "条码": "9787545144246",
                 "书名": "主数据标题",
                 "出版时间": "2024-03",
                 "内容简介": "甲" * 260,
-                "主题词": "思维心理学",
+                "主题词": "思维心理学/7-10岁",
+                "中图分类": "B84-05",
             },
             priority=0,
         )
@@ -55,6 +76,9 @@ class MergeBookRecordsTests(unittest.TestCase):
         self.assertEqual(row["id"], "9787545144246")
         self.assertEqual(len(row["description"]), 200)
         self.assertEqual(row["publication_year"], 2024)
+        self.assertEqual(row["clc_code"], "B84-05")
+        self.assertEqual(row["age_min"], 7)
+        self.assertEqual(row["age_max"], 10)
 
     def test_merge_prefers_main_record_and_fills_missing_from_supplement(self):
         merged = merge_book_records(

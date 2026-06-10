@@ -104,6 +104,39 @@ def pick_category(subject: object, classification: object) -> str:
     return classification_text[:100] if classification_text else "general"
 
 
+def parse_age_range(subject: object) -> tuple[Optional[int], Optional[int]]:
+    subject_text = normalize_text(subject)
+    if not subject_text:
+        return None, None
+    
+    # Match patterns like "7-10岁", "7-10", "3 - 6 岁"
+    match = re.search(r"(\d+)\s*[-－~\s]\s*(\d+)\s*(?:岁|years|yr)?", subject_text)
+    if match:
+        try:
+            return int(match.group(1)), int(match.group(2))
+        except ValueError:
+            pass
+            
+    # Match patterns like "7岁+", "7+"
+    match_single = re.search(r"(\d+)\s*(?:岁|years|yr)?\s*\+", subject_text)
+    if match_single:
+        try:
+            return int(match_single.group(1)), None
+        except ValueError:
+            pass
+            
+    # Match patterns like "7岁"
+    match_single_only = re.search(r"(\d+)\s*岁", subject_text)
+    if match_single_only:
+        try:
+            val = int(match_single_only.group(1))
+            return val, val
+        except ValueError:
+            pass
+            
+    return None, None
+
+
 def normalize_book_row(row: dict, priority: int) -> Optional[dict]:
     book_id = normalize_barcode(
         row.get("条码") or row.get("barcode") or row.get("ISBN") or row.get("isbn")
@@ -113,11 +146,14 @@ def normalize_book_row(row: dict, priority: int) -> Optional[dict]:
         return None
 
     full_description = normalize_text(row.get("内容简介") or row.get("简介") or row.get("description"))
+    clc_code = normalize_text(row.get("中图法") or row.get("中图分类"))[:50] or None
+    age_min, age_max = parse_age_range(row.get("主题词"))
+    
     return {
         "id": str(book_id),
         "title": title[:255],
-        "author": normalize_text(row.get("作者") or row.get("author"))[:255] or None,
-        "publisher": normalize_text(row.get("出版社") or row.get("publisher"))[:255] or None,
+        "author": normalize_text(row.get("author") or row.get("作者"))[:255] or None,
+        "publisher": normalize_text(row.get("publisher") or row.get("出版社"))[:255] or None,
         "publication_year": normalize_publication_year(
             row.get("出版时间")
             or row.get("出版日期")
@@ -130,6 +166,9 @@ def normalize_book_row(row: dict, priority: int) -> Optional[dict]:
         "description": full_description[:DESCRIPTION_MAX_CHARS],
         "cover_url": None,
         "popularity_score": normalize_int(row.get("库存") or row.get("stock")),
+        "clc_code": clc_code,
+        "age_min": age_min,
+        "age_max": age_max,
         "_priority": priority,
     }
 
@@ -139,7 +178,7 @@ def merge_book_records(records: List[dict]) -> dict:
     merged = ordered[0].copy()
 
     for record in ordered[1:]:
-        for field in ("publisher", "author", "description", "category", "publication_year"):
+        for field in ("publisher", "author", "description", "category", "publication_year", "clc_code", "age_min", "age_max"):
             if not merged.get(field) and record.get(field):
                 merged[field] = record[field]
 

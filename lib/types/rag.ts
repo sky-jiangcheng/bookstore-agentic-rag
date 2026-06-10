@@ -12,6 +12,9 @@ export interface Book {
   relevance_score: number;
   popularity_score?: number;
   is_abnormal_id?: boolean;
+  clc_code?: string;
+  age_min?: number;
+  age_max?: number;
 }
 
 export interface RequirementAnalysis {

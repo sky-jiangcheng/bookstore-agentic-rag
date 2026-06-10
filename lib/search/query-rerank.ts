@@ -5,6 +5,9 @@ interface CatalogRerankBook {
   category?: unknown;
   description?: unknown;
   relevance_score?: unknown;
+  clc_code?: unknown;
+  age_min?: unknown;
+  age_max?: unknown;
 }
 
 interface ScoredBook<T extends CatalogRerankBook> {
@@ -360,12 +363,44 @@ function computeBookScore(
     }
   }
 
+  const clcCode = normalizeText(book.clc_code);
+  const ageMin = book.age_min !== null && book.age_min !== undefined ? Number(book.age_min) : null;
+  const ageMax = book.age_max !== null && book.age_max !== undefined ? Number(book.age_max) : null;
+
   if (hasHistoryBioTopic) {
-    if (containsAny(haystack, ['传记', '人物', '鲁迅'])) {
+    if (clcCode.startsWith('k')) {
+      score += 2.8;
+    } else if (containsAny(haystack, ['传记', '人物', '鲁迅'])) {
       score += 2.8;
     }
-    if (containsAny(haystack, ['小说'])) {
+    if (clcCode.startsWith('i24')) {
       score -= 2.6;
+    } else if (containsAny(haystack, ['小说'])) {
+      score -= 2.6;
+    }
+  }
+
+  // Boost science books for science-popularization queries
+  if (/科普|科学|知识/.test(normalizedQuery) && (clcCode.startsWith('n') || clcCode.startsWith('o') || clcCode.startsWith('p') || clcCode.startsWith('q') || clcCode.startsWith('r') || clcCode.startsWith('s') || clcCode.startsWith('t'))) {
+    score += 1.8;
+  }
+
+  // Optimize targeting alignment based on age range
+  if (requirement?.inferred_library_type === '小学') {
+    if (ageMin !== null && ageMax !== null) {
+      if (ageMin <= 12 && ageMax >= 6) {
+        score += 3.0; // Age-appropriate boost
+      } else {
+        score -= 3.0; // Age-inappropriate penalty
+      }
+    }
+  } else if (requirement?.inferred_library_type === '初高中') {
+    if (ageMin !== null && ageMax !== null) {
+      if (ageMin <= 18 && ageMax >= 12) {
+        score += 3.0; // Age-appropriate boost
+      } else {
+        score -= 3.0; // Age-inappropriate penalty
+      }
     }
   }
 

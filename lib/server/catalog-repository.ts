@@ -21,6 +21,9 @@ interface CatalogApiBook {
   description?: string | null;
   cover_url?: string | null;
   relevance_score?: number | null;
+  clc_code?: string | null;
+  age_min?: number | null;
+  age_max?: number | null;
 }
 
 /** Check if a book ID matches standard ISBN-13 format (978/979 + 10 digits) */
@@ -48,6 +51,9 @@ function mapBook(record: CatalogApiBook): Book {
     cover_url: record.cover_url ?? undefined,
     relevance_score: Number(record.relevance_score ?? 0),
     is_abnormal_id: isAbnormalId(idStr),
+    clc_code: record.clc_code ?? undefined,
+    age_min: record.age_min !== null && record.age_min !== undefined ? Number(record.age_min) : undefined,
+    age_max: record.age_max !== null && record.age_max !== undefined ? Number(record.age_max) : undefined,
   };
 }
 
@@ -117,7 +123,10 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
       COALESCE(book_category, 'general') AS category,
       COALESCE(description, '') AS description,
       cover_url,
-      COALESCE(popularity_score, 0) AS relevance_score
+      COALESCE(popularity_score, 0) AS relevance_score,
+      clc_code,
+      age_min,
+      age_max
     FROM books
     ${whereClause}
     ORDER BY COALESCE(popularity_score, 0) DESC, COALESCE(updated_at, NOW()) DESC
@@ -167,7 +176,10 @@ export async function getBookDetailsFromDatabase(bookId: string): Promise<Book |
       COALESCE(book_category, 'general') AS category,
       COALESCE(description, '') AS description,
       cover_url,
-      COALESCE(popularity_score, 0) AS relevance_score
+      COALESCE(popularity_score, 0) AS relevance_score,
+      clc_code,
+      age_min,
+      age_max
     FROM books
     WHERE id = $1
     LIMIT 1
@@ -286,7 +298,10 @@ export async function* streamBooksForExport(
         COALESCE(book_category, 'general') AS category,
         COALESCE(description, '') AS description,
         cover_url,
-        COALESCE(popularity_score, 0) AS relevance_score
+        COALESCE(popularity_score, 0) AS relevance_score,
+        clc_code,
+        age_min,
+        age_max
       FROM books
       ${whereClause}
         ${conditions.length > 0 ? 'AND' : 'WHERE'} id > $${paramIdx}
@@ -318,7 +333,10 @@ export async function getPopularBooksFromDatabase(count: number): Promise<Book[]
       COALESCE(book_category, 'general') AS category,
       COALESCE(description, '') AS description,
       cover_url,
-      COALESCE(popularity_score, 0) AS relevance_score
+      COALESCE(popularity_score, 0) AS relevance_score,
+      clc_code,
+      age_min,
+      age_max
     FROM books
     ORDER BY
       COALESCE(popularity_score, 0) DESC,
