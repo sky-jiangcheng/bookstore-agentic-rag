@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { sql } from '@vercel/postgres';
+import { requireAuth } from '@/lib/auth';
 
 interface CategoryMapping {
   book_category: string;
@@ -45,12 +46,16 @@ async function getMappings(filters?: {
     return result.rows;
   }
 
-  // 有筛选条件
-  const whereClause = auto_only ? 'WHERE cm.auto_assigned = TRUE' : '';
-  
+  // 有筛选条件 - 使用参数化查询避免SQL注入
+  const conditions: string[] = [];
+  const values: (string | number | boolean | string[])[] = [];
+
+  if (auto_only) {
+    conditions.push('cm.auto_assigned = TRUE');
+  }
+
   const havingParts: string[] = [];
-  const values: any[] = [];
-  
+
   if (min_book_count) {
     havingParts.push(`COUNT(*) >= $${values.length + 1}`);
     values.push(min_book_count);
@@ -63,10 +68,14 @@ async function getMappings(filters?: {
     havingParts.push(`cm.library_codes @> $${values.length + 1}`);
     values.push([library_type]);
   }
-  
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const havingClause = havingParts.length > 0 ? `HAVING ${havingParts.join(' AND ')}` : '';
 
-  const query = `
+  // 添加limit参数
+  values.push(limit);
+
+  const result = await sql.query<CategoryMapping>(`
     SELECT 
       cm.book_category,
       cm.library_codes,
@@ -81,11 +90,9 @@ async function getMappings(filters?: {
     GROUP BY cm.book_category, cm.library_codes, cm.confidence, cm.auto_assigned, cm.created_at, cm.updated_at
     ${havingClause}
     ORDER BY book_count DESC
-    LIMIT ${limit}
-  `;
+    LIMIT $${values.length}
+  `, values);
 
-  // 使用原始查询（注意：这有 SQL 注入风险，但值都是数字和受控的）
-  const result = await sql.query<CategoryMapping>(query, values);
   return result.rows;
 }
 
@@ -203,6 +210,9 @@ async function recalculateMapping(bookCategory?: string): Promise<{ updated: num
 }
 
 export async function GET(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(req.url);
     
@@ -238,6 +248,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const { book_category, library_codes, action } = body;
@@ -283,6 +296,9 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = requireAuth(req);
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const { action, book_category } = body;

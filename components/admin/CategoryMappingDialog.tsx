@@ -39,6 +39,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Settings, Search, Filter, RefreshCw, AlertCircle, X } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
+import { APP_CONFIG } from '@/config/app';
 
 interface CategoryMapping {
   book_category: string;
@@ -64,9 +66,10 @@ interface CategoryQualityResponse {
   issues: QualityIssues;
 }
 
-const LIBRARY_TYPES = ['公共馆', '成人目录', '初高中', '小学', '大学'];
+const { libraryTypes: LIBRARY_TYPES } = APP_CONFIG;
 
 export function CategoryMappingDialog() {
+  const { success, error: toastError, warning, ToastContainer } = useToast();
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('manage');
   const [mappings, setMappings] = useState<CategoryMapping[]>([]);
@@ -77,8 +80,12 @@ export function CategoryMappingDialog() {
   // 筛选条件
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLibraryType, setFilterLibraryType] = useState<string>('all');
-  const [minBookCount, setMinBookCount] = useState(1000);
-  const [maxConfidence, setMaxConfidence] = useState(0.3);
+  const [minBookCount, setMinBookCount] = useState(
+    APP_CONFIG.categoryMapping.minBookCount
+  );
+  const [maxConfidence, setMaxConfidence] = useState(
+    APP_CONFIG.qualityIssues.lowConfidenceThreshold
+  );
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false);
 
   // 编辑状态
@@ -119,7 +126,9 @@ export function CategoryMappingDialog() {
       const data = await response.json();
       setQualityData(data);
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '加载质量数据失败';
       console.error('加载质量数据失败:', err);
+      toastError(`加载质量数据失败: ${errorMsg}`);
     }
   };
 
@@ -172,7 +181,7 @@ export function CategoryMappingDialog() {
   const saveMapping = async () => {
     if (!editingCategory) return;
     if (editingLibraryTypes.length === 0) {
-      alert('请至少选择一个馆别');
+      warning('请至少选择一个馆别');
       return;
     }
     setSaving(true);
@@ -189,9 +198,9 @@ export function CategoryMappingDialog() {
       setEditingCategory(null);
       loadMappings();
       loadQualityData();
-      alert('保存成功！映射已更新为人工审核状态。');
+      success('保存成功！映射已更新为人工审核状态。');
     } catch (err) {
-      alert(err instanceof Error ? err.message : '保存失败');
+      toastError(err instanceof Error ? err.message : '保存失败');
     } finally {
       setSaving(false);
     }
@@ -212,9 +221,9 @@ export function CategoryMappingDialog() {
       if (!response.ok) throw new Error('重新计算失败');
       loadMappings();
       loadQualityData();
-      alert('重新计算成功！映射已更新为自动分配状态。');
+      success('重新计算成功！映射已更新为自动分配状态。');
     } catch (err) {
-      alert(err instanceof Error ? err.message : '重新计算失败');
+      toastError(err instanceof Error ? err.message : '重新计算失败');
     }
   };
 
@@ -233,9 +242,9 @@ export function CategoryMappingDialog() {
       if (!response.ok) throw new Error('重置失败');
       loadMappings();
       loadQualityData();
-      alert('已重置为自动分配状态。');
+      success('已重置为自动分配状态。');
     } catch (err) {
-      alert(err instanceof Error ? err.message : '重置失败');
+      toastError(err instanceof Error ? err.message : '重置失败');
     }
   };
 
@@ -250,35 +259,36 @@ export function CategoryMappingDialog() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Settings className="w-4 h-4 mr-2" />
-          分类映射管理
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-6xl max-h-[90vh]">
-        <DialogHeader>
-          <DialogTitle>分类映射管理</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Settings className="w-4 h-4 mr-2" />
+            分类映射管理
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-6xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>分类映射管理</DialogTitle>
+          </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-          <TabsList>
-            <TabsTrigger value="manage">映射管理</TabsTrigger>
-            <TabsTrigger value="quality">
-              质量监控
-              {qualityData?.issues.total ? (
-                <Badge variant="destructive" className="ml-2 h-5">
-                  {qualityData.issues.total}
-                </Badge>
-              ) : null}
-            </TabsTrigger>
-          </TabsList>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+            <TabsList>
+              <TabsTrigger value="manage">映射管理</TabsTrigger>
+              <TabsTrigger value="quality">
+                质量监控
+                {qualityData?.issues.total ? (
+                  <Badge variant="destructive" className="ml-2 h-5">
+                    {qualityData.issues.total}
+                  </Badge>
+                ) : null}
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="manage" className="mt-4">
-            {/* 筛选工具栏 */}
-            <div className="flex gap-4 mb-4 flex-wrap items-center">
-              <InputGroup className="flex-1 min-w-[200px]">
+            <TabsContent value="manage" className="mt-4">
+              {/* 筛选工具栏 */}
+              <div className="flex gap-4 mb-4 flex-wrap items-center">
+                <InputGroup className="flex-1 min-w-[200px]">
                 <Search className="w-4 h-4" />
                 <Input
                   placeholder="搜索分类..."
@@ -648,5 +658,7 @@ export function CategoryMappingDialog() {
         </Tabs>
       </DialogContent>
     </Dialog>
+    <ToastContainer />
+    </>
   );
 }
