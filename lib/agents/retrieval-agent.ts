@@ -245,8 +245,12 @@ LIMIT ${limitNum};`;
     ? `\n  AND price >= ${requirement.constraints.price_min}`
     : '';
 
-  const publicationYearClause = requirement.constraints.publication_year_min !== undefined
+  const publicationYearMinClause = requirement.constraints.publication_year_min !== undefined
     ? `\n  AND publication_year >= ${requirement.constraints.publication_year_min}`
+    : '';
+
+  const publicationYearMaxClause = requirement.constraints.publication_year_max !== undefined
+    ? `\n  AND publication_year <= ${requirement.constraints.publication_year_max}`
     : '';
 
   const authorClause = requirement.constraints.author
@@ -263,7 +267,7 @@ LIMIT ${limitNum};`;
 FROM books
 WHERE (
      ${termsClause || '1=1'}
-)${categoriesClause}${priceMinClause}${priceMaxClause}${publicationYearClause}${authorClause}${excludeClause}
+)${categoriesClause}${priceMinClause}${priceMaxClause}${publicationYearMinClause}${publicationYearMaxClause}${authorClause}${excludeClause}
 ORDER BY popularity_score DESC, updated_at DESC
 LIMIT ${limitNum};`;
 }

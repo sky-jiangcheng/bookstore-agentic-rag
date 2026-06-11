@@ -94,6 +94,10 @@ export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): 
     params.push(filters.publication_year_min);
     conditions.push(`publication_year >= $${params.length}`);
   }
+  if (filters.publication_year_max !== undefined) {
+    params.push(filters.publication_year_max);
+    conditions.push(`publication_year <= $${params.length}`);
+  }
   if (filters.categories && filters.categories.length > 0) {
     const placeholders = filters.categories.map((_, i) => `$${params.length + i + 1}`).join(',');
     conditions.push(`book_category IN (${placeholders})`);
@@ -271,6 +275,10 @@ export async function* streamBooksForExport(
   if (filters.publication_year_min !== undefined) {
     baseParams.push(filters.publication_year_min);
     conditions.push(`publication_year >= $${paramIdx++}`);
+  }
+  if (filters.publication_year_max !== undefined) {
+    baseParams.push(filters.publication_year_max);
+    conditions.push(`publication_year <= $${paramIdx++}`);
   }
   if (filters.categories && filters.categories.length > 0) {
     const placeholders = filters.categories.map(() => `$${paramIdx++}`).join(',');

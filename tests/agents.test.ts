@@ -6,6 +6,7 @@ import type { RequirementAnalysis } from '../lib/types/rag';
 import {
   buildLocalFallbackRequirement,
   parsePublicationYearMin,
+  parsePublicationYearMax,
   sanitizePromptInput,
   extractQueryKeywords,
   parseBudget,
@@ -83,6 +84,36 @@ test('local fallback converts recent-year wording into an inclusive minimum year
     2026,
   );
   assert.equal(requirement.constraints.publication_year_min, 2025);
+});
+
+test('parsePublicationYearMin parses specific year patterns', () => {
+  // "20XX年以后/之后/出版/起" 形式
+  assert.equal(parsePublicationYearMin('推荐2025年以后的历史书', 2026), 2025);
+  assert.equal(parsePublicationYearMin('找2020年之后出版的Python编程书', 2026), 2020);
+  assert.equal(parsePublicationYearMin('2018年起出版的教材', 2026), 2018);
+  assert.equal(parsePublicationYearMin('2023年以上出版的图书', 2026), 2023);
+
+  // "20XX年到20XX年" 范围形式，取下限
+  assert.equal(parsePublicationYearMin('2020年到2025年之间出版的书', 2026), 2020);
+  assert.equal(parsePublicationYearMin('2018-2022年的小说', 2026), 2018);
+
+  // 无年份信息
+  assert.equal(parsePublicationYearMin('推荐经典小说', 2026), undefined);
+});
+
+test('parsePublicationYearMax parses upper bound year patterns', () => {
+  // "20XX年以前/之前/以内/以下" 形式
+  assert.equal(parsePublicationYearMax('推荐2020年以前的历史书'), 2020);
+  assert.equal(parsePublicationYearMax('找2018年之前出版的Python编程书'), 2018);
+  assert.equal(parsePublicationYearMax('2022年以内的教材'), 2022);
+  assert.equal(parsePublicationYearMax('2023年以下出版的图书'), 2023);
+
+  // "20XX年到20XX年" 范围形式，取上限
+  assert.equal(parsePublicationYearMax('2020年到2025年之间出版的书'), 2025);
+  assert.equal(parsePublicationYearMax('2018-2022年的小说'), 2022);
+
+  // 无年份信息
+  assert.equal(parsePublicationYearMax('推荐经典小说'), undefined);
 });
 
 test('sanitizePromptInput strips role markers', () => {

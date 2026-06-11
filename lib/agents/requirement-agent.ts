@@ -26,6 +26,7 @@ const RequirementAnalysisSchema = z.object({
     price_min: z.number().optional(),
     price_max: z.number().optional(),
     publication_year_min: z.number().int().min(1900).max(2100).optional(),
+    publication_year_max: z.number().int().min(1900).max(2100).optional(),
     exclude_keywords: z.array(z.string()).optional(),
   }),
   preferences: z.array(z.string()),
@@ -149,8 +150,47 @@ export function parsePublicationYearMin(
   query: string,
   referenceYear = new Date().getFullYear(),
 ): number | undefined {
+  // "近 N 年 / 最近 N 年" 形式
   const years = parseRecencyYears(query);
-  return years ? referenceYear - years + 1 : undefined;
+  if (years) return referenceYear - years + 1;
+
+  // "20XX 年以后/之后/出版/起" 形式
+  const afterMatch = query.match(/(20\d{2})\s*年\s*(?:以后|之后|出版|起|以上)/iu);
+  if (afterMatch) {
+    const year = Number(afterMatch[1]);
+    if (year >= 1900 && year <= 2100) return year;
+  }
+
+  // "20XX 年到 20XX 年之间" 范围形式，取下限
+  // 支持多种格式: "2020年到2025年", "2020-2025年", "2018年-2022年"
+  const rangeMatch = query.match(/(20\d{2})(?:\s*年)?\s*(?:到|至|－|-)\s*(20\d{2})\s*年/iu);
+  if (rangeMatch) {
+    const from = Number(rangeMatch[1]);
+    if (from >= 1900 && from <= 2100) return from;
+  }
+
+  return undefined;
+}
+
+export function parsePublicationYearMax(
+  query: string,
+): number | undefined {
+  // "20XX 年以前/之前/以内/以下" 形式
+  const beforeMatch = query.match(/(20\d{2})\s*年\s*(?:以前|之前|以内|以下)/iu);
+  if (beforeMatch) {
+    const year = Number(beforeMatch[1]);
+    if (year >= 1900 && year <= 2100) return year;
+  }
+
+  // "20XX 年到 20XX 年之间" 范围形式，取上限
+  // 支持多种格式: "2020年到2025年", "2020-2025年", "2018年-2022年"
+  const rangeMatch = query.match(/(20\d{2})(?:\s*年)?\s*(?:到|至|－|-)\s*(20\d{2})\s*年/iu);
+  if (rangeMatch) {
+    const to = Number(rangeMatch[2]);
+    if (to >= 1900 && to <= 2100) return to;
+  }
+
+  return undefined;
 }
 
 /**
@@ -248,6 +288,7 @@ function normalizeRequirement(
   const targetCount = parseTargetCount(userQuery);
   const recencyPreference = parseRecencyPreference(positiveQuery);
   const publicationYearMin = parsePublicationYearMin(positiveQuery, referenceYear);
+  const publicationYearMax = parsePublicationYearMax(positiveQuery);
   if (recencyPreference) preferences.add(recencyPreference);
 
   return {
@@ -260,6 +301,7 @@ function normalizeRequirement(
       ...(budget !== undefined ? { budget } : {}),
       ...(targetCount !== undefined ? { target_count: targetCount } : {}),
       ...(publicationYearMin !== undefined ? { publication_year_min: publicationYearMin } : {}),
+      ...(publicationYearMax !== undefined ? { publication_year_max: publicationYearMax } : {}),
       ...(parsedExclusions.length > 0 ? { exclude_keywords: parsedExclusions } : {}),
     },
     preferences: Array.from(preferences),
@@ -292,7 +334,7 @@ ${JSON.stringify(sanitizePromptInput(userQuery))}
 1. categories: 用户提到的书籍分类（如"小说"，"历史"，"围棋"，"计算机"等）
 2. keywords: 关键词（书名、主题、作者等关键词）
 3. expanded_search_terms: 搜索扩展词——根据用户的意图，生成 5-15 个同义/近义/相关的搜索词，用于覆盖用户可能不知道但内容相关的表达。例如用户说"围棋入门"，扩展词可以是["围棋", "围棋入门", "围棋教程", "围棋基础", "围棋技巧", "学围棋", "围棋初级", "围棋"]；用户说"Python编程"，扩展词可以是["Python", "Python编程", "Python开发", "Python入门", "编程", "Python语言"]。**要求：必须包含用户的原始关键词。**
-4. constraints: 约束条件 - 预算（总价上限），目标书籍数量，特定作者，价格区间，最近出版年份下限(publication_year_min，例如当前为2026年，“近2年”填2025)，排除关键词(exclude_keywords)
+4. constraints: 约束条件 - 预算（总价上限），目标书籍数量，特定作者，价格区间，最近出版年份下限(publication_year_min，例如当前为2026年，“近2年”填2025)，出版年份上限(publication_year_max，例如“2020年以前”填2020，“2020-2025年”取2025)，排除关键词(exclude_keywords)
 5. preferences: 用户偏好描述（如"深入浅出"，"经典"，"新书"）
 6. inferred_library_type: 智能判断当前查询意图对应的目标图书馆别。从以下固定值中选择一个：'公共馆'、'成人目录'、'初高中'、'小学'、'大学'、'none'。
    - 判断指南：

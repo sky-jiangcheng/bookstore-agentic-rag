@@ -30,6 +30,7 @@ export interface RequirementAnalysis {
     price_min?: number;
     price_max?: number;
     publication_year_min?: number;
+    publication_year_max?: number;
     exclude_keywords?: string[];
   };
   preferences: string[];
@@ -76,6 +77,7 @@ export interface CatalogSearchFilters {
   price_min?: number;
   price_max?: number;
   publication_year_min?: number;
+  publication_year_max?: number;
   query?: string;
   search_terms?: string[];
   limit?: number;
