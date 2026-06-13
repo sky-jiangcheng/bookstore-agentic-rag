@@ -82,6 +82,6 @@ export function buildPseudoSql(
     'FROM books',
     clauses.length > 0 ? `WHERE ${clauses.join('\n  AND ')}` : '-- 暂无过滤条件',
     'ORDER BY relevance_score DESC',
-    `LIMIT ${requirement.constraints.target_count ?? 15};`,
+    `LIMIT ${Math.min(requirement.constraints.target_count ?? 15, 100)};`,
   ].join('\n');
 }

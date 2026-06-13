@@ -160,9 +160,9 @@ export function enforceHardConstraints(books: Book[], requirement: RequirementAn
   });
 
   const fallbackBooks = filtered.length > 0 ? filtered : books.filter((book) => !isBookExcluded(book, requirement));
-  const sorted = [...fallbackBooks].sort((a, b) => computeRelevanceScore(b, requirement) - computeRelevanceScore(a, requirement));
-
-  return sorted;
+  const scored = fallbackBooks.map((book) => ({ book, score: computeRelevanceScore(book, requirement) }));
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map(({ book }) => book);
 }
 
 interface RetrieveOptions {
@@ -176,8 +176,6 @@ async function retrieveKeyword(requirement: RequirementAnalysis, topK: number, o
         ? requirement.expanded_search_terms
         : expandSearchTerms(requirement);
 
-    const mergedBooks = new Map<string, Book>();
-
     const books = await searchCatalog({
       author: requirement.constraints.author,
       price_min: requirement.constraints.price_min,
@@ -190,15 +188,8 @@ async function retrieveKeyword(requirement: RequirementAnalysis, topK: number, o
       library_category: options?.libraryCategory,
     });
 
-    for (const book of books) {
-      if (!mergedBooks.has(book.book_id)) {
-        mergedBooks.set(book.book_id, book);
-      }
-    }
-
-    const limitedBooks = Array.from(mergedBooks.values()).slice(0, topK * 2);
-    console.log(`[keyword] Retrieved ${limitedBooks.length} books from catalog search (terms: ${searchTerms.length})`);
-    return limitedBooks;
+    console.log(`[keyword] Retrieved ${books.length} books from catalog search (terms: ${searchTerms.length})`);
+    return books;
   } catch (error) {
     console.error('[keyword] retrieval failed:', error);
     throw error;
@@ -216,6 +207,10 @@ async function retrievePopular(topK: number): Promise<Book[]> {
   }
 }
 
+function pseudoEscape(val: string): string {
+  return val.replace(/'/g, "''");
+}
+
 function generatePseudoSql(
   requirement: RequirementAnalysis,
   searchTerms: string[],
@@ -230,11 +225,11 @@ LIMIT ${limitNum};`;
   }
 
   const termsClause = searchTerms
-    .map((term) => `(title || ' ' || author || ' ' || book_category) ILIKE '%${term}%'`)
+    .map((term) => `(title || ' ' || author || ' ' || book_category) ILIKE '%${pseudoEscape(term)}%'`)
     .join('\n     OR ');
 
   const categoriesClause = requirement.categories.length > 0
-    ? `\n  AND book_category IN (${requirement.categories.map((c) => `'${c}'`).join(', ')})`
+    ? `\n  AND book_category IN (${requirement.categories.map((c) => `'${pseudoEscape(c)}'`).join(', ')})`
     : '';
 
   const priceMaxClause = requirement.constraints.price_max !== undefined
@@ -254,12 +249,12 @@ LIMIT ${limitNum};`;
     : '';
 
   const authorClause = requirement.constraints.author
-    ? `\n  AND author ILIKE '%${requirement.constraints.author}%'`
+    ? `\n  AND author ILIKE '%${pseudoEscape(requirement.constraints.author)}%'`
     : '';
 
   const excludeClause = requirement.constraints.exclude_keywords?.length
     ? `\n  -- 排除项过滤\n  AND NOT (\n    ${requirement.constraints.exclude_keywords
-        .map((k) => `(title || ' ' || author || ' ' || book_category) ILIKE '%${k}%'`)
+        .map((k) => `(title || ' ' || author || ' ' || book_category) ILIKE '%${pseudoEscape(k)}%'`)
         .join('\n     OR ')}\n  )`
     : '';
 

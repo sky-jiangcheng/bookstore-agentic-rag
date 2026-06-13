@@ -6,6 +6,27 @@ import { buildCatalogTextSearch, SIMPLE_RERANK_THRESHOLD } from '@/lib/search/ca
 import { buildCatalogSearchTerms, rerankCatalogBooks } from '@/lib/search/query-rerank';
 import type { Book, CatalogSearchFilters } from '@/lib/types/rag';
 
+/**
+ * Shared SELECT columns for book queries.
+ * Used by searchCatalogFromDatabase, streamBooksForExport, and getPopularBooksFromDatabase.
+ */
+const BOOK_SELECT_COLUMNS = `
+  id AS book_id,
+  title,
+  author,
+  COALESCE(publisher, 'Unknown Publisher') AS publisher,
+  publication_year,
+  COALESCE(price, 0) AS price,
+  COALESCE(stock, 0) AS stock,
+  COALESCE(book_category, 'general') AS category,
+  '' AS description,
+  cover_url,
+  COALESCE(popularity_score, 0) AS relevance_score,
+  clc_code,
+  age_min,
+  age_max
+`;
+
 
 
 interface CatalogApiBook {
@@ -62,79 +83,84 @@ function normalizeBooks(records: CatalogApiBook[]): Book[] {
 }
 
 /**
- * 搜索目录：关键词 ILIKE 搜索 + 筛选。
- * query 来自用户自由文本，无 query 时仅按筛选条件返回热门图书。
+ * Build WHERE conditions and params for catalog search filters.
+ * startParamIndex specifies the first `$N` parameter number.
  */
-export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): Promise<Book[]> {
+function buildWhereConditions(
+  filters: CatalogSearchFilters,
+  startParamIndex: number,
+): { conditions: string[]; params: unknown[]; nextParamIndex: number } {
   const conditions: string[] = [];
   const params: unknown[] = [];
+  let paramIdx = startParamIndex;
 
   const searchTerms = filters.search_terms?.length
     ? filters.search_terms
     : buildCatalogSearchTerms(filters.query ?? '');
-  const textSearch = buildCatalogTextSearch(searchTerms, params.length + 1);
+  const textSearch = buildCatalogTextSearch(searchTerms, paramIdx);
   if (textSearch.condition) {
     conditions.push(textSearch.condition);
     params.push(...textSearch.params);
+    paramIdx += textSearch.params.length;
   }
 
   if (filters.author) {
     params.push(`%${filters.author}%`);
-    conditions.push(`author ILIKE $${params.length}`);
+    conditions.push(`author ILIKE $${paramIdx++}`);
   }
   if (filters.price_min !== undefined) {
     params.push(filters.price_min);
-    conditions.push(`price >= $${params.length}`);
+    conditions.push(`price >= $${paramIdx++}`);
   }
   if (filters.price_max !== undefined) {
     params.push(filters.price_max);
-    conditions.push(`price <= $${params.length}`);
+    conditions.push(`price <= $${paramIdx++}`);
   }
   if (filters.publication_year_min !== undefined) {
     params.push(filters.publication_year_min);
-    conditions.push(`publication_year >= $${params.length}`);
+    conditions.push(`publication_year >= $${paramIdx++}`);
   }
   if (filters.publication_year_max !== undefined) {
     params.push(filters.publication_year_max);
-    conditions.push(`publication_year <= $${params.length}`);
+    conditions.push(`publication_year <= $${paramIdx++}`);
   }
   if (filters.categories && filters.categories.length > 0) {
-    const placeholders = filters.categories.map((_, i) => `$${params.length + i + 1}`).join(',');
+    const placeholders = filters.categories.map(() => `$${paramIdx++}`).join(',');
     conditions.push(`book_category IN (${placeholders})`);
     params.push(...filters.categories);
   }
 
   if (filters.library_category && filters.library_category !== 'none') {
     params.push(filters.library_category);
-    conditions.push(`library_codes @> ARRAY[$${params.length}]::text[]`);
+    conditions.push(`library_codes @> ARRAY[$${paramIdx++}]::text[]`);
   }
 
+  return { conditions, params, nextParamIndex: paramIdx };
+}
+
+/**
+ * 搜索目录：关键词 ILIKE 搜索 + 筛选。
+ * query 来自用户自由文本，无 query 时仅按筛选条件返回热门图书。
+ */
+export async function searchCatalogFromDatabase(filters: CatalogSearchFilters): Promise<Book[]> {
+  const { conditions, params } = buildWhereConditions(filters, 1);
+  const searchTerms = filters.search_terms?.length
+    ? filters.search_terms
+    : buildCatalogSearchTerms(filters.query ?? '');
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const limit = filters.limit !== undefined ? filters.limit : (filters.page !== undefined ? 30 : 10000);
+  const safeLimit = filters.limit !== undefined
+    ? Math.max(1, Math.min(10000, Math.floor(filters.limit)))
+    : (filters.page !== undefined ? 30 : 500);
   const page = filters.page !== undefined ? Math.max(1, filters.page) : 1;
-  const offset = (page - 1) * limit;
-  const limitClause = limit > 0 ? `LIMIT ${limit} OFFSET ${offset}` : '';
+  const offset = (page - 1) * safeLimit;
 
   const query = `
-    SELECT
-      id AS book_id,
-      title,
-      author,
-      COALESCE(publisher, 'Unknown Publisher') AS publisher,
-      publication_year,
-      COALESCE(price, 0) AS price,
-      COALESCE(stock, 0) AS stock,
-      COALESCE(book_category, 'general') AS category,
-      '' AS description,
-      cover_url,
-      COALESCE(popularity_score, 0) AS relevance_score,
-      clc_code,
-      age_min,
-      age_max
+    SELECT${BOOK_SELECT_COLUMNS}
     FROM books
     ${whereClause}
     ORDER BY COALESCE(popularity_score, 0) DESC, COALESCE(updated_at, NOW()) DESC
-    ${limitClause}
+    LIMIT ${safeLimit} OFFSET ${offset}
   `;
 
   const books = normalizeBooks((await sql.query<CatalogApiBook>(query, params)).rows);
@@ -195,7 +221,7 @@ export async function getBookDetailsFromDatabase(bookId: string): Promise<Book |
 }
 
 /**
- * Lightweight rerank for large result sets (10K+).
+ * Lightweight rerank for large result sets (> SIMPLE_RERANK_THRESHOLD).
  * Skips expensive per-book scoring; applies field-weighted scoring only.
  */
 function applySimpleRerank(
@@ -246,74 +272,26 @@ const EXPORT_BATCH_SIZE = 500;
 export async function* streamBooksForExport(
   filters: CatalogSearchFilters,
 ): AsyncGenerator<Book[], void, undefined> {
-  const conditions: string[] = [];
-  const baseParams: unknown[] = [];
-  let paramIdx = 1;
+  const { conditions: baseConditions, params: baseParams } = buildWhereConditions(filters, 1);
+  // Increment paramIdx past where buildWhereConditions ended
+  let paramIdx = 1 + baseParams.length;
 
-  const searchTerms = filters.search_terms?.length
-    ? filters.search_terms
-    : buildCatalogSearchTerms(filters.query ?? '');
-  const textSearch = buildCatalogTextSearch(searchTerms, paramIdx);
-  if (textSearch.condition) {
-    conditions.push(textSearch.condition);
-    baseParams.push(...textSearch.params);
-    paramIdx += textSearch.params.length;
-  }
-
-  if (filters.author) {
-    baseParams.push(`%${filters.author}%`);
-    conditions.push(`author ILIKE $${paramIdx++}`);
-  }
-  if (filters.price_min !== undefined) {
-    baseParams.push(filters.price_min);
-    conditions.push(`price >= $${paramIdx++}`);
-  }
-  if (filters.price_max !== undefined) {
-    baseParams.push(filters.price_max);
-    conditions.push(`price <= $${paramIdx++}`);
-  }
-  if (filters.publication_year_min !== undefined) {
-    baseParams.push(filters.publication_year_min);
-    conditions.push(`publication_year >= $${paramIdx++}`);
-  }
-  if (filters.publication_year_max !== undefined) {
-    baseParams.push(filters.publication_year_max);
-    conditions.push(`publication_year <= $${paramIdx++}`);
-  }
-  if (filters.categories && filters.categories.length > 0) {
-    const placeholders = filters.categories.map(() => `$${paramIdx++}`).join(',');
-    conditions.push(`book_category IN (${placeholders})`);
-    baseParams.push(...filters.categories);
-  }
-
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const limit = filters.limit ?? 10000;
+  const whereClause = baseConditions.length > 0 ? `WHERE ${baseConditions.join(' AND ')}` : '';
+  const safeLimit = filters.limit !== undefined
+    ? Math.max(1, Math.min(100000, Math.floor(filters.limit)))
+    : 10000;
   let lastId = '0';
   let totalFetched = 0;
 
-  while (totalFetched < limit) {
-    const batchSize = Math.min(EXPORT_BATCH_SIZE, limit - totalFetched);
+  while (totalFetched < safeLimit) {
+    const batchSize = Math.min(EXPORT_BATCH_SIZE, safeLimit - totalFetched);
     const params = [...baseParams, lastId, batchSize];
 
     const query = `
-      SELECT
-        id AS book_id,
-        title,
-        author,
-        COALESCE(publisher, 'Unknown Publisher') AS publisher,
-        publication_year,
-        COALESCE(price, 0) AS price,
-        COALESCE(stock, 0) AS stock,
-        COALESCE(book_category, 'general') AS category,
-        '' AS description,
-        cover_url,
-        COALESCE(popularity_score, 0) AS relevance_score,
-        clc_code,
-        age_min,
-        age_max
+      SELECT${BOOK_SELECT_COLUMNS}
       FROM books
       ${whereClause}
-        ${conditions.length > 0 ? 'AND' : 'WHERE'} id > $${paramIdx}
+        ${baseConditions.length > 0 ? 'AND' : 'WHERE'} id > $${paramIdx}
       ORDER BY id ASC
       LIMIT $${paramIdx + 1}
     `;
@@ -331,21 +309,7 @@ export async function* streamBooksForExport(
 
 export async function getPopularBooksFromDatabase(count: number): Promise<Book[]> {
   const query = `
-    SELECT
-      id AS book_id,
-      title,
-      author,
-      COALESCE(publisher, 'Unknown Publisher') AS publisher,
-      publication_year,
-      COALESCE(price, 0) AS price,
-      COALESCE(stock, 0) AS stock,
-      COALESCE(book_category, 'general') AS category,
-      '' AS description,
-      cover_url,
-      COALESCE(popularity_score, 0) AS relevance_score,
-      clc_code,
-      age_min,
-      age_max
+    SELECT${BOOK_SELECT_COLUMNS}
     FROM books
     ORDER BY
       COALESCE(popularity_score, 0) DESC,

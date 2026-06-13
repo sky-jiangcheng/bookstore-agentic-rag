@@ -16,6 +16,16 @@ interface ScoredBook<T extends CatalogRerankBook> {
   index: number;
 }
 
+// Module-level compiled regex patterns for reuse in scoring loops
+const HEALTH_PATTERN = /健康|养生|科普|医疗|免疫力|长辈|老人|中老年/;
+const SCIENCE_PATTERN = /科普|科学|知识/;
+const XIANGQI_PATTERN = /象棋/;
+const WEIQI_PATTERN = /围棋/;
+const GUOJIXIANGQI_PATTERN = /国际象棋/;
+const WUZIQI_PATTERN = /五子棋/;
+const HISTORY_PATTERN = /历史|传记|人物|鲁迅/;
+const LUXUN_PATTERN = /鲁迅/;
+
 const CATEGORY_ALIASES: Record<string, string[]> = {
   健康: ['健康', '养生', '医疗', '免疫力', '中老年', '老人', '长辈', '保健'],
   科普: ['科普', '科学', '知识', '百科'],
@@ -79,7 +89,6 @@ const SEARCH_INTENT_RULES: Array<{ terms: string[]; triggers: string[] }> = [
   { terms: ['围棋', '定式', '死活', '布局', '实战'], triggers: ['围棋'] },
   { terms: ['国际象棋', '开局', '中局', '残局', '实战'], triggers: ['国际象棋'] },
   { terms: ['五子棋', '布局', '实战', '开局'], triggers: ['五子棋'] },
-  // 法律/行政法
   { terms: ['法律', '法学', '行政法', '行政诉讼法', '宪法', '民法', '刑法'], triggers: ['法律', '法学', '行政法', '行政诉讼法', '行政', '诉讼法', '宪法', '民法', '刑法'] },
   // 公共管理/政治学
   { terms: ['公共管理', '行政管理', '政治学', '政治', '公共', '行政'], triggers: ['公共管理', '公共行政', '政治学', '行政管理', '公共', '行政'] },
@@ -236,8 +245,8 @@ function matchCategories(book: CatalogRerankBook, normalizedQuery: string): stri
 
 interface RerankOptions {
   query?: unknown;
-  requirement?: any;
-  feedbackStats?: Record<string, any>;
+  requirement?: import('@/lib/types/rag').RequirementAnalysis;
+  feedbackStats?: Record<string, import('@/lib/types/rag').FeedbackStats>;
 }
 
 function computeBookScore(
@@ -247,7 +256,7 @@ function computeBookScore(
 ): { score: number; index: number } {
   const { query, requirement, feedbackStats } = options;
   const normalizedQuery = normalizeText(requirement?.original_query || query);
-  const queryTerms = requirement?.keywords?.length > 0
+  const queryTerms = requirement?.keywords?.length
     ? unique(requirement.keywords.map((k: string) => k.toLowerCase()))
     : extractTerms(requirement?.original_query || query);
   const title = normalizeText(book.title);
@@ -273,7 +282,7 @@ function computeBookScore(
   const categoryHits = matchCount(category, queryTerms);
   const descriptionHits = matchCount(description, queryTerms);
   
-  const categoriesToMatch = requirement?.categories?.length > 0
+  const categoriesToMatch = requirement?.categories?.length
     ? requirement.categories
     : matchCategories(book, normalizedQuery);
 
@@ -295,7 +304,7 @@ function computeBookScore(
     score += 1.25;
   }
 
-  if (titleHits > 0 && /健康|养生|科普|医疗|免疫力|长辈|老人|中老年/.test(normalizedQuery)) {
+  if (titleHits > 0 && HEALTH_PATTERN.test(normalizedQuery)) {
     score += 0.9;
   }
 
@@ -312,22 +321,22 @@ function computeBookScore(
     score -= 10;
   }
 
-  if (/健康|养生|医疗|免疫力|长辈|老人|中老年/.test(normalizedQuery) && /健康|养生|医疗|免疫力|长辈|老人|中老年/.test(haystack)) {
+  if (HEALTH_PATTERN.test(normalizedQuery) && HEALTH_PATTERN.test(haystack)) {
     score += 2.2;
   }
 
-  if (/科普|科学|知识/.test(normalizedQuery) && /科普|科学|知识/.test(haystack)) {
+  if (SCIENCE_PATTERN.test(normalizedQuery) && SCIENCE_PATTERN.test(haystack)) {
     score += 1.8;
   }
 
-  const hasQigongTopic = /象棋/.test(normalizedQuery);
-  const hasWeiqiTopic = /围棋/.test(normalizedQuery);
-  const hasGuojiXiangqiTopic = /国际象棋/.test(normalizedQuery);
-  const hasWuziqiTopic = /五子棋/.test(normalizedQuery);
-  const hasHistoryBioTopic = /历史/.test(normalizedQuery) || /传记/.test(normalizedQuery) || /人物/.test(normalizedQuery) || /鲁迅/.test(normalizedQuery);
-  const hasLuXunTopic = /鲁迅/.test(normalizedQuery);
+  const hasXiangqiTopic = XIANGQI_PATTERN.test(normalizedQuery);
+  const hasWeiqiTopic = WEIQI_PATTERN.test(normalizedQuery);
+  const hasGuojiXiangqiTopic = GUOJIXIANGQI_PATTERN.test(normalizedQuery);
+  const hasWuziqiTopic = WUZIQI_PATTERN.test(normalizedQuery);
+  const hasHistoryBioTopic = HISTORY_PATTERN.test(normalizedQuery);
+  const hasLuXunTopic = LUXUN_PATTERN.test(normalizedQuery);
 
-  if (hasQigongTopic) {
+  if (hasXiangqiTopic) {
     if (containsAny(haystack, ['象棋'])) {
       score += 4.5;
     }
@@ -381,7 +390,7 @@ function computeBookScore(
   }
 
   // Boost science books for science-popularization queries
-  if (/科普|科学|知识/.test(normalizedQuery) && (clcCode.startsWith('n') || clcCode.startsWith('o') || clcCode.startsWith('p') || clcCode.startsWith('q') || clcCode.startsWith('r') || clcCode.startsWith('s') || clcCode.startsWith('t'))) {
+  if (SCIENCE_PATTERN.test(normalizedQuery) && (clcCode.startsWith('n') || clcCode.startsWith('o') || clcCode.startsWith('p') || clcCode.startsWith('q') || clcCode.startsWith('r') || clcCode.startsWith('s') || clcCode.startsWith('t'))) {
     score += 1.8;
   }
 
@@ -430,8 +439,8 @@ function computeBookScore(
 async function rerankCatalogBooks<T extends CatalogRerankBook>(
   books: T[],
   query: unknown,
-  requirement?: any,
-  feedbackStats?: Record<string, any>,
+  requirement?: import('@/lib/types/rag').RequirementAnalysis,
+  feedbackStats?: Record<string, import('@/lib/types/rag').FeedbackStats>,
 ): Promise<Array<T & { relevance_score: number }>> {
   if (!Array.isArray(books) || books.length === 0) {
     return [];

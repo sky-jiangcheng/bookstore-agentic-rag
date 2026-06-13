@@ -82,7 +82,7 @@ export interface CatalogSearchFilters {
   search_terms?: string[];
   limit?: number;
   page?: number;
-  requirement?: any;
+  requirement?: RequirementAnalysis;
   library_category?: string;
 }
 

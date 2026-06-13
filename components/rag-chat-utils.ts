@@ -68,6 +68,8 @@ export function buildFollowUpPrompts(lastUserQuery: string, assistantMessage?: A
     return [];
   }
 
+  const truncatedQuery = lastUserQuery.length > 50 ? lastUserQuery.slice(0, 47) + '...' : lastUserQuery;
+
   const recommendations = assistantMessage?.recommendations ?? [];
   const requirement = assistantMessage?.requirement;
   const budget = requirement?.constraints.budget;
@@ -77,9 +79,9 @@ export function buildFollowUpPrompts(lastUserQuery: string, assistantMessage?: A
 
   if (recommendations.length === 0) {
     return [
-      `沿用"${lastUserQuery}"，补充"给谁读 + 推荐几本 + 预算上限"`,
-      `沿用"${lastUserQuery}"，加一条"排除教材/教辅"`,
-      `沿用"${lastUserQuery}"，指定更明确主题词（例如历史/AI/管理）`,
+      `沿用"${truncatedQuery}"，补充"给谁读 + 推荐几本 + 预算上限"`,
+      `沿用"${truncatedQuery}"，加一条"排除教材/教辅"`,
+      `沿用"${truncatedQuery}"，指定更明确主题词（例如历史/AI/管理）`,
     ];
   }
 
@@ -91,24 +93,24 @@ export function buildFollowUpPrompts(lastUserQuery: string, assistantMessage?: A
   }
 
   if (typeof budget === 'number') {
-    prompts.push(`基于"${lastUserQuery}"，保持预算 ¥${budget} 不变，替换成更高相关度的书`);
+    prompts.push(`基于"${truncatedQuery}"，保持预算 ¥${budget} 不变，替换成更高相关度的书`);
     if (totalPrice > budget) {
-      prompts.push(`基于"${lastUserQuery}"，严格把总价压到 ¥${budget} 以内`);
+      prompts.push(`基于"${truncatedQuery}"，严格把总价压到 ¥${budget} 以内`);
     }
   } else {
-    prompts.push(`基于"${lastUserQuery}"，增加硬预算约束：总价不超过 150 元`);
+    prompts.push(`基于"${truncatedQuery}"，增加硬预算约束：总价不超过 150 元`);
   }
 
   if (typeof targetCount === 'number') {
-    prompts.push(`基于"${lastUserQuery}"，数量固定 ${targetCount} 本，优先保留最相关的`);
+    prompts.push(`基于"${truncatedQuery}"，数量固定 ${targetCount} 本，优先保留最相关的`);
   } else {
-    prompts.push(`基于"${lastUserQuery}"，把数量固定为 5 本并给出排序理由`);
+    prompts.push(`基于"${truncatedQuery}"，把数量固定为 5 本并给出排序理由`);
   }
 
   if (excluded.length === 0) {
-    prompts.push(`基于"${lastUserQuery}"，增加排除词：教材、教辅`);
+    prompts.push(`基于"${truncatedQuery}"，增加排除词：教材、教辅`);
   } else {
-    prompts.push(`基于"${lastUserQuery}"，继续排除：${excluded.join('、')}，并补充同主题替代书`);
+    prompts.push(`基于"${truncatedQuery}"，继续排除：${excluded.join('、')}，并补充同主题替代书`);
   }
 
   return Array.from(new Set(prompts)).slice(0, 3);
@@ -134,7 +136,7 @@ export function normalizeBookRecommendations(
       source: typeof item.source === 'string' ? item.source.trim() || null : null,
       remark: typeof item.remark === 'string' ? item.remark.trim() || null : null,
     }))
-    .filter((r) => r.title !== '未命名图书' || r.author !== '未知作者');
+    .filter((r) => r.title !== '未命名图书' && r.author !== '未知作者');
 }
 
 export function normalizeRequirementSnapshot(
@@ -146,7 +148,7 @@ export function normalizeRequirementSnapshot(
     keywords: Array.isArray(raw.keywords) ? raw.keywords as string[] : [],
     constraints: {
       budget: typeof constraints.budget === 'number' ? constraints.budget : (constraints.budget != null ? Number(constraints.budget) : undefined),
-      target_count: typeof constraints.target_count === 'number' ? constraints.target_count : Number(constraints.target_count) || undefined,
+      target_count: constraints.target_count != null ? Number(constraints.target_count) : undefined,
       ...(constraints.publication_year_min != null
         ? {
             publication_year_min: typeof constraints.publication_year_min === 'number'
