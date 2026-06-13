@@ -79,10 +79,11 @@ export function RAGChat() {
   const [libraryCategory, setLibraryCategory] = useState<string>('none');
   const [availableCategories, setAvailableCategories] = useState<{ code: string; name: string; keyword_count: number }[]>([]);
   const [loadingCategory, setLoadingCategory] = useState(false);
-  const [llmProvider, setLlmProvider] = useState<LLMProviderConfig>(() => {
-    if (typeof window !== 'undefined') return loadProviderConfig();
-    return { type: 'google' as const, apiKey: '', model: 'gemini-2.0-flash' };
-  });
+  const [llmProvider, setLlmProvider] = useState<LLMProviderConfig>({ type: 'openai-compatible' as const, apiKey: '', model: 'gemini-2.0-flash' });
+
+  useEffect(() => {
+    setLlmProvider(loadProviderConfig());
+  }, []);
 
   const handleProviderSave = useCallback((config: LLMProviderConfig) => {
     setLlmProvider(config);
@@ -1101,7 +1102,7 @@ export function RAGChat() {
       <div className="border-t border-white/5 pt-4 space-y-2 select-none shrink-0">
         <LLMSettingsDialog config={llmProvider} onSave={handleProviderSave} />
         <div className="text-[10px] text-slate-600 text-center font-mono">
-          <div>{llmProvider.type === 'google' ? 'Gemini' : llmProvider.model || 'LLM'} RAG Engine</div>
+          <div>{llmProvider.model || 'LLM'} RAG Engine</div>
           <div className="mt-0.5 opacity-60">© 2026 Antigravity</div>
         </div>
       </div>
@@ -1126,7 +1127,7 @@ export function RAGChat() {
               </h2>
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] text-slate-500 font-mono">{llmProvider.type === 'google' ? 'Gemini' : llmProvider.model || 'LLM'} RAG Engine v1.2</span>
+                <span className="text-[10px] text-slate-500 font-mono">{llmProvider.model || 'LLM'} RAG Engine v1.2</span>
               </div>
             </div>
           </div>

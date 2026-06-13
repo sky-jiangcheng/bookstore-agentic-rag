@@ -27,7 +27,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import type { LLMProviderConfig, LLMProviderType } from '@/lib/config/provider-config';
+import type { LLMProviderConfig } from '@/lib/config/provider-config';
 import {
   applyThemeMode,
   loadThemeMode,
@@ -41,20 +41,15 @@ interface LLMSettingsDialogProps {
   onSave: (config: LLMProviderConfig) => void;
 }
 
-const PROVIDER_LABELS: Record<LLMProviderType, string> = {
-  google: 'Google Gemini',
-  'openai-compatible': 'OpenAI 兼容',
-};
-
-const PLACEHOLDERS: Record<LLMProviderType, { apiKey: string; model: string; baseUrl: string }> = {
-  google: { apiKey: 'AIza...', model: 'gemini-2.0-flash', baseUrl: '' },
-  'openai-compatible': { apiKey: 'sk-...', model: 'gpt-4o', baseUrl: 'https://api.openai.com/v1' },
-};
-
-const MODEL_EXAMPLES: Record<LLMProviderType, string[]> = {
-  google: ['gemini-2.0-flash', 'gemini-2.5-pro-exp-03-25', 'gemini-1.5-pro'],
-  'openai-compatible': ['gpt-4o', 'gpt-4o-mini', 'deepseek-chat', 'claude-sonnet-4-20250514'],
-};
+const DEFAULT_MODEL_EXAMPLES = [
+  'gemini-2.0-flash',
+  'gemini-2.5-pro-exp-03-25',
+  'gemini-1.5-pro',
+  'gpt-4o',
+  'gpt-4o-mini',
+  'deepseek-chat',
+  'claude-sonnet-4-20250514',
+];
 
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '');
@@ -63,7 +58,6 @@ function normalizeBaseUrl(url: string): string {
 export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'model' | 'library' | 'appearance'>('model');
-  const [type, setType] = useState<LLMProviderType>(config.type);
   const [apiKey, setApiKey] = useState(config.apiKey);
   const [model, setModel] = useState(config.model);
   const [baseUrl, setBaseUrl] = useState(config.baseUrl ?? '');
@@ -87,7 +81,6 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
 
   const syncDrafts = useCallback(() => {
     const theme = loadThemeMode();
-    setType(config.type);
     setApiKey(config.apiKey);
     setModel(config.model);
     setBaseUrl(config.baseUrl ?? '');
@@ -102,18 +95,16 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
     if (nextOpen) {
       syncDrafts();
       setActiveTab('model');
-    } else {
-      applyThemeMode(savedTheme);
     }
     setOpen(nextOpen);
   };
 
   const handleSave = () => {
     const newConfig: LLMProviderConfig = {
-      type,
+      type: 'openai-compatible',
       apiKey: apiKey.trim(),
-      model: model.trim() || (type === 'google' ? 'gemini-2.0-flash' : 'gpt-4o'),
-      baseUrl: type === 'openai-compatible' ? (normalizeBaseUrl(baseUrl.trim()) || undefined) : undefined,
+      model: model.trim() || 'gemini-2.0-flash',
+      baseUrl: normalizeBaseUrl(baseUrl.trim()) || undefined,
     };
     onSave(newConfig);
     saveThemeMode(themeDraft);
@@ -122,25 +113,16 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
     setOpen(false);
   };
 
-  const handleTypeChange = (newType: LLMProviderType) => {
-    setType(newType);
-    if (newType === 'openai-compatible' && !baseUrl) {
-      setBaseUrl('https://api.openai.com/v1');
-    }
-    setTestStatus('idle');
-    setTestError('');
-  };
-
   const handleTestConnection = useCallback(async () => {
     setTesting(true);
     setTestStatus('idle');
     setTestError('');
 
     const providerConfig: LLMProviderConfig = {
-      type,
+      type: 'openai-compatible',
       apiKey: apiKey.trim(),
-      model: model.trim() || (type === 'google' ? 'gemini-2.0-flash' : 'gpt-4o'),
-      baseUrl: type === 'openai-compatible' ? (normalizeBaseUrl(baseUrl.trim()) || undefined) : undefined,
+      model: model.trim() || 'gemini-2.0-flash',
+      baseUrl: normalizeBaseUrl(baseUrl.trim()) || undefined,
     };
 
     try {
@@ -169,7 +151,7 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
     } finally {
       setTesting(false);
     }
-  }, [type, apiKey, model, baseUrl]);
+  }, [apiKey, model, baseUrl]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -214,25 +196,22 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
         {activeTab === 'model' ? (
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-[11px] font-semibold text-slate-400">供应商</label>
-            <div className="grid grid-cols-2 gap-2">
-              {(['google', 'openai-compatible'] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => handleTypeChange(t)}
-                  className={`rounded-lg border px-3 py-2.5 text-left text-xs font-semibold transition-all ${
-                    type === t
-                      ? 'border-blue-500/50 bg-blue-500/10 text-blue-300'
-                      : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600 hover:text-slate-300'
-                  }`}
-                >
-                  <div>{PROVIDER_LABELS[t]}</div>
-                  {t === 'openai-compatible' && (
-                    <div className="mt-0.5 text-[10px] font-normal text-slate-500">支持任何 OpenAI 兼容 API</div>
-                  )}
-                </button>
-              ))}
+            <label className="mb-1.5 block text-[11px] font-semibold text-slate-400">API Key</label>
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="AIza... 或 sk-..."
+                className="w-full rounded-md border border-slate-700 bg-[#101216] px-2.5 py-2 pr-8 text-xs text-slate-200 outline-none focus:border-amber-500/60"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              >
+                {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
             </div>
           </div>
 
@@ -241,11 +220,11 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
             <input
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder={PLACEHOLDERS[type].model}
+              placeholder="gemini-2.0-flash"
               className="w-full rounded-md border border-slate-700 bg-[#101216] px-2.5 py-2 text-xs text-slate-200 outline-none focus:border-amber-500/60"
             />
             <div className="mt-1 flex flex-wrap gap-1.5">
-              {MODEL_EXAMPLES[type].map((m) => (
+              {DEFAULT_MODEL_EXAMPLES.map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -259,45 +238,17 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[11px] font-semibold text-slate-400">
-              API Key
-              {config.apiKey && apiKey === config.apiKey && (
-                <span className="ml-2 text-[10px] text-emerald-500">已配置</span>
-              )}
-            </label>
-            <div className="relative">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={PLACEHOLDERS[type].apiKey}
-                className="w-full rounded-md border border-slate-700 bg-[#101216] px-2.5 py-2 pr-8 text-xs text-slate-200 outline-none focus:border-amber-500/60"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-              >
-                {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              </button>
-            </div>
+            <label className="mb-1.5 block text-[11px] font-semibold text-slate-400">API 地址 (Base URL)</label>
+            <input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://generativelanguage.googleapis.com/v1beta/openai"
+              className="w-full rounded-md border border-slate-700 bg-[#101216] px-2.5 py-2 text-xs text-slate-200 outline-none focus:border-amber-500/60 font-mono"
+            />
+            <p className="mt-1 text-[10px] text-slate-500">
+              支持任何 OpenAI 兼容 API，例如 Google Gemini、DeepSeek、OpenAI
+            </p>
           </div>
-
-          {type === 'openai-compatible' && (
-            <div>
-              <label className="mb-1.5 block text-[11px] font-semibold text-slate-400">API 地址 (Base URL)</label>
-              <input
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder={PLACEHOLDERS[type].baseUrl}
-                className="w-full rounded-md border border-slate-700 bg-[#101216] px-2.5 py-2 text-xs text-slate-200 outline-none focus:border-amber-500/60 font-mono"
-              />
-              <p className="mt-1 text-[10px] text-slate-500">
-                例如: https://api.openai.com/v1, https://api.deepseek.com/v1
-                不需要包含 /chat/completions，SDK 会自动追加
-              </p>
-            </div>
-          )}
         </div>
         ) : activeTab === 'library' ? (
           <LibraryManagement />
@@ -320,6 +271,8 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
                   type="button"
                   onClick={() => {
                     setThemeDraft(mode);
+                    saveThemeMode(mode);
+                    setSavedTheme(mode);
                     applyThemeMode(mode);
                   }}
                   className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-2 py-3 text-xs font-semibold transition-all ${
@@ -343,10 +296,7 @@ export function LLMSettingsDialog({ config, onSave }: LLMSettingsDialogProps) {
               <>
                 <ExternalLink className="h-3 w-3" />
                 <span>
-                  {type === 'google'
-                    ? <a href="https://ai.google.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-300">ai.google.dev</a>
-                    : <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-300">platform.openai.com</a>
-                  }
+                  <a href="https://ai.google.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-300">ai.google.dev</a>
                 </span>
               </>
             ) : (

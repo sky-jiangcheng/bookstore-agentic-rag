@@ -1,4 +1,5 @@
-export type LLMProviderType = 'google' | 'openai-compatible';
+export const OPENAI_COMPATIBLE = 'openai-compatible' as const;
+export type LLMProviderType = typeof OPENAI_COMPATIBLE;
 
 export interface LLMProviderConfig {
   type: LLMProviderType;
@@ -7,10 +8,13 @@ export interface LLMProviderConfig {
   baseUrl?: string;
 }
 
+export const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
+
 export const DEFAULT_PROVIDER_CONFIG: LLMProviderConfig = {
-  type: 'google',
+  type: 'openai-compatible',
   apiKey: '',
   model: 'gemini-2.0-flash',
+  baseUrl: GEMINI_BASE_URL,
 };
 
 const STORAGE_KEY = 'rag-llm-provider';
@@ -18,7 +22,16 @@ const STORAGE_KEY = 'rag-llm-provider';
 export function loadProviderConfig(): LLMProviderConfig {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as LLMProviderConfig;
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed.type === 'google') {
+        parsed.type = 'openai-compatible';
+        if (!parsed.baseUrl) {
+          parsed.baseUrl = GEMINI_BASE_URL;
+        }
+      }
+      return parsed as LLMProviderConfig;
+    }
   } catch {}
   return { ...DEFAULT_PROVIDER_CONFIG };
 }
@@ -26,5 +39,3 @@ export function loadProviderConfig(): LLMProviderConfig {
 export function saveProviderConfig(config: LLMProviderConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 }
-
-

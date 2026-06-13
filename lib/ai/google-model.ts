@@ -1,8 +1,9 @@
 import 'server-only';
 
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
 
 import config from '@/lib/config/environment';
+import { GEMINI_BASE_URL } from '@/lib/config/provider-config';
 
 interface GoogleModelConfig {
   apiKey: string;
@@ -14,11 +15,12 @@ function normalizeModelId(model: string): string {
 }
 
 export function createGoogleModel(options: GoogleModelConfig) {
-  const google = createGoogleGenerativeAI({
+  const openai = createOpenAI({
     apiKey: options.apiKey,
+    baseURL: GEMINI_BASE_URL,
   });
 
-  return google(normalizeModelId(options.model));
+  return openai(normalizeModelId(options.model));
 }
 
 const configuredModel = createGoogleModel(config.google);

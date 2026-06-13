@@ -19,7 +19,6 @@
     "vercel:deploy": "vercel --prod"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.57",
     "@ai-sdk/openai": "^3.0.68",
     "@ai-sdk/react": "^3.0.147",
     "@radix-ui/react-accordion": "^1.2.12",

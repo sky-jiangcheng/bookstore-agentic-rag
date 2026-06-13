@@ -46,6 +46,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        <meta name="darkreader-lock" />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="antialiased min-h-screen">{children}</body>

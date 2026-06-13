@@ -5,6 +5,11 @@ export const config = {
     apiKey: process.env.GOOGLE_API_KEY || '',
     model: process.env.GOOGLE_MODEL || 'gemini-2.0-flash',
   },
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY || '',
+    baseUrl: process.env.OPENAI_BASE_URL || '',
+    model: process.env.OPENAI_MODEL || '',
+  },
   database: {
     url: process.env.POSTGRES_URL || process.env.DATABASE_URL || '',
   },

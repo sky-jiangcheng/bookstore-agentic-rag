@@ -5,7 +5,7 @@ import { createModel } from '@/lib/ai/model-factory';
 import { logServerError } from '@/lib/utils/safe-error';
 
 const providerSchema = z.object({
-  type: z.enum(['google', 'openai-compatible']),
+  type: z.literal('openai-compatible'),
   apiKey: z.string(),
   model: z.string(),
   baseUrl: z.string().optional(),

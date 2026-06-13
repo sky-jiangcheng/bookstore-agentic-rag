@@ -33,6 +33,9 @@
   --td-brand-color-active: #93c5fd;
   --td-radius-medium: 16px;
   --td-radius-large: 24px;
+
+  --scrollbar-thumb: 51 65 85;
+  --scrollbar-thumb-hover: 71 85 105;
 }
 
 .light {
@@ -46,6 +49,9 @@
   --accent-foreground: 30 64 175;
   --border: 203 213 225;
   --ring: 37 99 235;
+
+  --scrollbar-thumb: 148 163 184;
+  --scrollbar-thumb-hover: 100 116 139;
 }
 
 body {
@@ -61,6 +67,7 @@ body {
 .light [class*="bg-[#101216]"],
 .light [class*="bg-[#111318]"],
 .light [class*="bg-[#121419]"],
+.light [class*="bg-[#14161a]"],
 .light [class*="bg-[#15171b]"],
 .light [class*="bg-[#15181f]"] {
   background-color: #f8fafc !important;
@@ -101,6 +108,7 @@ body {
 }
 
 .light [class*="border-[#282b31]"],
+.light [class*="border-[#2d3037]"],
 .light [class*="border-slate-800"],
 .light [class*="border-slate-700"] {
   border-color: #cbd5e1 !important;
@@ -230,11 +238,11 @@ h1, h2, h3, h4, h5, h6 {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgb(var(--scrollbar-thumb));
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgb(var(--scrollbar-thumb-hover));
 }
 
 /* Ambient glow background spots (Dazzling Space Glow) */

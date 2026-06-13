@@ -8,7 +8,7 @@ import { createModel } from '@/lib/ai/model-factory';
 import type { LLMProviderConfig } from '@/lib/config/provider-config';
 
 const providerSchema = z.object({
-  type: z.enum(['google', 'openai-compatible']),
+  type: z.literal('openai-compatible'),
   apiKey: z.string(),
   model: z.string(),
   baseUrl: z.string().optional(),
@@ -28,21 +28,27 @@ export async function POST(req: NextRequest) {
 
     const { query, llmProvider } = parsed.data;
 
-    const model = llmProvider
-      ? createModel(llmProvider as LLMProviderConfig)
-      : undefined;
+    if (!llmProvider) {
+      return NextResponse.json({ error: '未配置LLM Provider，请在设置中配置' }, { status: 400 });
+    }
 
+    const model = createModel(llmProvider as LLMProviderConfig);
     const requirement = await analyzeRequirement(query, { model });
+
     const inferredType = requirement.inferred_library_type || 'none';
 
     let vocabulary: string[] = [];
     if (inferredType !== 'none') {
-      const vocabularyResult = await sql<{ keyword: string }>`
-        SELECT keyword FROM filter_keywords
-        WHERE library_code = ${inferredType} AND is_active = TRUE
-        ORDER BY id ASC
-      `.catch(() => ({ rows: [] as Array<{ keyword: string }> }));
-      vocabulary = vocabularyResult.rows.map((row) => row.keyword).filter(Boolean);
+      try {
+        const vocabularyResult = await sql<{ keyword: string }>`
+          SELECT keyword FROM filter_keywords
+          WHERE library_code = ${inferredType} AND is_active = TRUE
+          ORDER BY id ASC
+        `;
+        vocabulary = vocabularyResult.rows.map((row) => row.keyword).filter(Boolean);
+      } catch (err) {
+        console.warn('[RAG Parse] Database unavailable, skipping vocabulary lookup:', String(err));
+      }
     }
     const suggestions = Array.from(new Set([
       ...parseExcludedKeywords(query),
